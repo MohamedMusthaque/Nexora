@@ -1,29 +1,7 @@
 require('dotenv').config();
-const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
-autoUpdater.logger = log;
-autoUpdater.logger.transports.file.level = 'info';
 const {app, BrowserWindow, ipcMain} = require('electron');
 const path = require('path')
-
-// Retrieve the app version
-const appVersion = app.getVersion();
-
-// Set the feed URL for updates
-autoUpdater.setFeedURL({
-  provider: 'github',
-  owner: 'Ayuen-madyt',
-  repo: 'Quicktill',
-  token: process.env.GITHUB_TOKEN,
-  url: `https://github.com/Ayuen-madyt/Quicktill/releases/tag/v${appVersion}`,
-});
-
-autoUpdater.checkForUpdatesAndNotify();
-
-const setupEvents = require('./installers/setupEvents')
- if (setupEvents.handleSquirrelEvent()) {
-    return;
- }
 
 // Set the log file location
 log.transports.file.file = `${app.getPath('userData')}/quicktill.log`;
@@ -75,9 +53,30 @@ function createWindow() {
 
 
 app.on("ready", ()=>{
+  const setupEvents = require('./installers/setupEvents')
+  if (setupEvents.handleSquirrelEvent()) {
+    return;
+  }
   process.env.APPDATA = path.join(app.getPath('home'),app.name);
   require('./server');
   createWindow();
+  
+  try {
+    const { autoUpdater } = require('electron-updater');
+    autoUpdater.logger = log;
+    autoUpdater.logger.transports.file.level = 'info';
+    const appVersion = app.getVersion();
+    autoUpdater.setFeedURL({
+      provider: 'github',
+      owner: 'Ayuen-madyt',
+      repo: 'Quicktill',
+      token: process.env.GITHUB_TOKEN,
+      url: `https://github.com/Ayuen-madyt/Quicktill/releases/tag/v${appVersion}`,
+    });
+    autoUpdater.checkForUpdatesAndNotify();
+  } catch (e) {
+    log.warn('Auto-updater disabled:', e.message);
+  }
 })
 
 app.on('window-all-closed', () => {
