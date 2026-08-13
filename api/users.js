@@ -121,7 +121,8 @@ app.post( "/post" , function ( req, res ) {
             else res.send( user );
         });
     }
-    else { 
+    else {
+        let isBootstrapAdmin = parseInt(req.body.id) === 1;
         usersDB.update( {
             _id: parseInt(req.body.id)
                     }, {
@@ -129,11 +130,11 @@ app.post( "/post" , function ( req, res ) {
                             username: req.body.username,
                             password: btoa(req.body.password),
                             fullname: req.body.fullname,
-                            perm_products: req.body.perm_products == "on" ? 1 : 0,
-                            perm_categories: req.body.perm_categories == "on" ? 1 : 0,
-                            perm_transactions: req.body.perm_transactions == "on" ? 1 : 0,
-                            perm_users: req.body.perm_users == "on" ? 1 : 0,
-                            perm_settings: req.body.perm_settings == "on" ? 1 : 0
+                            perm_products: isBootstrapAdmin || req.body.perm_products == "on" ? 1 : 0,
+                            perm_categories: isBootstrapAdmin || req.body.perm_categories == "on" ? 1 : 0,
+                            perm_transactions: isBootstrapAdmin || req.body.perm_transactions == "on" ? 1 : 0,
+                            perm_users: isBootstrapAdmin || req.body.perm_users == "on" ? 1 : 0,
+                            perm_settings: isBootstrapAdmin || req.body.perm_settings == "on" ? 1 : 0
                         }
                     }, {}, function (
             err,
@@ -154,7 +155,7 @@ app.get( "/check", function ( req, res ) {
         _id: 1
 }, function ( err, docs ) {
         if(!docs) {
-            let User = { 
+            let User = {
                 "_id": 1,
                 "username": "admin",
                 "password": btoa("admin"),
@@ -166,8 +167,25 @@ app.get( "/check", function ( req, res ) {
                 "perm_settings": 1,
                 "status": ""
               }
-            usersDB.insert( User, function ( err, user ) {                            
+            usersDB.insert( User, function ( err, user ) {
             });
+        }
+        else if(docs.perm_products != 1 || docs.perm_categories != 1 || docs.perm_transactions != 1 || docs.perm_users != 1 || docs.perm_settings != 1) {
+            // The bootstrap Administrator account (_id 1) must always have full access.
+            // Its permissions can end up stripped if its profile is ever saved without
+            // the permission checkboxes being populated (e.g. editing your own profile).
+            usersDB.update( {
+                _id: 1
+            }, {
+                $set: {
+                    perm_products: 1,
+                    perm_categories: 1,
+                    perm_transactions: 1,
+                    perm_users: 1,
+                    perm_settings: 1
+                }
+            }, {}, function ( err, numReplaced ) {
+            } );
         }
     } );
 } );

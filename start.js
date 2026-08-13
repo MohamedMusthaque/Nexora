@@ -90,7 +90,8 @@ app.on("ready", async ()=>{
   // main process, otherwise storage.set()/get() silently no-op in the renderer
   // (and login can never persist).
   try {
-    require('electron-store').initRenderer();
+    const ElectronStore = require('electron-store');
+    (ElectronStore.default || ElectronStore).initRenderer();
   } catch (e) {
     log.warn('electron-store initRenderer failed:', e.message);
   }

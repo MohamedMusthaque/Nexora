@@ -34,6 +34,7 @@ let dotInterval = setInterval(function () {
   $(".dot").text(".");
 }, 3000);
 let Store = require("electron-store");
+Store = Store.default || Store;
 // NOTE: require('electron').remote was removed in Electron 14+ and no longer
 // exists in Electron 43. These lines crashed the renderer at startup.
 // const remote = require("electron").remote;
@@ -1871,6 +1872,7 @@ if (!authedThisSession) {
           $.get(api + "users/logout/" + user._id, function (data) {
             storage.delete("auth");
             storage.delete("user");
+            sessionStorage.removeItem("auth");
             ipcRenderer.send("app-reload", "");
           });
         }
@@ -2011,12 +2013,22 @@ if (!authedThisSession) {
     $("#cashier").click(function () {
       ownUserEdit = true;
 
+      if (platform.app != "Network Point of Sale Terminal") {
+        $(".perms").show();
+      }
+
       $("#userModal").modal("show");
 
       $("#user_id").val(user._id);
       $("#fullname").val(user.fullname);
       $("#username").val(user.username);
       $("#password").val(atob(user.password));
+
+      $("#perm_products").prop("checked", user.perm_products == 1);
+      $("#perm_categories").prop("checked", user.perm_categories == 1);
+      $("#perm_transactions").prop("checked", user.perm_transactions == 1);
+      $("#perm_users").prop("checked", user.perm_users == 1);
+      $("#perm_settings").prop("checked", user.perm_settings == 1);
     });
 
     $("#add-user").click(function () {
@@ -2564,6 +2576,7 @@ $("body").on("submit", "#account", function (e) {
         if (data._id) {
           storage.set("auth", { auth: true });
           storage.set("user", data);
+          sessionStorage.setItem("auth", "1");
           ipcRenderer.send("app-reload", "");
         } else {
           Swal.fire("Oops!", auth_error, "warning");
