@@ -1453,13 +1453,25 @@ if (!authedThisSession) {
       }
     });
 
+    // Only the bootstrap Administrator account (_id 1) may view or change
+    // permission flags. Other users with "Manage Users" access can still
+    // add/edit accounts, but the Permissions section stays hidden for them
+    // so they can't grant themselves or anyone else extra access.
+    function isCurrentUserAdministrator() {
+      return !!(user && user._id === 1);
+    }
+
     $.fn.editUser = function (index) {
       user_index = index;
       ownUserEdit = false;
 
       $("#Users").modal("hide");
 
-      $(".perms").show();
+      if (isCurrentUserAdministrator()) {
+        $(".perms").show();
+      } else {
+        $(".perms").hide();
+      }
 
       $("#user_id").val(allUsers[index]._id);
       $("#fullname").val(allUsers[index].fullname);
@@ -2018,8 +2030,13 @@ if (!authedThisSession) {
     $("#cashier").click(function () {
       ownUserEdit = true;
 
-      if (platform?.app != "Network Point of Sale Terminal") {
+      if (
+        isCurrentUserAdministrator() &&
+        platform?.app != "Network Point of Sale Terminal"
+      ) {
         $(".perms").show();
+      } else {
+        $(".perms").hide();
       }
 
       $("#userModal").modal("show");
@@ -2039,8 +2056,13 @@ if (!authedThisSession) {
     $("#add-user").click(function () {
       ownUserEdit = false;
 
-      if (platform?.app != "Network Point of Sale Terminal") {
+      if (
+        isCurrentUserAdministrator() &&
+        platform?.app != "Network Point of Sale Terminal"
+      ) {
         $(".perms").show();
+      } else {
+        $(".perms").hide();
       }
 
       $("#saveUser").get(0).reset();
