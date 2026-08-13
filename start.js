@@ -26,7 +26,7 @@ if (!util.isArray) util.isArray = Array.isArray;
 if (!util.isRegExp) util.isRegExp = (v) => v instanceof RegExp;
 
 // Set the log file location
-log.transports.file.file = `${app.getPath('userData')}/quicktill.log`;
+log.transports.file.file = `${app.getPath('userData')}/nexora.log`;
 
 // Set the log level (optional)
 log.transports.file.level = 'info'; // or 'debug', 'warn', 'error', etc.
@@ -134,10 +134,10 @@ app.on("ready", async ()=>{
     const appVersion = app.getVersion();
     autoUpdater.setFeedURL({
       provider: 'github',
-      owner: 'Ayuen-madyt',
-      repo: 'Quicktill',
+      owner: 'MohamedMusthaque',
+      repo: 'NexoraPOS',
       token: process.env.GITHUB_TOKEN,
-      url: `https://github.com/Ayuen-madyt/Quicktill/releases/tag/v${appVersion}`,
+      url: `https://github.com/MohamedMusthaque/NexoraPOS/releases/tag/v${appVersion}`,
     });
     autoUpdater.checkForUpdatesAndNotify();
   } catch (e) {

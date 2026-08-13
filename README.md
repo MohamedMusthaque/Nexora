@@ -1,6 +1,6 @@
-# Quick Till Point of Sale
+# NEXORA POS by Mohamed Musthaque
 
-![POS](screenshots/quicktill_pos.png)
+![POS](screenshots/nexora_pos.png)
 
 Desktop Point of Sale app built with electron
 
@@ -21,7 +21,7 @@ Desktop Point of Sale app built with electron
 
 ## Development
 
-Quicktill is an offline-first application built on jQuery, Node, and Electron. It utilizes a local NeDB as the database by default.
+NEXORA POS is an offline-first application built on jQuery, Node, and Electron. It utilizes a local NeDB as the database by default.
 
 ### Pre-requisites
 
@@ -34,14 +34,14 @@ Next, you will need to install [yarn](https://classic.yarnpkg.com/lang/en/docs/i
 ### Clone and Run
 
 Once you are through the Pre-requisites, you can run the following commands to
-setup Quicktill for development and building:
+setup the app for development and building:
 
 ```bash
 # clone the repository
-git clone https://github.com/Ayuen-madyt/Quicktill.git
+git clone https://github.com/MohamedMusthaque/Nexora.git
 
 # change directory
-cd Quicktill
+cd Nexora
 
 # install dependencies
 yarn
@@ -49,7 +49,7 @@ yarn
 
 #### Development
 
-To run Quicktill in development mode:
+To run the app in development mode:
 
 ```bash
 # start the electron app
@@ -58,7 +58,7 @@ yarn electron
 
 #### Build
 
-To build Quicktill and create an installer:
+To build the app and create an installer:
 
 ```bash
 # start the electron app
@@ -73,7 +73,7 @@ computer) check the _Building_ section at
 
 ### Project Contribution Guidelines
 
-Thank you for your interest in contributing to Quicktill POS! This document outlines the guidelines for contributing to our repository. Please take a moment to read through this guide before making any contributions. By following these guidelines, you will help us maintain a high-quality codebase and ensure a smooth contribution process.
+Thank you for your interest in contributing to NEXORA POS! This document outlines the guidelines for contributing to our repository. Please take a moment to read through this guide before making any contributions. By following these guidelines, you will help us maintain a high-quality codebase and ensure a smooth contribution process.
 
 ### Branching
 
@@ -86,7 +86,7 @@ Thank you for your interest in contributing to Quicktill POS! This document outl
 - Fork the repository first.
 - Familiarize yourself with the project's technology stack, including jQuery, Node, and Electron.
 - Make your code changes, following the existing coding style and conventions.
-- Test your changes thoroughly, ensuring they work seamlessly with Quicktill's offline functionality.
+- Test your changes thoroughly, ensuring they work seamlessly with the app's offline functionality.
 - Commit your changes with a clear and descriptive commit message.
 - Push your changes to your forked repository.
 - Open a pull request (PR) from your branch to the master branch of the main repository.

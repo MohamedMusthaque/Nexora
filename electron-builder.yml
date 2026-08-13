@@ -1,5 +1,5 @@
-appId: quicktill.app
+appId: nexora.app
 publish:
   provider: github
-  owner: Ayuen-madyt
-  repo: https://github.com/Ayuen-madyt/Quicktill
+  owner: MohamedMusthaque
+  repo: https://github.com/MohamedMusthaque/Nexora

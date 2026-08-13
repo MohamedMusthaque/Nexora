@@ -1,12 +1,12 @@
 {
-  "name": "QuickTill",
+  "name": "Nexora",
   "version": "0.2.2",
-  "description": "Quick Till of Sale is a desktop application developed by Raedal Technologies",
+  "description": "NEXORA POS by Mohamed Musthaque is a desktop point-of-sale application",
   "author": "Mohamed Musthaque",
   "private": true,
   "main": "start.js",
   "build": {
-    "appId": "quicktill.app",
+    "appId": "nexora.app",
     "directories": {
       "buildResources": "assets"
     },
