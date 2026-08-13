@@ -1455,6 +1455,7 @@ if (!authedThisSession) {
 
     $.fn.editUser = function (index) {
       user_index = index;
+      ownUserEdit = false;
 
       $("#Users").modal("hide");
 
@@ -1954,27 +1955,24 @@ if (!authedThisSession) {
       e.preventDefault();
       let formData = $(this).serializeObject();
 
-      console.log(formData);
+      // A new user (via the "+" button) has no existing password to fall
+      // back to, so it must always be validated against the Repeat
+      // Password field. Editing an existing account may keep its current
+      // password unchanged without retyping/confirming it.
+      let isNewUser = !formData.id;
+      let originalPassword = isNewUser
+        ? null
+        : ownUserEdit
+        ? atob(user.password)
+        : atob(allUsers[user_index].password);
 
-      if (ownUserEdit) {
-        if (formData.password != atob(user.password)) {
-          if (formData.password != formData.pass) {
-            Swal.fire("Oops!", "Passwords do not match!", "warning");
-          }
-        }
+      let keepingOriginalPassword =
+        !isNewUser && formData.password == originalPassword;
+      let passwordsMatch = formData.password == formData.pass;
+
+      if (!keepingOriginalPassword && !passwordsMatch) {
+        Swal.fire("Oops!", "Passwords do not match!", "warning");
       } else {
-        if (formData.password != atob(allUsers[user_index].password)) {
-          if (formData.password != formData.pass) {
-            Swal.fire("Oops!", "Passwords do not match!", "warning");
-          }
-        }
-      }
-
-      if (
-        formData.password == atob(user.password) ||
-        formData.password == atob(allUsers[user_index].password) ||
-        formData.password == formData.pass
-      ) {
         $.ajax({
           url: api + "users/post",
           type: "POST",
@@ -2020,7 +2018,7 @@ if (!authedThisSession) {
     $("#cashier").click(function () {
       ownUserEdit = true;
 
-      if (platform.app != "Network Point of Sale Terminal") {
+      if (platform?.app != "Network Point of Sale Terminal") {
         $(".perms").show();
       }
 
@@ -2039,7 +2037,9 @@ if (!authedThisSession) {
     });
 
     $("#add-user").click(function () {
-      if (platform.app != "Network Point of Sale Terminal") {
+      ownUserEdit = false;
+
+      if (platform?.app != "Network Point of Sale Terminal") {
         $(".perms").show();
       }
 
@@ -2048,7 +2048,7 @@ if (!authedThisSession) {
     });
 
     $("#settings").click(function () {
-      if (platform.app == "Network Point of Sale Terminal") {
+      if (platform?.app == "Network Point of Sale Terminal") {
         $("#net_settings_form").show(500);
         $("#settings_form").hide(500);
 
@@ -2061,7 +2061,7 @@ if (!authedThisSession) {
 
         $("#app option")
           .filter(function () {
-            return $(this).text() == platform.app;
+            return $(this).text() == platform?.app;
           })
           .prop("selected", true);
       } else {
