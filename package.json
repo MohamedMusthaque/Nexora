@@ -2,7 +2,7 @@
   "name": "QuickTill",
   "version": "0.2.2",
   "description": "Quick Till of Sale is a desktop application developed by Raedal Technologies",
-  "author": "Raedal Technologies",
+  "author": "Mohamed Musthaque",
   "private": true,
   "main": "start.js",
   "build": {
@@ -31,6 +31,10 @@
     },
     "files": [
       "**/*",
+      "!dist-final",
+      "!dist-final/**/*",
+      "!dist-pub",
+      "!dist-pub/**/*",
       "assets/**/*",
       "node_modules/**/*",
       "public/**/*"

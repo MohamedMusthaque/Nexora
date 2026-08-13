@@ -154,13 +154,13 @@ margin-right: 30px;
 
 #loading {
   background: rgb(221,221,221);
-  background: radial-gradient(circle, rgba(153,153,153,1) 0%, rgba(221,221,221,1)  100%); 
+  background: radial-gradient(circle, rgba(153,153,153,1) 0%, rgba(221,221,221,1)  100%);
   position: absolute;
   height: 100%;
   width: 100%;
-  z-index: 999; 
+  z-index: 999;
   overflow: hidden;
-  display: none;  
+  display: block;
 }
 
 #quit {

@@ -3,6 +3,28 @@ const log = require('electron-log');
 const {app, BrowserWindow, ipcMain} = require('electron');
 const path = require('path')
 
+// Single-instance guard: a second launch (double-click, installer, update)
+// would crash the express server with EADDRINUSE on port 8001. Quit instead
+// and focus the already-running window.
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+  process.exit(0);
+}
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
+
+// nedb 1.8.0 uses legacy util.is* APIs that were removed in Node 22
+// (bundled with Electron 43). Restore the ones nedb relies on before it loads.
+const util = require('util');
+if (!util.isDate) util.isDate = (v) => v instanceof Date;
+if (!util.isArray) util.isArray = Array.isArray;
+if (!util.isRegExp) util.isRegExp = (v) => v instanceof RegExp;
+
 // Set the log file location
 log.transports.file.file = `${app.getPath('userData')}/quicktill.log`;
 
@@ -20,8 +42,6 @@ log.catchErrors();
 
 // Usage example
 log.info('App started');
-
-const contextMenu = require('electron-context-menu');
 
 let mainWindow
 
@@ -46,20 +66,55 @@ function createWindow() {
     `file://${path.join(__dirname, 'index.html')}`
   )
 
+  // Forward renderer console messages (incl. JS errors) to the main-process log
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    const label = ['verbose', 'info', 'warning', 'error'][level] || level;
+    log.info(`[renderer:${label}] ${message} (${sourceId}:${line})`);
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null
   })
 }
 
 
-app.on("ready", ()=>{
+app.on("ready", async ()=>{
   const setupEvents = require('./installers/setupEvents')
   if (setupEvents.handleSquirrelEvent()) {
     return;
   }
   process.env.APPDATA = path.join(app.getPath('home'),app.name);
   require('./server');
+
+  // electron-store v8 renderer persistence bridge: must be called from the
+  // main process, otherwise storage.set()/get() silently no-op in the renderer
+  // (and login can never persist).
+  try {
+    require('electron-store').initRenderer();
+  } catch (e) {
+    log.warn('electron-store initRenderer failed:', e.message);
+  }
+
   createWindow();
+
+  // electron-context-menu v4 is ESM-only, so it must be loaded via dynamic import()
+  const { default: contextMenu } = await import('electron-context-menu');
+  contextMenu({
+    prepend: (params, browserWindow) => [
+      {
+        label: 'DevTools',
+        click(item, focusedWindow) {
+          focusedWindow.toggleDevTools();
+        },
+      },
+      {
+        label: 'Reload',
+        click() {
+          mainWindow.reload();
+        },
+      },
+    ],
+  });
   
   try {
     const { autoUpdater } = require('electron-updater');
@@ -101,32 +156,3 @@ ipcMain.on('app-quit', (evt, arg) => {
 ipcMain.on('app-reload', (event, arg) => {
   mainWindow.reload();
 });
-
-
-
-contextMenu({
-  prepend: (params, browserWindow) => [
-     
-      {label: 'DevTools',
-       click(item, focusedWindow){
-        focusedWindow.toggleDevTools();
-      }
-    },
-     { 
-      label: "Reload", 
-        click() {
-          mainWindow.reload();
-      } 
-    // },
-    // {  label: 'Quit',  click:  function(){
-    //    mainWindow.destroy();
-    //     mainWindow.quit();
-    // } 
-  }  
-  ],
-
-});
-
- 
-
- 

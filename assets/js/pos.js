@@ -34,8 +34,10 @@ let dotInterval = setInterval(function () {
   $(".dot").text(".");
 }, 3000);
 let Store = require("electron-store");
-const remote = require("electron").remote;
-const app = remote.app;
+// NOTE: require('electron').remote was removed in Electron 14+ and no longer
+// exists in Electron 43. These lines crashed the renderer at startup.
+// const remote = require("electron").remote;
+// const app = remote.app;
 let img_path = process.env.APPDATA + "/POS/uploads/";
 let api = "http://" + host + ":" + port + "/api/";
 let btoa = require("btoa");
@@ -126,10 +128,15 @@ $.fn.serializeObject = function () {
   return o;
 };
 
+// Session-scoped login flag: survives window.reload() (used right after
+// login/logout) but is cleared when the app restarts, so the login screen
+// always shows on launch instead of auto-entering the previous session.
+let authedThisSession = sessionStorage.getItem("auth") === "1";
+
 auth = storage.get("auth");
 user = storage.get("user");
 
-if (auth == undefined) {
+if (!authedThisSession) {
   $.get(api + "users/check/", function (data) {});
   $("#loading").show();
   authenticate();
