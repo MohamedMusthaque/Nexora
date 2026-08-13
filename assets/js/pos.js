@@ -42,7 +42,7 @@ Store = Store.default || Store;
 let img_path = process.env.APPDATA + "/POS/uploads/";
 let api = "http://" + host + ":" + port + "/api/";
 let btoa = require("btoa");
-let jsPDF = require("jspdf");
+let { jsPDF } = require("jspdf");
 let html2canvas = require("html2canvas");
 let JsBarcode = require("jsbarcode");
 let macaddress = require("macaddress");
@@ -1770,7 +1770,7 @@ if (!authedThisSession) {
             <td>${settings.symbol}${product.price}</td>
             <td>${product.stock == 1 ? product.quantity : "N/A"}</td>
             <td>${category.length > 0 ? category[0].name : ""}</td>
-            <td class="nobr">
+            <td class="nobr pdf-exclude">
             <span class="btn-group" style="display: flex;">
               <button onClick="$(this).printBarcode('${product.name}', '${
             product.barcode
@@ -2112,26 +2112,61 @@ if (!authedThisSession) {
 
     const filename = "productList.pdf";
 
-    html2canvas($("#all_products").get(0)).then((canvas) => {
-      let height = canvas.height * (25.4 / 96);
-      let width = canvas.width * (25.4 / 96);
-      let pdf = new jsPDF("p", "mm", "a4");
-      pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, width, height);
+    const restoreProductsTable = () => {
+      $("#productList").DataTable({
+        order: [[1, "desc"]],
+        autoWidth: false,
+        info: true,
+        JQueryUI: true,
+        ordering: true,
+        paging: false,
+      });
 
-      $("#loading").hide();
-      pdf.save(filename);
-    });
+      $(".loading").hide();
+    };
 
-    $("#productList").DataTable({
-      order: [[1, "desc"]],
-      autoWidth: false,
-      info: true,
-      JQueryUI: true,
-      ordering: true,
-      paging: false,
-    });
+    const productsEl = $("#all_products").get(0);
 
-    $(".loading").hide();
+    // Hide the Action column (buttons aren't useful in a downloaded PDF)
+    // before measuring/capturing, so layout and width reflect its absence.
+    $(productsEl).addClass("pdf-exporting");
+
+    html2canvas(productsEl, {
+      // The products table can be wider than the modal box (long category
+      // names push it past modal-body's width with overflow:visible), so
+      // without these html2canvas clips its capture to the box and drops
+      // the right-most columns. Rendering at the content's real scroll
+      // size captures the full, unclipped table.
+      scrollX: 0,
+      scrollY: -window.scrollY,
+      width: productsEl.scrollWidth,
+      height: productsEl.scrollHeight,
+      windowWidth: productsEl.scrollWidth,
+      windowHeight: productsEl.scrollHeight,
+    })
+      .then((canvas) => {
+        let height = canvas.height * (25.4 / 96);
+        let width = canvas.width * (25.4 / 96);
+        // Size the PDF page to the captured image instead of a fixed A4
+        // portrait page, so a wide table isn't cut off at the page edge.
+        let pdf = new jsPDF({
+          orientation: width > height ? "l" : "p",
+          unit: "mm",
+          format: [width, height],
+        });
+        pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, width, height);
+
+        pdf.save(filename);
+      })
+      .catch((err) => {
+        console.error("Failed to generate product list PDF:", err);
+        Swal.fire("Oops!", "Could not generate the download. Please try again.", "warning");
+      })
+      .finally(() => {
+        $(productsEl).removeClass("pdf-exporting");
+        $("#loading").hide();
+        restoreProductsTable();
+      });
   });
 }
 

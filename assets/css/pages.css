@@ -152,6 +152,10 @@ margin-right: 30px;
   display: none;
 }
 
+.pdf-exporting .pdf-exclude {
+  display: none !important;
+}
+
 #loading {
   background: rgb(221,221,221);
   background: radial-gradient(circle, rgba(153,153,153,1) 0%, rgba(221,221,221,1)  100%);
