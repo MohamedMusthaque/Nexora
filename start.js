@@ -66,6 +66,16 @@ function createWindow() {
     `file://${path.join(__dirname, 'index.html')}`
   )
 
+  // jsPDF's pdf.save() (used by the Products "Download" button) triggers a
+  // browser-style download, which Electron saves silently to the default
+  // downloads folder unless we opt into a native Save As dialog here.
+  mainWindow.webContents.session.on('will-download', (event, item) => {
+    item.setSaveDialogOptions({
+      title: 'Save File',
+      defaultPath: item.getFilename(),
+    });
+  });
+
   // Forward renderer console messages (incl. JS errors) to the main-process log
   mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
     const label = ['verbose', 'info', 'warning', 'error'][level] || level;

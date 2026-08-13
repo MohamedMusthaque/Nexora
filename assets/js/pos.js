@@ -42,7 +42,14 @@ Store = Store.default || Store;
 let img_path = process.env.APPDATA + "/POS/uploads/";
 let api = "http://" + host + ":" + port + "/api/";
 let btoa = require("btoa");
-let { jsPDF } = require("jspdf");
+// require("jspdf") resolves to the package's Node.js build in this
+// nodeIntegration renderer (its package.json "node" export condition wins
+// over "browser" for plain Node require()). That build's save() writes
+// straight to disk via fs, silently, with no Save dialog. Requiring the UMD
+// build explicitly gets the browser build instead, whose save() clicks a
+// real <a download> Blob link — which Electron's will-download handler
+// (see start.js) can intercept to show a native Save dialog.
+let { jsPDF } = require("jspdf/dist/jspdf.umd.min.js");
 let html2canvas = require("html2canvas");
 let JsBarcode = require("jsbarcode");
 let macaddress = require("macaddress");
