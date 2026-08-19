@@ -639,6 +639,19 @@ if (!authedThisSession) {
 
     $("#payButton").on("click", function () {
       if (cart.length != 0) {
+        $("#card").toggle(settings.card_disabled != "on");
+        $("#mpesa").toggle(settings.mpesa_disabled != "on");
+
+        if (
+          (paymentType == 2 && settings.card_disabled == "on") ||
+          (paymentType == 3 && settings.mpesa_disabled == "on")
+        ) {
+          paymentType = 1;
+          $(".list-group-item").removeClass("active");
+          $("#cash").addClass("active");
+          $("#cardInfo").hide();
+        }
+
         $("#paymentModel").modal("toggle");
       } else {
         Swal.fire("Oops!", "There is nothing to pay!", "warning");
@@ -2102,6 +2115,12 @@ if (!authedThisSession) {
         $("#logo_img").val(settings.img);
         if (settings.charge_tax == "on") {
           $("#charge_tax").prop("checked", true);
+        }
+        if (settings.card_disabled == "on") {
+          $("#card_disabled").prop("checked", true);
+        }
+        if (settings.mpesa_disabled == "on") {
+          $("#mpesa_disabled").prop("checked", true);
         }
         if (settings.img != "") {
           $("#logoname").hide();
