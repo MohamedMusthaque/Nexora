@@ -2823,6 +2823,7 @@ $("#reportrange").on("apply.daterangepicker", function (ev, picker) {
 function authenticate() {
   $("#loading").append(
     `<div id="load">
+    <div class="text-center"><img src="assets/images/Nexora-Logo.png" alt="Nexora" style="max-height: 90px; margin-bottom: 20px;"></div>
     <form id="account"><div class="form-group"><input type="text" placeholder="Username" name="username" class="form-control"></div>
         <div class="form-group"><input type="password" placeholder="Password" name="password" class="form-control"></div>
         <div class="form-group"><input type="submit" class="btn btn-block btn-default" value="Login"></div></form>`

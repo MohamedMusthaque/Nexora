@@ -20,7 +20,7 @@
     },
     "linux": {
       "category": "Office",
-      "icon": "assets/default.jpg"
+      "icon": "assets/images/Nexora-Logo.png"
     },
     "win": {
       "target": [
