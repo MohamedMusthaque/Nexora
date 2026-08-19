@@ -4,6 +4,9 @@ let allUsers = [];
 let allCustomers = [];
 let allProducts = [];
 let allCategories = [];
+let productGroups = [];
+let productListPage = 1;
+let productListPageSize = 10;
 let allTransactions = [];
 let sold = [];
 let state = [];
@@ -42,15 +45,7 @@ Store = Store.default || Store;
 let img_path = process.env.APPDATA + "/POS/uploads/";
 let api = "http://" + host + ":" + port + "/api/";
 let btoa = require("btoa");
-// require("jspdf") resolves to the package's Node.js build in this
-// nodeIntegration renderer (its package.json "node" export condition wins
-// over "browser" for plain Node require()). That build's save() writes
-// straight to disk via fs, silently, with no Save dialog. Requiring the UMD
-// build explicitly gets the browser build instead, whose save() clicks a
-// real <a download> Blob link — which Electron's will-download handler
-// (see start.js) can intercept to show a native Save dialog.
-let { jsPDF } = require("jspdf/dist/jspdf.umd.min.js");
-let html2canvas = require("html2canvas");
+let ExcelJS = require("exceljs");
 let JsBarcode = require("jsbarcode");
 let macaddress = require("macaddress");
 let categories = [];
@@ -1775,74 +1770,244 @@ if (!authedThisSession) {
       loadCustomerList();
     });
 
+    // builds the row markup for one product inside a category's detail table
+    function buildProductRowHtml(product) {
+      let index = allProducts.indexOf(product);
+
+      return `<tr>
+          <td><img id="${product.barcode}"></td>
+          <td><img style="max-height: 50px; max-width: 50px; border: 1px solid #ddd;" src="${
+            product.img == ""
+              ? "./assets/images/default.jpg"
+              : img_path + product.img
+          }" id="product_img"></td>
+          <td>${product.name}</td>
+          <td>${settings.symbol}${product.price}</td>
+          <td>${product.stock == 1 ? product.quantity : "N/A"}</td>
+          <td class="nobr">
+          <span class="btn-group" style="display: flex;">
+            <button onClick="$(this).printBarcode('${product.name}', '${
+        product.barcode
+      }', '${
+        product.price
+      }')" class="btn btn-dark btn-sm" title="Print barcode"><i class="fa fa-print"></i></button>
+            <button onClick="$(this).editProduct(${index})" class="btn btn-warning btn-sm"><i class="fa fa-edit"></i></button>
+            <button onClick="$(this).deleteProduct(${product._id}, '${
+        product.img
+      }')" class="btn btn-danger btn-sm"><i class="fa fa-trash"></i></button>
+          </span>
+        </td>
+      </tr>`;
+    }
+
+    // builds the summary row + expandable detail row for one category group
+    function buildCategoryGroupHtml(group, itemsToShow, expanded) {
+      return `<tr class="category-row" data-category="${group.catId}">
+          <td><i class="fa fa-chevron-${
+            expanded ? "down" : "right"
+          } toggle-icon"></i></td>
+          <td><strong>${group.categoryName}</strong></td>
+          <td>${group.trackedCount > 0 ? group.totalStock : "N/A"}</td>
+          <td>${group.items.length}</td>
+        </tr>
+        <tr class="category-detail" data-category="${
+          group.catId
+        }" style="display: ${expanded ? "table-row" : "none"};">
+          <td colspan="4" style="padding: 0;">
+            <table class="table table-bordered table-condensed detail-table">
+              <thead>
+                <tr>
+                  <th>Barcode</th>
+                  <th>Item</th>
+                  <th>Name</th>
+                  <th>Price</th>
+                  <th>Stock</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsToShow.map(buildProductRowHtml).join("")}
+              </tbody>
+            </table>
+          </td>
+        </tr>`;
+    }
+
+    // recomputes the category groups (barcode/price/stock changes, category
+    // renamed, etc.) and resets back to page 1
     function loadProductList() {
       let products = [...allProducts];
-      let product_list = "";
-      let counter = 0;
-      $("#product_list").empty();
-      $("#productList").DataTable().destroy();
 
-      products.forEach((product, index) => {
-        counter++;
+      let groups = {};
+      products.forEach((product) => {
+        let key = String(product.category);
+        (groups[key] = groups[key] || []).push(product);
+      });
 
-        let category = allCategories.filter(function (category) {
-          return category._id == product.category;
+      // preserve category display order, with anything referencing an
+      // unknown/removed category last
+      let categoryIds = allCategories.map((c) => String(c._id));
+      Object.keys(groups).forEach((key) => {
+        if (!categoryIds.includes(key)) categoryIds.push(key);
+      });
+
+      productGroups = categoryIds
+        .filter((catId) => groups[catId] && groups[catId].length > 0)
+        .map((catId) => {
+          let items = groups[catId];
+          let categoryMeta = allCategories.filter((c) => String(c._id) == catId);
+          let categoryName =
+            categoryMeta.length > 0 ? categoryMeta[0].name : "Uncategorized";
+          let trackedItems = items.filter((p) => p.stock == 1);
+          let totalStock = trackedItems.reduce(
+            (sum, p) => sum + (parseInt(p.quantity) || 0),
+            0
+          );
+
+          return {
+            catId,
+            categoryName,
+            items,
+            totalStock,
+            trackedCount: trackedItems.length,
+          };
         });
 
-        product_list +=
-          `<tr>
-            <td><img id="` +
-          product.barcode +
-          `"></td>
-            <td><img style="max-height: 50px; max-width: 50px; border: 1px solid #ddd;" src="${
-              product.img == ""
-                ? "./assets/images/default.jpg"
-                : img_path + product.img
-            }" id="product_img"></td>
-            <td>${product.name}</td>
-            <td>${settings.symbol}${product.price}</td>
-            <td>${product.stock == 1 ? product.quantity : "N/A"}</td>
-            <td>${category.length > 0 ? category[0].name : ""}</td>
-            <td class="nobr pdf-exclude">
-            <span class="btn-group" style="display: flex;">
-              <button onClick="$(this).printBarcode('${product.name}', '${
-            product.barcode
-          }', '${
-            product.price
-          }')" class="btn btn-dark btn-sm" title="Print barcode"><i class="fa fa-print"></i></button>
-              <button onClick="$(this).editProduct(${index})" class="btn btn-warning btn-sm"><i class="fa fa-edit"></i></button>
-              <button onClick="$(this).deleteProduct(${product._id}, '${
-            product.img
-          }')" class="btn btn-danger btn-sm"><i class="fa fa-trash"></i></button>
-            </span>
-          </td>`;
-
-        if (counter == allProducts.length) {
-          $("#product_list").html(product_list);
-
-          products.forEach((pro) => {
-            $("#" + pro?.barcode + "").JsBarcode(pro?.barcode, {
-              width: 2,
-              height: 25,
-              fontSize: 14,
-            });
-          });
-
-          $("#productList").DataTable({
-            order: [[1, "desc"]],
-            autoWidth: false,
-            info: true,
-            JQueryUI: true,
-            ordering: true,
-            paging: true,
-            language: {
-              search: "_INPUT_",
-              searchPlaceholder: "Search",
-            },
-          });
-        }
-      });
+      productListPage = 1;
+      renderProductList();
     }
+
+    // renders the current page of (optionally search-filtered) category
+    // groups and refreshes the pagination controls
+    function renderProductList() {
+      let term = $("#productListSearch").val().trim().toLowerCase();
+
+      let filtered = productGroups
+        .map((group) => {
+          if (term === "") {
+            return { group, itemsToShow: group.items, expand: false };
+          }
+
+          let categoryMatches = group.categoryName.toLowerCase().includes(term);
+          let itemsToShow = categoryMatches
+            ? group.items
+            : group.items.filter((p) =>
+                (p.name + " " + p.barcode).toLowerCase().includes(term)
+              );
+
+          return { group, itemsToShow, expand: true, matched: categoryMatches || itemsToShow.length > 0 };
+        })
+        .filter((entry) => term === "" || entry.matched);
+
+      let totalEntries = filtered.length;
+      let totalPages = Math.max(1, Math.ceil(totalEntries / productListPageSize));
+      productListPage = Math.min(Math.max(productListPage, 1), totalPages);
+
+      let start = (productListPage - 1) * productListPageSize;
+      let pageEntries = filtered.slice(start, start + productListPageSize);
+
+      $("#product_list").html(
+        pageEntries
+          .map((entry) =>
+            buildCategoryGroupHtml(entry.group, entry.itemsToShow, entry.expand)
+          )
+          .join("")
+      );
+
+      pageEntries.forEach((entry) => {
+        entry.itemsToShow.forEach((pro) => {
+          $("#" + pro?.barcode + "").JsBarcode(pro?.barcode, {
+            width: 2,
+            height: 25,
+            fontSize: 14,
+          });
+        });
+      });
+
+      renderProductListPagination(totalEntries, totalPages);
+    }
+
+    function renderProductListPagination(totalEntries, totalPages) {
+      let start = totalEntries === 0 ? 0 : (productListPage - 1) * productListPageSize + 1;
+      let end = Math.min(productListPage * productListPageSize, totalEntries);
+
+      $("#productListInfo").text(
+        totalEntries === 0
+          ? "No matching categories"
+          : `Showing ${start} to ${end} of ${totalEntries} categories`
+      );
+
+      let pager = $("#productListPager").empty();
+
+      pager.append(
+        $("<button>", {
+          type: "button",
+          class: "btn btn-white btn-sm",
+          text: "Previous",
+        })
+          .prop("disabled", productListPage <= 1)
+          .click(function () {
+            productListPage -= 1;
+            renderProductList();
+          })
+      );
+
+      for (let i = 1; i <= totalPages; i++) {
+        pager.append(
+          $("<button>", {
+            type: "button",
+            class:
+              "btn btn-default btn-sm" +
+              (i === productListPage ? " active" : ""),
+            text: i,
+            style: "margin-left: 4px;",
+          }).click(function () {
+            productListPage = i;
+            renderProductList();
+          })
+        );
+      }
+
+      pager.append(
+        $("<button>", {
+          type: "button",
+          class: "btn btn-white btn-sm",
+          text: "Next",
+          style: "margin-left: 4px;",
+        })
+          .prop("disabled", productListPage >= totalPages)
+          .click(function () {
+            productListPage += 1;
+            renderProductList();
+          })
+      );
+    }
+
+    // expand/collapse a category group in the products list
+    $("#product_list").on("click", ".category-row", function () {
+      let catId = $(this).data("category");
+      let detail = $(
+        '.category-detail[data-category="' + catId + '"]'
+      );
+      let expanded = detail.is(":visible");
+
+      detail.toggle(!expanded);
+      $(this)
+        .find(".toggle-icon")
+        .toggleClass("fa-chevron-right", expanded)
+        .toggleClass("fa-chevron-down", !expanded);
+    });
+
+    $("#productListSearch").on("input", function () {
+      productListPage = 1;
+      renderProductList();
+    });
+
+    $("#productListPageSize").on("change", function () {
+      productListPageSize = parseInt($(this).val(), 10);
+      productListPage = 1;
+      renderProductList();
+    });
 
     function loadCategoryList() {
       let category_list = "";
@@ -2156,64 +2321,87 @@ if (!authedThisSession) {
   $("#print_list").click(function () {
     $("#loading").show();
 
-    $("#productList").DataTable().destroy();
+    const headers = ["Barcode", "Name", "Category", "Price (LKR)", "Stock"];
 
-    const filename = "productList.pdf";
+    let workbook = new ExcelJS.Workbook();
+    let sheet = workbook.addWorksheet("Products");
 
-    const restoreProductsTable = () => {
-      $("#productList").DataTable({
-        order: [[1, "desc"]],
-        autoWidth: false,
-        info: true,
-        JQueryUI: true,
-        ordering: true,
-        paging: false,
+    // Keep grouped rows expanded by default: a row is only auto-collapsed
+    // when its outlineLevel >= the sheet's outlineLevelRow, and detail rows
+    // below use level 1, so this just needs to be higher than that.
+    sheet.properties.outlineLevelRow = 2;
+    // The category row sits above its detail rows, so the +/- outline
+    // control for a collapsed group should show above the group too.
+    sheet.properties.outlineProperties = { summaryBelow: false };
+
+    sheet.mergeCells(1, 1, 1, headers.length);
+    let titleCell = sheet.getCell(1, 1);
+    titleCell.value = "Product List";
+    titleCell.font = { bold: true, size: 14 };
+    titleCell.alignment = { horizontal: "center" };
+
+    let headerRow = sheet.addRow(headers);
+    headerRow.font = { bold: true };
+    headerRow.alignment = { horizontal: "center" };
+
+    productGroups.forEach((group) => {
+      let groupRow = sheet.addRow([
+        "",
+        "",
+        group.categoryName,
+        "",
+        group.trackedCount > 0 ? group.totalStock : "N/A",
+      ]);
+      groupRow.font = { bold: true };
+      groupRow.getCell(5).alignment = { horizontal: "right" };
+
+      group.items.forEach((product) => {
+        let row = sheet.addRow([
+          product.barcode,
+          product.name,
+          group.categoryName,
+          "Rs. " + (parseFloat(product.price) || 0).toFixed(2),
+          product.stock == 1 ? product.quantity : "N/A",
+        ]);
+        row.outlineLevel = 1;
+        row.getCell(4).alignment = { horizontal: "right" };
+        row.getCell(5).alignment = { horizontal: "right" };
       });
+    });
 
-      $(".loading").hide();
-    };
+    sheet.addRow([]);
+    sheet.addRow([
+      "This report is generated on " + moment().format("DD-MM-YYYY hh:mm:ss A"),
+    ]);
 
-    const productsEl = $("#all_products").get(0);
+    sheet.columns.forEach((col) => {
+      col.width = 22;
+    });
 
-    // Hide the Action column (buttons aren't useful in a downloaded PDF)
-    // before measuring/capturing, so layout and width reflect its absence.
-    $(productsEl).addClass("pdf-exporting");
-
-    html2canvas(productsEl, {
-      // The products table can be wider than the modal box (long category
-      // names push it past modal-body's width with overflow:visible), so
-      // without these html2canvas clips its capture to the box and drops
-      // the right-most columns. Rendering at the content's real scroll
-      // size captures the full, unclipped table.
-      scrollX: 0,
-      scrollY: -window.scrollY,
-      width: productsEl.scrollWidth,
-      height: productsEl.scrollHeight,
-      windowWidth: productsEl.scrollWidth,
-      windowHeight: productsEl.scrollHeight,
-    })
-      .then((canvas) => {
-        let height = canvas.height * (25.4 / 96);
-        let width = canvas.width * (25.4 / 96);
-        // Size the PDF page to the captured image instead of a fixed A4
-        // portrait page, so a wide table isn't cut off at the page edge.
-        let pdf = new jsPDF({
-          orientation: width > height ? "l" : "p",
-          unit: "mm",
-          format: [width, height],
-        });
-        pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, width, height);
-
-        pdf.save(filename);
+    // workbook.xlsx.writeFile() would silently write straight to disk via fs
+    // in this nodeIntegration renderer (same class of bug jsPDF had), with
+    // no Save dialog. Building the Blob/<a download> link ourselves instead
+    // lets Electron's will-download handler (see start.js) intercept it and
+    // show a native Save dialog.
+    workbook.xlsx
+      .writeBuffer()
+      .then((buffer) => {
+        let blob = new Blob([buffer], { type: "application/octet-stream" });
+        let url = URL.createObjectURL(blob);
+        let link = document.createElement("a");
+        link.href = url;
+        link.download = "productList.xlsx";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
       })
       .catch((err) => {
-        console.error("Failed to generate product list PDF:", err);
+        console.error("Failed to generate product list Excel file:", err);
         Swal.fire("Oops!", "Could not generate the download. Please try again.", "warning");
       })
       .finally(() => {
-        $(productsEl).removeClass("pdf-exporting");
         $("#loading").hide();
-        restoreProductsTable();
       });
   });
 }

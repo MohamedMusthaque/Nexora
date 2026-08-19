@@ -689,21 +689,35 @@
                             <button class="btn btn-white pull-right" id="print_list">Download</button>
                         </h4>                        
                     </div>
-                     <div class="modal-body" id="all_products" style="padding: 20px; padding-right: 40px;"> 
+                     <div class="modal-body" id="all_products" style="padding: 20px; padding-right: 40px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <div>
+                                Show
+                                <select id="productListPageSize" class="form-control" style="display: inline-block; width: auto;">
+                                    <option value="10">10</option>
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                </select>
+                                categories
+                            </div>
+                            <input type="text" id="productListSearch" class="form-control" placeholder="Search categories or products" style="max-width: 320px;">
+                        </div>
                         <table class="table table-bordered" id="productList">
                             <thead>
-                                <tr>                                                                      
-                                    <th>Barcode</th>
-                                    <th>Item</th>
-                                    <th>Name</th>                                      
-                                    <th>Price</th>
-                                    <th>Stock</th>
+                                <tr>
+                                    <th style="width: 36px;"></th>
                                     <th>Category</th>
-                                    <th class="pdf-exclude">Action</th>
+                                    <th>Total Stock</th>
+                                    <th>Products</th>
                                 </tr>
                             </thead>
                             <tbody id="product_list"></tbody>
                         </table>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+                            <div id="productListInfo"></div>
+                            <div id="productListPager"></div>
+                        </div>
 
                     </div>
                </div>

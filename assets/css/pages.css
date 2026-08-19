@@ -132,6 +132,24 @@ margin-right: 30px;
   width: 100%;
 }
 
+#productList .category-row {
+  cursor: pointer;
+  background-color: #f7f7f9;
+}
+
+#productList .category-row:hover {
+  background-color: #eef1f5;
+}
+
+#productList .toggle-icon {
+  color: #555;
+  transition: transform 0.15s ease;
+}
+
+#productList .detail-table {
+  margin-bottom: 0;
+}
+
 .action {
   text-align: center;
 }
@@ -150,10 +168,6 @@ margin-right: 30px;
 
 .perms {
   display: none;
-}
-
-.pdf-exporting .pdf-exclude {
-  display: none !important;
 }
 
 #loading {
