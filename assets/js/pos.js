@@ -2124,6 +2124,92 @@ if (!authedThisSession) {
       return !isNaN(parseFloat(n)) && isFinite(n);
     }
 
+    function refreshDataLocationDisplay() {
+      ipcRenderer.invoke("data:get-location").then(function (loc) {
+        $("#data_location_display").val(loc.dataRoot);
+      });
+    }
+
+    refreshDataLocationDisplay();
+
+    $("#change_data_location").on("click", function () {
+      ipcRenderer
+        .invoke("data:choose-folder", { title: "Select New Data Location" })
+        .then(function (picked) {
+          if (picked.canceled) return;
+
+          Swal.fire({
+            title: "Move data to this folder?",
+            text:
+              "Your existing data will be copied to \"" +
+              picked.path +
+              "\" and the app will restart to use it.",
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonText: "Move & Restart",
+          }).then(function (result) {
+            if (!result.value) return;
+
+            Swal.fire({
+              title: "Moving data...",
+              allowOutsideClick: false,
+              didOpen: () => Swal.showLoading(),
+            });
+
+            ipcRenderer
+              .invoke("data:set-location", picked.path)
+              .then(function (res) {
+                if (res.success) {
+                  ipcRenderer.send("app-relaunch", "");
+                } else {
+                  Swal.fire("Oops!", res.error || "Could not change the data location.", "error");
+                }
+              });
+          });
+        });
+    });
+
+    $("#backup_data").on("click", function () {
+      ipcRenderer.invoke("data:backup").then(function (res) {
+        if (res.canceled) return;
+        if (res.success) {
+          Swal.fire("Backup complete!", "Saved to \"" + res.path + "\"", "success");
+        } else {
+          Swal.fire("Oops!", res.error || "Backup failed.", "error");
+        }
+      });
+    });
+
+    $("#restore_data").on("click", function () {
+      Swal.fire({
+        title: "Restore data?",
+        text: "This replaces ALL current data (products, customers, transactions, settings) with the contents of the backup you choose. This cannot be undone.",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        confirmButtonText: "Choose backup & Restore",
+      }).then(function (result) {
+        if (!result.value) return;
+
+        ipcRenderer.invoke("data:restore").then(function (res) {
+          if (res.canceled) return;
+
+          if (res.success) {
+            Swal.fire({
+              title: "Restore complete!",
+              text: "The app will now restart.",
+              icon: "success",
+              allowOutsideClick: false,
+            }).then(function () {
+              ipcRenderer.send("app-relaunch", "");
+            });
+          } else {
+            Swal.fire("Oops!", res.error || "Restore failed.", "error");
+          }
+        });
+      });
+    });
+
     $("#net_settings_form").on("submit", function (e) {
       e.preventDefault();
       let formData = $(this).serializeObject();
@@ -2195,13 +2281,13 @@ if (!authedThisSession) {
         "Network Point of Sale Terminal"
       ) {
         $("#net_settings_form").show(500);
-        $("#settings_form").hide(500);
+        $("#settings_form, #data_management_section").hide(500);
         macaddress.one(function (err, mac) {
           $("#mac").val(mac);
         });
       } else {
         $("#net_settings_form").hide(500);
-        $("#settings_form").show(500);
+        $("#settings_form, #data_management_section").show(500);
       }
     });
 
@@ -2250,7 +2336,7 @@ if (!authedThisSession) {
     $("#settings").click(function () {
       if (platform?.app == "Network Point of Sale Terminal") {
         $("#net_settings_form").show(500);
-        $("#settings_form").hide(500);
+        $("#settings_form, #data_management_section").hide(500);
 
         $("#ip").val(platform.ip);
         $("#till").val(platform.till);
@@ -2266,7 +2352,7 @@ if (!authedThisSession) {
           .prop("selected", true);
       } else {
         $("#net_settings_form").hide(500);
-        $("#settings_form").show(500);
+        $("#settings_form, #data_management_section").show(500);
 
         $("#settings_id").val("1");
         $("#store").val(settings.store);

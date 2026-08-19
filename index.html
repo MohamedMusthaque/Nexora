@@ -1044,6 +1044,28 @@
                         </div>
 
                     </form>
+
+                    <div id="data_management_section">
+                        <hr>
+                        <h5>Data Storage</h5>
+                        <div class="form-group">
+                            <label for="data_location_display">Current Data Location</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="data_location_display" readonly="readonly">
+                                <span class="input-group-btn">
+                                    <button type="button" class="btn btn-default" id="change_data_location">Change...</button>
+                                </span>
+                            </div>
+                            <span class="help-block">Moves your existing data to the new folder and restarts the app.</span>
+                        </div>
+                        <div class="form-group">
+                            <label>Backup &amp; Restore</label> <br>
+                            <button type="button" class="btn btn-info" id="backup_data">Backup Data</button>
+                            <button type="button" class="btn btn-warning" id="restore_data">Restore Data</button>
+                            <span class="help-block">Restoring replaces all current data and restarts the app.</span>
+                        </div>
+                    </div>
+
                     </div>
                </div>
           </div>

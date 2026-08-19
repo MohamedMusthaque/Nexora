@@ -1,7 +1,9 @@
 require('dotenv').config();
 const log = require('electron-log');
-const {app, BrowserWindow, ipcMain} = require('electron');
+const {app, BrowserWindow, ipcMain, dialog} = require('electron');
 const path = require('path')
+const fs = require('fs')
+const { getDataRoot, setDataRoot, getPosDir } = require('./lib/dataConfig')
 
 // Single-instance guard: a second launch (double-click, installer, update)
 // would crash the express server with EADDRINUSE on port 8001. Quit instead
@@ -93,7 +95,12 @@ app.on("ready", async ()=>{
   if (setupEvents.handleSquirrelEvent()) {
     return;
   }
-  process.env.APPDATA = path.join(app.getPath('home'),app.name);
+  process.env.APPDATA = getDataRoot();
+  // multer's diskStorage (uploads) doesn't create its destination folder on
+  // its own, unlike nedb (which mkdirp's server/databases internally) - so a
+  // freshly chosen/empty data directory needs this or the first logo/product
+  // image upload fails with ENOENT.
+  fs.mkdirSync(path.join(getPosDir(), 'uploads'), { recursive: true });
   require('./server');
 
   // electron-store v8 renderer persistence bridge: must be called from the
@@ -166,4 +173,106 @@ ipcMain.on('app-quit', (evt, arg) => {
 
 ipcMain.on('app-reload', (event, arg) => {
   mainWindow.reload();
+});
+
+ipcMain.on('app-relaunch', () => {
+  app.relaunch();
+  app.exit(0);
+});
+
+// --- Data location / backup / restore -------------------------------------
+// nedb datastores are opened once, synchronously, at `require('./api/*')`
+// time (see server.js), so none of these operations can just flip
+// process.env.APPDATA and reload the window - the whole process has to
+// relaunch for a new/restored data directory to actually take effect.
+
+ipcMain.handle('data:get-location', () => {
+  return { dataRoot: getDataRoot(), posDir: getPosDir() };
+});
+
+ipcMain.handle('data:choose-folder', async (event, options) => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: options?.title || 'Select Folder',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || !result.filePaths.length) return { canceled: true };
+  return { canceled: false, path: result.filePaths[0] };
+});
+
+ipcMain.handle('data:set-location', async (event, newRoot) => {
+  try {
+    const currentRoot = getDataRoot();
+    if (path.resolve(currentRoot) === path.resolve(newRoot)) {
+      return { success: true, moved: false };
+    }
+
+    const currentPosDir = getPosDir(currentRoot);
+    const newPosDir = getPosDir(newRoot);
+
+    if (fs.existsSync(newPosDir)) {
+      return { success: false, error: 'The selected folder already contains a "POS" data folder. Choose an empty folder, or restore from it instead of setting it as a new location.' };
+    }
+
+    fs.mkdirSync(newRoot, { recursive: true });
+    if (fs.existsSync(currentPosDir)) {
+      fs.cpSync(currentPosDir, newPosDir, { recursive: true });
+    }
+
+    setDataRoot(newRoot);
+    return { success: true, moved: true };
+  } catch (e) {
+    log.error('Failed to change data location:', e);
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('data:backup', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select Backup Destination Folder',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || !result.filePaths.length) return { canceled: true };
+
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const destDir = path.join(result.filePaths[0], `Nexora-Backup-${timestamp}`);
+
+    fs.mkdirSync(destDir, { recursive: true });
+    fs.cpSync(getPosDir(), path.join(destDir, 'POS'), { recursive: true });
+
+    return { success: true, path: destDir };
+  } catch (e) {
+    log.error('Backup failed:', e);
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('data:restore', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select Backup Folder to Restore',
+    properties: ['openDirectory'],
+  });
+  if (result.canceled || !result.filePaths.length) return { canceled: true };
+
+  try {
+    const selected = result.filePaths[0];
+    // Accept either a backup root (containing a "POS" subfolder, as created
+    // by data:backup above) or the POS folder itself.
+    const sourcePosDir = fs.existsSync(path.join(selected, 'POS'))
+      ? path.join(selected, 'POS')
+      : selected;
+
+    if (!fs.existsSync(path.join(sourcePosDir, 'server', 'databases'))) {
+      return { success: false, error: 'The selected folder does not look like a valid Nexora backup.' };
+    }
+
+    const posDir = getPosDir();
+    fs.rmSync(posDir, { recursive: true, force: true });
+    fs.cpSync(sourcePosDir, posDir, { recursive: true });
+
+    return { success: true };
+  } catch (e) {
+    log.error('Restore failed:', e);
+    return { success: false, error: e.message };
+  }
 });
