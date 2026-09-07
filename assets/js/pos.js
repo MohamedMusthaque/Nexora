@@ -2537,8 +2537,15 @@ function loadTransactions() {
         }
 
         counter++;
+        let returnBadge =
+          trans?.return_status == "full"
+            ? ' <span class="label label-danger">Returned</span>'
+            : trans?.return_status == "partial"
+            ? ' <span class="label label-warning">Partial Return</span>'
+            : "";
+
         transaction_list += `<tr>
-                                <td>${trans?.order}</td>
+                                <td>${trans?.order}${returnBadge}</td>
                                 <td class="nobr">${moment(trans?.date).format(
                                   "YYYY MMM DD hh:mm:ss"
                                 )}</td>
@@ -2878,7 +2885,286 @@ $.fn.viewTransaction = function (index) {
   $("#viewTransaction").html("");
   $("#viewTransaction").html(receipt);
 
+  if (allTransactions[index]?.return_status == "partial") {
+    $("#viewTransaction").append(
+      '<p style="text-align:center;"><span class="label label-warning">Partially Returned</span></p>'
+    );
+  } else if (allTransactions[index]?.return_status == "full") {
+    $("#viewTransaction").append(
+      '<p style="text-align:center;"><span class="label label-danger">Returned</span></p>'
+    );
+  }
+
+  $.get(
+    api + "returns/order/" + allTransactions[index]?._id,
+    function (returns) {
+      if (returns && returns.length > 0) {
+        let historyRows = "";
+        returns.forEach((ret) => {
+          let itemsSummary = ret.items
+            .map((i) => i.product_name + " x" + i.quantity)
+            .join(", ");
+          historyRows += `<tr>
+                        <td>${moment(ret.date).format("YYYY MMM DD hh:mm:ss")}</td>
+                        <td>${ret.type == "exchange" ? "Exchange" : "Return"}</td>
+                        <td>${itemsSummary}</td>
+                        <td>${settings.symbol}${parseFloat(ret.refund_amount).toFixed(2)}</td>
+                        <td>${ret.reason || ""}</td>
+                        <td>${ret.user || ""}</td>
+                    </tr>`;
+        });
+
+        $("#viewTransaction").append(`
+                    <hr>
+                    <p style="text-align:center;"><b>Return / Exchange History</b></p>
+                    <table width="100%" style="font-size: 9px;">
+                        <thead style="text-align: left;">
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Items</th>
+                            <th>Amount</th>
+                            <th>Reason</th>
+                            <th>Cashier</th>
+                        </tr>
+                        </thead>
+                        <tbody>${historyRows}</tbody>
+                    </table>
+                `);
+      }
+    }
+  );
+
   $("#orderModal").modal("show");
+};
+
+let currentReturnMode = "return";
+let returnableItems = [];
+let selectableOrders = [];
+let selectedReturnOrder = null;
+
+$.fn.openSelectOrderModal = function (mode) {
+  currentReturnMode = mode;
+
+  $("#selectOrderModalLabel").text(
+    mode == "exchange" ? "Select Order to Exchange" : "Select Order to Return/Refund"
+  );
+  $("#selectOrderSearch").val("");
+  $("#selectOrderList").html("<tr><td colspan='5'>Loading...</td></tr>");
+
+  $.get(api + "all", function (data) {
+    selectableOrders = (data || []).filter(function (order) {
+      return order.status == 1 && order.paid != "";
+    });
+
+    $(this).renderSelectOrderList(selectableOrders);
+  });
+
+  $("#selectOrderModal").modal("show");
+};
+
+$.fn.renderSelectOrderList = function (orders) {
+  if (orders.length == 0) {
+    $("#selectOrderList").html("<tr><td colspan='5'>No paid orders found.</td></tr>");
+    return;
+  }
+
+  let rows = "";
+
+  orders.forEach((order) => {
+    rows += `<tr>
+                    <td>${order.order}${
+      order.return_status == "full"
+        ? ' <span class="label label-danger">Returned</span>'
+        : order.return_status == "partial"
+        ? ' <span class="label label-warning">Partial Return</span>'
+        : ""
+    }</td>
+                    <td class="nobr">${moment(order.date).format("YYYY MMM DD hh:mm:ss")}</td>
+                    <td>${order.customer == 0 ? "Walk in Customer" : order.customer?.name}</td>
+                    <td>${settings.symbol}${order.total}</td>
+                    <td><button class="btn btn-info" onclick="$(this).selectOrderForReturn('${order._id}')"><i class="fa fa-check"></i> Select</button></td>
+                </tr>`;
+  });
+
+  $("#selectOrderList").html(rows);
+};
+
+$("#selectOrderSearch").on("keyup", function () {
+  let query = $(this).val().toLowerCase();
+
+  let filtered = selectableOrders.filter(function (order) {
+    let customerName =
+      order.customer == 0 ? "walk in customer" : (order.customer?.name || "").toLowerCase();
+
+    return (
+      String(order.order).toLowerCase().includes(query) ||
+      String(order.ref_number || "").toLowerCase().includes(query) ||
+      customerName.includes(query)
+    );
+  });
+
+  $(this).renderSelectOrderList(filtered);
+});
+
+$.fn.selectOrderForReturn = function (orderId) {
+  let order = selectableOrders.find(function (o) {
+    return o._id == orderId;
+  });
+
+  if (!order) {
+    return;
+  }
+
+  selectedReturnOrder = order;
+  $("#selectOrderModal").modal("hide");
+  $(this).openReturnModal(currentReturnMode);
+};
+
+$.fn.openReturnModal = function (mode) {
+  currentReturnMode = mode;
+  let order = selectedReturnOrder;
+
+  if (!order) {
+    return;
+  }
+
+  $("#returnModalLabel").text(
+    mode == "exchange" ? "Exchange Items" : "Return / Refund"
+  );
+  $("#refundMethodGroup").toggle(mode != "exchange");
+  $("#confirmReturnBtn").text(mode == "exchange" ? "Confirm Exchange" : "Confirm Return");
+  $("#returnReason").val("");
+
+  $.get(api + "returns/order/" + order._id, function (returns) {
+    let alreadyReturned = {};
+    (returns || []).forEach((ret) => {
+      ret.items.forEach((item) => {
+        alreadyReturned[item.id] =
+          (alreadyReturned[item.id] || 0) + parseInt(item.quantity);
+      });
+    });
+
+    returnableItems = [];
+    let rows = "";
+
+    order.items.forEach((item) => {
+      let returnedQty = alreadyReturned[item.id] || 0;
+      let remaining = parseInt(item.quantity) - returnedQty;
+
+      returnableItems.push({
+        id: item.id,
+        product_name: item.product_name,
+        sku: item.sku,
+        price: item.price,
+        remaining: remaining,
+      });
+
+      rows += `<tr>
+                    <td><input type="checkbox" class="return-item-check" data-id="${item.id}" ${remaining <= 0 ? "disabled" : ""}></td>
+                    <td>${item.product_name}</td>
+                    <td>${item.quantity}</td>
+                    <td>${returnedQty}</td>
+                    <td><input type="number" class="form-control return-item-qty" data-id="${item.id}" min="0" max="${remaining}" value="0" ${remaining <= 0 ? "disabled" : ""}></td>
+                    <td>${settings.symbol}${parseFloat(item.price).toFixed(2)}</td>
+                </tr>`;
+    });
+
+    $("#returnItemsList").html(rows);
+  });
+
+  $("#returnModal").modal("show");
+};
+
+$.fn.submitReturn = function () {
+  let order = selectedReturnOrder;
+  let items = [];
+
+  $("#returnItemsList tr").each(function () {
+    let checked = $(this).find(".return-item-check").is(":checked");
+    let id = $(this).find(".return-item-check").data("id");
+    let qty = parseInt($(this).find(".return-item-qty").val()) || 0;
+
+    if (checked && qty > 0) {
+      let match = returnableItems.find((i) => i.id == id);
+
+      if (!match) return;
+
+      if (qty > match.remaining) {
+        Swal.fire(
+          "Oops!",
+          "Cannot return " + qty + " of " + match.product_name + ". Only " + match.remaining + " remaining.",
+          "warning"
+        );
+        items = null;
+        return false;
+      }
+
+      items.push({
+        id: match.id,
+        product_name: match.product_name,
+        sku: match.sku,
+        price: match.price,
+        quantity: qty,
+      });
+    }
+  });
+
+  if (items === null) {
+    return;
+  }
+
+  if (items.length == 0) {
+    Swal.fire("Oops!", "Please select at least one item to return.", "warning");
+    return;
+  }
+
+  let payload = {
+    order_id: order._id,
+    type: currentReturnMode,
+    items: items,
+    reason: $("#returnReason").val(),
+    refund_method: $("#refundMethod").val(),
+    restock: true,
+    till: platform?.till,
+    mac: platform?.mac,
+    user: user?.fullname,
+    user_id: user._id,
+  };
+
+  $.ajax({
+    url: api + "returns",
+    type: "POST",
+    contentType: "application/json",
+    data: JSON.stringify(payload),
+    success: function (response) {
+      $("#returnModal").modal("hide");
+      loadTransactions();
+
+      if (currentReturnMode == "exchange") {
+        cart = [];
+        holdOrder = 0;
+        $("#inputDiscount").val(parseFloat(response.refund_amount).toFixed(2));
+        $(document).renderTable(cart);
+        $("#pointofsale").trigger("click");
+
+        Swal.fire(
+          "Items Returned!",
+          "Exchange credit of " + settings.symbol + parseFloat(response.refund_amount).toFixed(2) + " has been applied as a discount on the new sale. Adjust or clear it if not needed.",
+          "success"
+        );
+      } else {
+        Swal.fire(
+          "Refunded!",
+          "Refund amount: " + settings.symbol + parseFloat(response.refund_amount).toFixed(2),
+          "success"
+        );
+      }
+    },
+    error: function (xhr) {
+      Swal.fire("Oops!", xhr.responseText || "Something went wrong.", "warning");
+    },
+  });
 };
 
 $("#status").change(function () {

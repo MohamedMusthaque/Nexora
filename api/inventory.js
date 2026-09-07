@@ -176,3 +176,42 @@ app.decrementInventory = function (products, callback) {
     }
   );
 };
+
+app.incrementInventory = function (products, callback) {
+  async.eachSeries(
+    products,
+    function (transactionProduct, callback) {
+      inventoryDB.findOne(
+        {
+          _id: parseInt(transactionProduct.id),
+        },
+        function (err, product) {
+          if (!product) {
+            callback();
+          } else {
+            let updatedQuantity =
+              parseInt(product.quantity || 0) +
+              parseInt(transactionProduct.quantity);
+
+            inventoryDB.update(
+              {
+                _id: parseInt(product._id),
+              },
+              {
+                $set: {
+                  quantity: updatedQuantity,
+                },
+              },
+              {},
+              callback
+            );
+          }
+        }
+      );
+    },
+    function (err) {
+      if (err) callback(err);
+      else callback(null, "Inventory updated successfully.");
+    }
+  );
+};
