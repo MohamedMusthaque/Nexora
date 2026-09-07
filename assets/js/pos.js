@@ -162,6 +162,7 @@ if (!authedThisSession) {
   $.get(api + "users/user/" + user._id, function (data) {
     user = data;
     $("#loggedin-user").text(user.fullname);
+    $("#cashier").attr("title", user.fullname);
   });
 
   $.get(api + "settings/get", function (data) {

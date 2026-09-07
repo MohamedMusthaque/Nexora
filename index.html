@@ -13,6 +13,44 @@
     <link href="assets/plugins/dataTables/jquery.dataTables.min.css" rel="stylesheet" type="text/css" />
     <link href="assets/plugins/dataTables/dataTables.bootstrap.min.css" rel="stylesheet" type="text/css" />    
     <link href="assets/css/pages.css" rel="stylesheet" type="text/css" />
+    <style>
+      .top-toolbar {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 4px;
+      }
+      .top-toolbar .toolbar-group {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: center;
+        flex: 0 0 auto;
+      }
+      .top-toolbar .toolbar-loading {
+        flex: 0 0 auto;
+        margin: 0 10px !important;
+      }
+      .top-toolbar #log-out {
+        margin-left: 4px !important;
+      }
+      @media (max-width: 1500px) {
+        .top-toolbar .btn {
+          font-size: 12px;
+          padding: 6px 10px;
+        }
+      }
+      @media (max-width: 1200px) {
+        .top-toolbar .btn {
+          font-size: 11px;
+          padding: 5px 8px;
+        }
+      }
+    </style>
     </head>
   <body>
     
@@ -21,9 +59,9 @@
   <div id="loading"></div>
   <div class="container">
         <div class="row">
-                <div class="col-sm-12">
+                <div class="col-sm-12 top-toolbar">
 
-                             <div class="button-list pull-left m-t-15 m-l-10">  
+                             <div class="button-list toolbar-group m-t-15 m-l-10">
                         
                             <div class="btn-group p_one">
                             <button id="productModal" data-toggle="modal" data-target="#Products" type="button" class="btn btn-default waves-effect waves-light">
@@ -64,9 +102,9 @@
 
 
                     
-                    <img  class="loading m-t-5" style="margin-left: 35%" height="50px" src="assets/images/loading.gif" alt="">
+                    <img  class="loading toolbar-loading m-t-5" height="50px" src="assets/images/loading.gif" alt="">
 
-                    <div class="button-list pull-right m-t-15 m-l-10">  
+                    <div class="button-list toolbar-group m-t-15 m-l-10">
 
                             <button id="settings" data-toggle="modal" data-target="#settingsModal"  type="button"  class="btn btn-default waves-effect waves-light p_five">
                                 <i class="glyphicon glyphicon-cog"></i>
@@ -90,8 +128,8 @@
                              </div>
 
 
-                            <button type="button"  class="btn btn-light waves-effect waves-light" id="cashier">
-                                <span class="btn-label"><i class="glyphicon glyphicon-user"></i> </span> <span id="loggedin-user"></span>
+                            <button type="button"  class="btn btn-light waves-effect waves-light" id="cashier" title="">
+                                <span class="btn-label"><i class="glyphicon glyphicon-user"></i> </span><span id="loggedin-user" style="display:none;"></span>
                          </button>
 
                             <button id="log-out"  type="button"  class="btn btn-warning waves-effect waves-light">
