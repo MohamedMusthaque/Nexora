@@ -69,13 +69,17 @@ app.get("/by-date", function(req, res) {
 
   let query = { $and: [{ date: { $gte: startDate.toJSON(), $lte: endDate.toJSON() }}] };
 
-  // Paid = Cash / Card / Bank Transfer (and Mpesa) sales; Unpaid = Credit sales.
-  // Held orders (status 0, not Credit) are excluded from both.
+  // Paid = Cash / Card / Bank Transfer (and Mpesa) sales; Unpaid = Credit sales;
+  // All (2) = Paid + Unpaid. Held orders (status 0, not Credit) are excluded from all.
+  let paidQuery = { $and: [{ status: 1 }, { payment_type: { $in: ["Cash", "Card", "Bank Transfer", "Mpesa"] } }] };
+  let unpaidQuery = { payment_type: "Credit" };
+
   if (status === 0) {
-    query.$and.push({ payment_type: "Credit" });
+    query.$and.push(unpaidQuery);
+  } else if (status === 2) {
+    query.$and.push({ $or: [paidQuery, unpaidQuery] });
   } else {
-    query.$and.push({ status: 1 });
-    query.$and.push({ payment_type: { $in: ["Cash", "Card", "Bank Transfer", "Mpesa"] } });
+    query.$and.push(paidQuery);
   }
 
   if (user !== 0) {
