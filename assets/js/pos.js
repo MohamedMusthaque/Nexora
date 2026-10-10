@@ -582,7 +582,12 @@ if (!authedThisSession) {
       $.each(cart, function (index, data) {
         total += data.quantity * data.price;
       });
-      total = total - $("#inputDiscount").val();
+      let discount = $("#inputDiscount").val();
+      if (discount < 0) {
+        $("#inputDiscount").val(0);
+        discount = 0;
+      }
+      total = total - discount;
       $("#price").text(settings.symbol + total.toFixed(2));
 
       subTotal = total;
