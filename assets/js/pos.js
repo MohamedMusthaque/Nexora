@@ -68,8 +68,8 @@ let platform;
 let user = {};
 let start = moment().startOf("month");
 let end = moment();
-let start_date = moment(start).toDate();
-let end_date = moment(end).toDate();
+let start_date = moment(start).toDate().toJSON();
+let end_date = moment(end).toDate().toJSON();
 let by_till = 0;
 let by_user = 0;
 let by_status = 1;
@@ -738,11 +738,19 @@ if (!authedThisSession) {
         $("#card").toggle(settings.card_disabled != "on");
         $("#mpesa").toggle(settings.mpesa_disabled != "on");
         $("#bank").toggle(settings.bank_disabled != "on");
+        
+        let customer = JSON.parse($("#customer").val());
+        if (customer == 0) {
+            $("#credit").hide();
+        } else {
+            $("#credit").show();
+        }
 
         if (
           (paymentType == 2 && settings.card_disabled == "on") ||
           (paymentType == 3 && settings.mpesa_disabled == "on") ||
-          (paymentType == 4 && settings.bank_disabled == "on")
+          (paymentType == 4 && settings.bank_disabled == "on") ||
+          (paymentType == 5 && customer == 0)
         ) {
           paymentType = 1;
           $(".list-group-item").removeClass("active");
@@ -783,6 +791,9 @@ if (!authedThisSession) {
         if (buttonValue == "Bank Transfer") {
           paymentType = 4;
         }
+        if (buttonValue == "Credit") {
+          paymentType = 5;
+        }
       });
     });
 
@@ -809,6 +820,12 @@ if (!authedThisSession) {
 
       let discount = $("#inputDiscount").val();
       let customer = JSON.parse($("#customer").val());
+      
+      if (paymentType === 5 && customer == 0) {
+        Swal.fire("Action Denied", "Walk in customer cannot do credit payment. Please register or select a customer first.", "error");
+        return;
+      }
+
       let date = moment(currentTime).format("YYYY-MM-DD HH:mm:ss");
       let paid =
         $("#payment").val() == ""
@@ -836,6 +853,9 @@ if (!authedThisSession) {
           break;
         case 4:
           type = "Bank Transfer";
+          break;
+        case 5:
+          type = "Credit";
           break;
         default:
           type = "Cash";
@@ -987,6 +1007,10 @@ if (!authedThisSession) {
           $(".loading").hide();
           return;
         }
+      }
+
+      if (type === "Credit") {
+        status = 0;
       }
 
       let data = {
@@ -2757,6 +2781,18 @@ function loadTransactions() {
         }
       });
     } else {
+      // Clear stale results from the previous filter
+      if ($.fn.DataTable.isDataTable("#transactionList")) {
+        $("#transactionList").DataTable().destroy();
+      }
+      $("#transaction_list").empty();
+      $("#product_sales").empty();
+      allTransactions = [];
+      $("#total_sales #counter").text(settings.symbol + "0.00");
+      $("#total_transactions #counter").text(0);
+      $("#total_items #counter").text(0);
+      $("#total_products #counter").text(0);
+
       Swal.fire(
         "No data!",
         "No transactions available within the selected criteria",
@@ -3295,17 +3331,18 @@ $.fn.submitReturn = function () {
 };
 
 $("#status").change(function () {
-  by_status = $(this).find("option:selected").val();
+  let selectedStatus = parseInt($(this).find("option:selected").val());
+  by_status = isNaN(selectedStatus) ? 1 : selectedStatus;
   loadTransactions();
 });
 
 $("#tills").change(function () {
-  by_till = $(this).find("option:selected").val();
+  by_till = parseInt($(this).find("option:selected").val()) || 0;
   loadTransactions();
 });
 
 $("#users").change(function () {
-  by_user = $(this).find("option:selected").val();
+  by_user = parseInt($(this).find("option:selected").val()) || 0;
   loadTransactions();
 });
 

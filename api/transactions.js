@@ -60,46 +60,37 @@ app.get("/customer-orders", function(req, res) {
 
 
 app.get("/by-date", function(req, res) {
-
   let startDate = new Date(req.query.start);
   let endDate = new Date(req.query.end);
+  let status = parseInt(req.query.status);
+  if (isNaN(status)) status = 1;
+  let user = parseInt(req.query.user) || 0;
+  let till = parseInt(req.query.till) || 0;
 
-  if(req.query.user == 0 && req.query.till == 0) {
-      transactionsDB.find(
-        { $and: [{ date: { $gte: startDate.toJSON(), $lte: endDate.toJSON() }}, { status: parseInt(req.query.status) }] },
-        function(err, docs) {
-          if (docs) res.send(docs);
-        }
-      );
+  let query = { $and: [{ date: { $gte: startDate.toJSON(), $lte: endDate.toJSON() }}] };
+
+  // Paid = Cash / Card / Bank Transfer (and Mpesa) sales; Unpaid = Credit sales.
+  // Held orders (status 0, not Credit) are excluded from both.
+  if (status === 0) {
+    query.$and.push({ payment_type: "Credit" });
+  } else {
+    query.$and.push({ status: 1 });
+    query.$and.push({ payment_type: { $in: ["Cash", "Card", "Bank Transfer", "Mpesa"] } });
   }
 
-  if(req.query.user != 0 && req.query.till == 0) {
-    transactionsDB.find(
-      { $and: [{ date: { $gte: startDate.toJSON(), $lte: endDate.toJSON() }}, { status: parseInt(req.query.status) }, { user_id: parseInt(req.query.user) }] },
-      function(err, docs) {
-        if (docs) res.send(docs);
-      }
-    );
+  if (user !== 0) {
+    query.$and.push({ user_id: user });
+  }
+  if (till !== 0) {
+    query.$and.push({ till: till });
   }
 
-  if(req.query.user == 0 && req.query.till != 0) {
-    transactionsDB.find(
-      { $and: [{ date: { $gte: startDate.toJSON(), $lte: endDate.toJSON() }}, { status: parseInt(req.query.status) }, { till: parseInt(req.query.till) }] },
-      function(err, docs) {
-        if (docs) res.send(docs);
-      }
-    );
-  }
-
-  if(req.query.user != 0 && req.query.till != 0) {
-    transactionsDB.find(
-      { $and: [{ date: { $gte: startDate.toJSON(), $lte: endDate.toJSON() }}, { status: parseInt(req.query.status) }, { till: parseInt(req.query.till) }, { user_id: parseInt(req.query.user) }] },
-      function(err, docs) {
-        if (docs) res.send(docs);
-      }
-    );
-  }
-
+  transactionsDB.find(query, function(err, docs) {
+    if (err) {
+      return res.status(500).send(err);
+    }
+    res.send(docs || []);
+  });
 });
 
 
