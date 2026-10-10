@@ -177,6 +177,9 @@ if (!authedThisSession) {
     if (settings.exchange_disabled == "on") {
       $("#exchangeOrdersBtn").hide();
     }
+    if (settings.stock_check_disabled == "on") {
+      $("#stock").parent().hide();
+    }
   });
 
   $.get(api + "users/all", function (users) {
@@ -1463,7 +1466,7 @@ if (!authedThisSession) {
         $("#rmv_img").show();
       }
 
-      if (allProducts[index].stock == 0) {
+      if (allProducts[index].stock == 0 && settings.stock_check_disabled != "on") {
         $("#stock").prop("checked", true);
       }
 
@@ -2474,6 +2477,9 @@ if (!authedThisSession) {
         }
         if (settings.exchange_disabled == "on") {
           $("#exchange_disabled").prop("checked", true);
+        }
+        if (settings.stock_check_disabled == "on") {
+          $("#stock_check_disabled").prop("checked", true);
         }
         if (settings.img != "") {
           $("#logoname").hide();
