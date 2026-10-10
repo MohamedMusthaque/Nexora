@@ -730,10 +730,12 @@ if (!authedThisSession) {
       if (cart.length != 0) {
         $("#card").toggle(settings.card_disabled != "on");
         $("#mpesa").toggle(settings.mpesa_disabled != "on");
+        $("#bank").toggle(settings.bank_disabled != "on");
 
         if (
           (paymentType == 2 && settings.card_disabled == "on") ||
-          (paymentType == 3 && settings.mpesa_disabled == "on")
+          (paymentType == 3 && settings.mpesa_disabled == "on") ||
+          (paymentType == 4 && settings.bank_disabled == "on")
         ) {
           paymentType = 1;
           $(".list-group-item").removeClass("active");
@@ -770,6 +772,9 @@ if (!authedThisSession) {
         }
         if (buttonValue == "Mpesa") {
           paymentType = 3;
+        }
+        if (buttonValue == "Bank Transfer") {
+          paymentType = 4;
         }
       });
     });
@@ -822,7 +827,9 @@ if (!authedThisSession) {
         case 3:
           type = "Mpesa";
           break;
-
+        case 4:
+          type = "Bank Transfer";
+          break;
         default:
           type = "Cash";
       }
@@ -2471,6 +2478,9 @@ if (!authedThisSession) {
         }
         if (settings.mpesa_disabled == "on") {
           $("#mpesa_disabled").prop("checked", true);
+        }
+        if (settings.bank_disabled == "on") {
+          $("#bank_disabled").prop("checked", true);
         }
         if (settings.return_disabled == "on") {
           $("#return_disabled").prop("checked", true);
