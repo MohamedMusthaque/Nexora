@@ -49,6 +49,10 @@ let ExcelJS = require("exceljs");
 let JsBarcode = require("jsbarcode");
 let macaddress = require("macaddress");
 let categories = [];
+// products on the POS sale grid, grouped by category + name so that
+// same-name items with different prices/barcodes share one tile; the user
+// picks which price to add via selectVariant()
+let posProductGroups = [];
 let holdOrderList = [];
 let customerOrderList = [];
 let ownUserEdit = null;
@@ -167,6 +171,12 @@ if (!authedThisSession) {
 
   $.get(api + "settings/get", function (data) {
     settings = data.settings;
+    if (settings.return_disabled == "on") {
+      $("#returnOrdersBtn").hide();
+    }
+    if (settings.exchange_disabled == "on") {
+      $("#exchangeOrdersBtn").hide();
+    }
   });
 
   $.get(api + "users/all", function (users) {
@@ -279,32 +289,66 @@ if (!authedThisSession) {
           `<button type="button" id="all" class="btn btn-categories btn-white waves-effect waves-light">All</button> `
         );
 
+        // group products with the same name inside the same category so
+        // they share one tile; each group's variants keep their own price,
+        // barcode and stock, picked via a popup when the tile is clicked
+        let groupsByKey = {};
         data.forEach((item) => {
           if (!categories.includes(item.category)) {
             categories.push(item.category);
           }
 
-          let item_info = `<div class="col-lg-2 box ${item.category}"
-                          onclick="$(this).addToCart(${item._id}, ${
-            item.quantity
-          }, ${item.stock})">
-                      <div class="widget-panel widget-style-2 ">                    
+          let key = item.category + "||" + item.name;
+          if (!groupsByKey[key]) {
+            groupsByKey[key] = {
+              category: item.category,
+              name: item.name,
+              variants: [],
+            };
+          }
+          groupsByKey[key].variants.push(item);
+        });
+
+        posProductGroups = Object.values(groupsByKey);
+
+        posProductGroups.forEach((group, groupIndex) => {
+          let representative = group.variants[0];
+          let prices = group.variants.map((v) => parseFloat(v.price));
+          let minPrice = Math.min(...prices);
+          let maxPrice = Math.max(...prices);
+          let priceLabel =
+            minPrice === maxPrice
+              ? settings.symbol + minPrice.toFixed(2)
+              : `${settings.symbol}${minPrice.toFixed(
+                  2
+                )} - ${settings.symbol}${maxPrice.toFixed(2)}`;
+
+          let trackedVariants = group.variants.filter((v) => v.stock == 1);
+          let totalStock = trackedVariants.reduce(
+            (sum, v) => sum + (parseInt(v.quantity) || 0),
+            0
+          );
+          let stockLabel = trackedVariants.length > 0 ? totalStock : "N/A";
+
+          let item_info = `<div class="col-lg-2 box ${group.category}"
+                          onclick="$(this).selectVariant(${groupIndex})">
+                      <div class="widget-panel widget-style-2 ">
                       <div id="image"><img src="${
-                        item.img == ""
+                        representative.img == ""
                           ? "./assets/images/default.jpg"
-                          : img_path + item.img
-                      }" id="product_img" alt=""></div>                    
+                          : img_path + representative.img
+                      }" id="product_img" alt=""></div>
                                   <div class="text-muted m-t-5 text-center">
                                   <div class="name" id="product_name">${
-                                    item.name
-                                  }</div> 
-                                  <span class="sku">${item.sku}</span>
-                                  <span class="stock">STOCK </span><span class="count">${
-                                    item.stock == 1 ? item.quantity : "N/A"
-                                  }</span></div>
-                                  <sp class="text-success text-center"><b data-plugin="counterup">${
-                                    settings.symbol + item.price
-                                  }</b> </sp>
+                                    group.name
+                                  }</div>
+                                  <span class="sku">${
+                                    group.variants.length > 1
+                                      ? group.variants.length + " prices"
+                                      : representative.sku || ""
+                                  }</span>
+                                  <span class="stock">STOCK </span><span class="count">${stockLabel}</span></div>
+                                  <sp class="text-success text-center"><b data-plugin="counterup">${priceLabel}</b> </sp>
                       </div>
                   </div>`;
           $("#parent").append(item_info);
@@ -351,6 +395,52 @@ if (!authedThisSession) {
         //  $('#customer').chosen();
       });
     }
+
+    // called when a POS tile is clicked; tiles that group several
+    // same-name/different-price products show a popup so the user can pick
+    // which price to ring up, otherwise the single variant is added directly
+    $.fn.selectVariant = function (groupIndex) {
+      let group = posProductGroups[groupIndex];
+      if (!group || group.variants.length === 0) return;
+
+      if (group.variants.length === 1) {
+        let v = group.variants[0];
+        $(this).addToCart(v._id, v.quantity, v.stock);
+        return;
+      }
+
+      let optionsHtml = group.variants
+        .map(
+          (v) =>
+            `<button type="button" class="btn btn-white btn-block variant-option" data-id="${
+              v._id
+            }" data-quantity="${v.quantity}" data-stock="${
+              v.stock
+            }" style="display:flex; justify-content:space-between; margin-bottom:6px;">
+              <span>${v.barcode ? "Barcode: " + v.barcode : ""}</span>
+              <span>${settings.symbol}${v.price}</span>
+            </button>`
+        )
+        .join("");
+
+      Swal.fire({
+        title: `Select price for ${group.name}`,
+        html: `<div class="variant-list">${optionsHtml}</div>`,
+        showConfirmButton: false,
+        showCloseButton: true,
+        didOpen: (popup) => {
+          $(popup)
+            .find(".variant-option")
+            .on("click", function () {
+              let id = $(this).data("id");
+              let quantity = $(this).data("quantity");
+              let stock = $(this).data("stock");
+              Swal.close();
+              $(document).addToCart(id, quantity, stock);
+            });
+        },
+      });
+    };
 
     $.fn.addToCart = function (id, count, stock) {
       if (stock == 1) {
@@ -1301,6 +1391,11 @@ if (!authedThisSession) {
         },
         error: function (data) {
           console.log(data);
+          Swal.fire({
+            title: "Could not save product",
+            text: "Please try again.",
+            icon: "error",
+          });
         },
       });
     });
@@ -2373,6 +2468,12 @@ if (!authedThisSession) {
         }
         if (settings.mpesa_disabled == "on") {
           $("#mpesa_disabled").prop("checked", true);
+        }
+        if (settings.return_disabled == "on") {
+          $("#return_disabled").prop("checked", true);
+        }
+        if (settings.exchange_disabled == "on") {
+          $("#exchange_disabled").prop("checked", true);
         }
         if (settings.img != "") {
           $("#logoname").hide();

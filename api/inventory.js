@@ -88,7 +88,13 @@ app.post("/product", upload.single("imagename"), function (req, res) {
   };
 
   if (req.body.id == "") {
-    Product._id = Math.floor(Date.now() / 1000);
+    // Date.now() alone (or Date.now()/1000) can collide when products are
+    // added in quick succession, which made nedb's unique _id index reject
+    // the second insert and silently drop the new product while the UI
+    // still reported success (the new barcode product ended up sharing the
+    // stock/tile of the earlier one). Add a random suffix to keep IDs
+    // unique even within the same millisecond.
+    Product._id = Date.now() * 1000 + Math.floor(Math.random() * 1000);
     inventoryDB.insert(Product, function (err, product) {
       if (err) res.status(500).send(err);
       else res.send(product);
