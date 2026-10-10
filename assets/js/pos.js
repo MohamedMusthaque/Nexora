@@ -395,7 +395,9 @@ if (!authedThisSession) {
           $("#customer").append(customer);
         });
 
-        //  $('#customer').chosen();
+        // Initialize or update Chosen plugin for searchable dropdown
+        $('#customer').chosen({ width: '100%', search_contains: true });
+        $('#customer').trigger("chosen:updated");
       });
     }
 
@@ -1138,6 +1140,7 @@ if (!authedThisSession) {
             return $(this).text() == "Walk in customer";
           })
           .prop("selected", true);
+        $("#customer").trigger("chosen:updated");
 
         holdOrder = holdOrderList[index]._id;
         cart = [];
@@ -1161,6 +1164,7 @@ if (!authedThisSession) {
             return $(this).text() == customerOrderList[index].customer.name;
           })
           .prop("selected", true);
+        $("#customer").trigger("chosen:updated");
 
         holdOrder = customerOrderList[index]._id;
         cart = [];
