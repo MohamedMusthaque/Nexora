@@ -66,10 +66,10 @@ let storage = new Store();
 let settings;
 let platform;
 let user = {};
-let start = moment().startOf("month");
-let end = moment();
-let start_date = moment(start).toDate().toJSON();
-let end_date = moment(end).toDate().toJSON();
+// Transactions page date range (ISO strings; "" = no limit). Kept in sync
+// with the date filter set up below.
+let start_date = moment().startOf("month").toDate().toJSON();
+let end_date = moment().endOf("day").toDate().toJSON();
 let by_till = 0;
 let by_user = 0;
 let by_status = 1;
@@ -77,13 +77,20 @@ let by_status = 1;
 // Reusable date range filter with a Clear option.
 // Markup (see index.html): .date-range-filter > .date-range-input (span label)
 // + .date-range-clear button. onChange() is called whenever the range is set
-// or cleared. Returns { matches(date), isActive(), reset() }.
-function initDateRangeFilter(container, onChange) {
+// or cleared. options.initial: { start, end } to start with a range instead
+// of "All dates". Returns { matches(date), isActive(), getRange(), reset() }.
+function initDateRangeFilter(container, onChange, options) {
+  options = options || {};
   let $box = $(container);
   let $input = $box.find(".date-range-input");
   let $label = $input.find(".date-range-label");
   let $clear = $box.find(".date-range-clear");
-  let range = null; // { start, end } as moments, or null for all dates
+  let range = options.initial // { start, end } as moments, or null for all dates
+    ? {
+        start: moment(options.initial.start).startOf("day"),
+        end: moment(options.initial.end).endOf("day"),
+      }
+    : null;
 
   function show() {
     if (range) {
@@ -105,6 +112,8 @@ function initDateRangeFilter(container, onChange) {
 
   $input.daterangepicker({
     autoUpdateInput: false,
+    startDate: range ? range.start : moment(),
+    endDate: range ? range.end : moment(),
     showDropdowns: true,
     alwaysShowCalendars: true,
     opens: "right",
@@ -148,6 +157,9 @@ function initDateRangeFilter(container, onChange) {
     isActive: function () {
       return !!range;
     },
+    getRange: function () {
+      return range ? { start: range.start.clone(), end: range.end.clone() } : null;
+    },
     // back to "All dates" without triggering onChange
     reset: function () {
       let picker = $input.data("daterangepicker");
@@ -160,49 +172,23 @@ function initDateRangeFilter(container, onChange) {
   };
 }
 
+// Transactions page date filter: starts on this month; "Clear" shows all dates
+// (start_date/end_date empty = no date limit in the by-date query).
 $(function () {
-  function cb(start, end) {
-    $("#reportrange span").html(
-      start.format("MMMM D, YYYY") + "  -  " + end.format("MMMM D, YYYY")
-    );
-  }
-
-  $("#reportrange").daterangepicker(
-    {
-      startDate: start,
-      endDate: end,
-      autoApply: true,
-      timePicker: true,
-      timePicker24Hour: true,
-      timePickerIncrement: 10,
-      timePickerSeconds: true,
-      // minDate: '',
-      ranges: {
-        Today: [moment().startOf("day"), moment()],
-        Yesterday: [
-          moment().subtract(1, "days").startOf("day"),
-          moment().subtract(1, "days").endOf("day"),
-        ],
-        "Last 7 Days": [
-          moment().subtract(6, "days").startOf("day"),
-          moment().endOf("day"),
-        ],
-        "Last 30 Days": [
-          moment().subtract(29, "days").startOf("day"),
-          moment().endOf("day"),
-        ],
-        "This Month": [moment().startOf("month"), moment().endOf("month")],
-        "This Month": [moment().startOf("month"), moment()],
-        "Last Month": [
-          moment().subtract(1, "month").startOf("month"),
-          moment().subtract(1, "month").endOf("month"),
-        ],
-      },
+  let transactionsDateFilter = initDateRangeFilter(
+    "#transactionsDateRange",
+    function () {
+      let range = transactionsDateFilter.getRange();
+      start_date = range ? range.start.toDate().toJSON() : "";
+      end_date = range ? range.end.toDate().toJSON() : "";
+      loadTransactions();
     },
-    cb
+    { initial: { start: moment().startOf("month"), end: moment() } }
   );
 
-  cb(start, end);
+  let range = transactionsDateFilter.getRange();
+  start_date = range.start.toDate().toJSON();
+  end_date = range.end.toDate().toJSON();
 });
 
 $.fn.serializeObject = function () {
@@ -2139,8 +2125,11 @@ if (!authedThisSession) {
 
     function renderCustomerTransactions() {
       let filter = $("#customerTransactionsFilter").val() || "all";
+      // payment type + date range; the totals below follow both filters
       customerTransactions = customerTransactionsAll.filter(
-        (t) => filter === "all" || t.payment_type === filter
+        (t) =>
+          (filter === "all" || t.payment_type === filter) &&
+          customerTxnDateFilter.matches(t.date)
       );
 
       let sym = settings?.symbol || "";
@@ -2172,7 +2161,7 @@ if (!authedThisSession) {
 
         rows += `<tr>
             <td>${trans.order}${returnBadge}</td>
-            <td class="nobr" data-order="${moment(trans.date).valueOf()}">${moment(trans.date).format("YYYY MMM DD hh:mm:ss")}</td>
+            <td class="nobr" data-order="${moment(trans.date).valueOf()}">${moment(trans.date).format("DD MMM YYYY, hh:mm A")}</td>
             <td>${itemCount}</td>
             <td>${sym + amount.toFixed(2)}</td>
             <td>${trans.paid === "" || trans.paid == null ? "" : sym + parseFloat(trans.paid).toFixed(2)}</td>
@@ -2202,7 +2191,9 @@ if (!authedThisSession) {
         language: {
           search: "_INPUT_",
           searchPlaceholder: "Search transactions...",
-          emptyTable: "No transactions for this customer",
+          emptyTable: customerTransactionsAll.length
+            ? "No transactions match the selected payment type / date range"
+            : "No transactions for this customer",
         },
       });
     }
@@ -2213,6 +2204,7 @@ if (!authedThisSession) {
 
       $("#customerTransactionsTitle").text("Transactions - " + customer.name);
       $("#customerTransactionsFilter").val("all");
+      customerTxnDateFilter.reset();
       $("#customerTxnCreditInfo").empty();
       customerTransactionsAll = [];
       customerTransactions = [];
@@ -2261,6 +2253,11 @@ if (!authedThisSession) {
     };
 
     $("#customerTransactionsFilter").on("change", renderCustomerTransactions);
+
+    let customerTxnDateFilter = initDateRangeFilter(
+      "#customerTransactionsDateRange",
+      renderCustomerTransactions
+    );
 
     // The receipt modal opens on top of the history modal; Bootstrap 3 drops
     // body.modal-open when it closes, which would stop the history scrolling.
@@ -4116,15 +4113,6 @@ $("#users").change(function () {
   loadTransactions();
 });
 
-$("#reportrange").on("apply.daterangepicker", function (ev, picker) {
-  start = picker.startDate.format("DD MMM YYYY hh:mm A");
-  end = picker.endDate.format("DD MMM YYYY hh:mm A");
-
-  start_date = picker.startDate.toDate().toJSON();
-  end_date = picker.endDate.toDate().toJSON();
-
-  loadTransactions();
-});
 
 function authenticate() {
   $("#loading").append(

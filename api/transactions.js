@@ -60,14 +60,23 @@ app.get("/customer-orders", function(req, res) {
 
 
 app.get("/by-date", function(req, res) {
-  let startDate = new Date(req.query.start);
-  let endDate = new Date(req.query.end);
+  // start/end are optional: leaving either out (the Transactions page's
+  // "Clear" / All dates) removes that side of the date limit
+  let startDate = req.query.start ? new Date(req.query.start) : null;
+  let endDate = req.query.end ? new Date(req.query.end) : null;
+  if ((startDate && isNaN(startDate)) || (endDate && isNaN(endDate))) {
+    return res.status(400).send("Invalid start or end date.");
+  }
   let status = parseInt(req.query.status);
   if (isNaN(status)) status = 1;
   let user = parseInt(req.query.user) || 0;
   let till = parseInt(req.query.till) || 0;
 
-  let query = { $and: [{ date: { $gte: startDate.toJSON(), $lte: endDate.toJSON() }}] };
+  let query = { $and: [] };
+  let dateRange = {};
+  if (startDate) dateRange.$gte = startDate.toJSON();
+  if (endDate) dateRange.$lte = endDate.toJSON();
+  if (startDate || endDate) query.$and.push({ date: dateRange });
 
   // Paid = Cash / Card / Bank Transfer (and Mpesa) sales; Unpaid = Credit sales;
   // All (2) = Paid + Unpaid. Held orders (status 0, not Credit) are excluded from all.

@@ -194,11 +194,15 @@
                                 <option value="0">Unpaid</option>
                             </select>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-4">
                             <span style="width: 100%;">Date</span>
-                            <div id="reportrange">
-                                <i class="fa fa-calendar"></i>&nbsp;
-                                <span></span> <i class="fa fa-caret-down"></i>
+                            <div class="date-range-filter transactions-date-filter" id="transactionsDateRange">
+                                <div class="date-range-input" title="Filter by date">
+                                    <i class="fa fa-calendar"></i>&nbsp;
+                                    <span class="date-range-label">All dates</span>
+                                    <i class="fa fa-caret-down"></i>
+                                </div>
+                                <button type="button" class="btn btn-default date-range-clear" title="Clear date filter (show all dates)" style="display: none;"><i class="fa fa-times"></i> Clear</button>
                             </div>
                         </div>
                     </div>   
@@ -1006,9 +1010,9 @@
                 </div>
                 <p id="customerTxnCreditInfo" class="text-muted" style="margin: 12px 0 0;"></p>
                 <br>
-                <div class="form-inline" style="margin-bottom: 10px;">
-                    <label for="customerTransactionsFilter">Payment type&nbsp;</label>
-                    <select id="customerTransactionsFilter" class="form-control">
+                <div class="filter-bar" style="margin-bottom: 10px;">
+                    <label for="customerTransactionsFilter" style="margin: 0;">Payment type</label>
+                    <select id="customerTransactionsFilter" class="form-control" style="width: auto;">
                         <option value="all">All</option>
                         <option value="Cash">Cash</option>
                         <option value="Card">Card</option>
@@ -1016,6 +1020,15 @@
                         <option value="Bank Transfer">Bank Transfer</option>
                         <option value="Credit">Credit</option>
                     </select>
+                    <label style="margin: 0 0 0 8px;">Date</label>
+                    <div class="date-range-filter" id="customerTransactionsDateRange">
+                        <div class="date-range-input" title="Filter by date">
+                            <i class="fa fa-calendar"></i>&nbsp;
+                            <span class="date-range-label">All dates</span>
+                            <i class="fa fa-caret-down"></i>
+                        </div>
+                        <button type="button" class="btn btn-default date-range-clear" title="Clear date filter" style="display: none;"><i class="fa fa-times"></i> Clear</button>
+                    </div>
                 </div>
                 <table class="table table-bordered" id="customerTransactionsTable">
                     <thead>

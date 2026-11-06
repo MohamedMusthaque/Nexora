@@ -132,6 +132,19 @@
   height: 34px;
   padding: 6px 10px;
 }
+/* Transactions page: fill the column, same height as the other filters */
+.transactions-date-filter{
+  display: flex;
+  width: 100%;
+}
+.transactions-date-filter .date-range-input{
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.transactions-date-filter .date-range-input,
+.transactions-date-filter .date-range-clear{
+  height: 38px;
+}
 /* the picker opens from inside popups */
 .daterangepicker{
   z-index: 3000;
