@@ -238,11 +238,14 @@ body.transactions-mode.totals-compact #totals #counter{
 /* ---- Transactions page: Profit section ---- */
 #profitSection .profit-header{
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 14px;
+}
+#profitSection .profit-filters{
+  justify-content: flex-end;
 }
 #profitSection .profit-tiles{
   display: grid;

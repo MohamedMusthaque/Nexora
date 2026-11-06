@@ -282,7 +282,19 @@
                 <div class="card-box" id="profitSection">
                     <div class="profit-header">
                         <h3 style="margin: 0;">Profit</h3>
-                        <span class="text-muted" id="profitPeriod"></span>
+                        <!-- Profit has its own date range (pos.js: profitDateFilter); Till / Cashier / Status come from the filters above -->
+                        <div class="filter-bar profit-filters">
+                            <span class="text-muted" id="profitPeriod"></span>
+                            <label style="margin: 0 0 0 8px;">Date</label>
+                            <div class="date-range-filter" id="profitDateRange">
+                                <div class="date-range-input" title="Filter profit by date">
+                                    <i class="fa fa-calendar"></i>&nbsp;
+                                    <span class="date-range-label">All dates</span>
+                                    <i class="fa fa-caret-down"></i>
+                                </div>
+                                <button type="button" class="btn btn-default date-range-clear" title="Clear date filter" style="display: none;"><i class="fa fa-times"></i> Clear</button>
+                            </div>
+                        </div>
                     </div>
                     <div class="profit-tiles">
                         <div class="profit-tile">

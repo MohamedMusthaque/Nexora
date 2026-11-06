@@ -679,6 +679,9 @@ $(function () {
       loadTransactions();
     }
   );
+
+  // Profit section: its own date range ("All dates" by default)
+  profitDateFilter = initDateRangeFilter("#profitDateRange", refreshProfit);
 });
 
 $.fn.serializeObject = function () {
@@ -4341,7 +4344,7 @@ function renderProfit(result) {
   let t = result.totals;
 
   $("#profitPeriod").text(
-    ($("#transactionsDateRange .date-range-label").text() || "All dates") +
+    ($("#profitDateRange .date-range-label").text() || "All dates") +
       " · " +
       ($("#status option:selected").text() || "Paid")
   );
@@ -4407,9 +4410,29 @@ function renderProfit(result) {
   );
 }
 
-// loads the refunds for the shown transactions, then calculates and shows profit
-function loadProfit(transactions) {
+// Profit has its own date range (set up with the Transactions date filter
+// below); Till / Cashier / Status are shared with the Transactions page.
+let profitDateFilter = null;
+
+// fetches the sales for the Profit date range + page filters, then shows profit
+function refreshProfit() {
   let requestId = ++profitRequestId;
+  let range = profitDateFilter ? profitDateFilter.getRange() : null;
+  let start = range ? range.start.toDate().toJSON() : "";
+  let end = range ? range.end.toDate().toJSON() : "";
+  $.get(api + `by-date?start=${start}&end=${end}&user=${by_user}&status=${by_status}&till=${by_till}`)
+    .done((transactions) => {
+      if (requestId !== profitRequestId) return; // a newer filter change won
+      loadProfit(transactions || [], requestId);
+    })
+    .fail(() => {
+      if (requestId === profitRequestId) loadProfit([], requestId);
+    });
+}
+
+// loads the refunds for the given transactions, then calculates and shows profit
+function loadProfit(transactions, requestId) {
+  requestId = requestId || ++profitRequestId;
   let ids = (transactions || []).map((t) => t._id);
   let done = (returns) => {
     if (requestId !== profitRequestId) return; // a newer filter change won
@@ -4446,7 +4469,7 @@ function loadTransactions() {
       $("#transactionList").DataTable().destroy();
 
       allTransactions = [...transactions];
-      loadProfit(allTransactions);
+      refreshProfit();
 
       transactions?.forEach((trans, index) => {
         const total = parseFloat(trans?.total);
@@ -4574,7 +4597,7 @@ function loadTransactions() {
       $("#transaction_list").empty();
       $("#product_sales").empty();
       allTransactions = [];
-      loadProfit([]);
+      refreshProfit();
       $("#total_sales #counter").text(settings.symbol + "0.00");
       $("#total_transactions #counter").text(0);
       $("#total_items #counter").text(0);
