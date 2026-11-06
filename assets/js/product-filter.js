@@ -89,10 +89,6 @@ $(document).ready(function(){
            $("#cardInfo").show();
            $("#cardInfo .input-group-addon").text("Card Info");
        }
-       else if(this.id == 'mpesa'){
-        $("#cardInfo").show();
-        $("#cardInfo .input-group-addon").text("Mpesa Code");
-        }
        else if(this.id == 'bank'){
            $("#cardInfo").show();
            $("#cardInfo .input-group-addon").text("Bank Info");

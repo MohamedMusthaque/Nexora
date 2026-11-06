@@ -1311,7 +1311,6 @@ if (!authedThisSession) {
     $("#payButton").on("click", function () {
       if (cart.length != 0) {
         $("#card").toggle(settings.card_disabled != "on");
-        $("#mpesa").toggle(settings.mpesa_disabled != "on");
         $("#bank").toggle(settings.bank_disabled != "on");
         
         // Credit is always listed, but only usable for a registered customer
@@ -1326,7 +1325,6 @@ if (!authedThisSession) {
 
         if (
           (paymentType == 2 && settings.card_disabled == "on") ||
-          (paymentType == 3 && settings.mpesa_disabled == "on") ||
           (paymentType == 4 && settings.bank_disabled == "on") ||
           (paymentType == 5 && customer == 0)
         ) {
@@ -1374,9 +1372,6 @@ if (!authedThisSession) {
         if (buttonValue == "Card") {
           paymentType = 2;
         }
-        if (buttonValue == "Mpesa") {
-          paymentType = 3;
-        }
         if (buttonValue == "Bank Transfer") {
           paymentType = 4;
         }
@@ -1403,7 +1398,7 @@ if (!authedThisSession) {
         }
       }
 
-      // setting value of card info/mpesa code to empty
+      // setting value of card info / bank info to empty
       $("#paymentInfo").val("");
 
       let items = "";
@@ -1452,9 +1447,6 @@ if (!authedThisSession) {
 
         case 2:
           type = "Card";
-          break;
-        case 3:
-          type = "Mpesa";
           break;
         case 4:
           type = "Bank Transfer";
@@ -2768,7 +2760,7 @@ if (!authedThisSession) {
       loadCustomerList();
     });
 
-    // ---- Customer transaction history (Cash, Card, Mpesa, Bank Transfer, Credit) ----
+    // ---- Customer transaction history (Cash, Card, Bank Transfer, Credit) ----
     let customerTransactions = [];
     let customerTransactionsAll = [];
     let customerTxnPageLength = 10;
@@ -3050,7 +3042,6 @@ if (!authedThisSession) {
       $("#settleAmount").siblings(".price-input-error").text("");
       // same payment methods as the Pay window (hide the ones switched off in Settings)
       $("#settleMethod option[value='Card']").toggle(settings.card_disabled != "on");
-      $("#settleMethod option[value='Mpesa']").toggle(settings.mpesa_disabled != "on");
       $("#settleMethod option[value='Bank Transfer']").toggle(settings.bank_disabled != "on");
       $("#settleMethod").val("Cash");
       $("#settleCreditModal").modal("show");
@@ -4174,9 +4165,6 @@ if (!authedThisSession) {
         if (settings.card_disabled == "on") {
           $("#card_disabled").prop("checked", true);
         }
-        if (settings.mpesa_disabled == "on") {
-          $("#mpesa_disabled").prop("checked", true);
-        }
         if (settings.bank_disabled == "on") {
           $("#bank_disabled").prop("checked", true);
         }
@@ -4710,9 +4698,6 @@ $.fn.viewTransaction = function (index, source) {
       break;
     case 2:
       type = "Card";
-      break;
-    case 3:
-      type = "Mpesa";
       break;
     default:
       type = "Cash";

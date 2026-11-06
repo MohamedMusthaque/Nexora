@@ -116,7 +116,9 @@ app.get("/by-date", function(req, res) {
   if (endDate) dateRange.$lte = endDate.toJSON();
   if (startDate || endDate) query.$and.push({ date: dateRange });
 
-  // Paid = Cash / Card / Bank Transfer (and Mpesa) sales; Unpaid = Credit sales;
+  // Paid = Cash / Card / Bank Transfer sales; Unpaid = Credit sales;
+  // ("Mpesa" stays in the list only so sales recorded before Mpesa was
+  // removed from the system still show up in reports)
   // All (2) = Paid + Unpaid. Held orders (status 0, not Credit) are excluded from all.
   let paidQuery = { $and: [{ status: 1 }, { payment_type: { $in: ["Cash", "Card", "Bank Transfer", "Mpesa"] } }] };
   let unpaidQuery = { payment_type: "Credit" };
@@ -145,7 +147,8 @@ app.get("/by-date", function(req, res) {
 });
 
 
-// All completed (Cash / Card / Bank Transfer / Mpesa) and Credit transactions
+// All completed (Cash / Card / Bank Transfer) and Credit transactions
+// ("Mpesa" below only matches sales recorded before Mpesa was removed)
 // for one registered customer, newest first. Held orders are excluded.
 app.get("/by-customer/:customerId", function(req, res) {
   let rawId = req.params.customerId;
@@ -226,7 +229,7 @@ app.post("/credit-payments", function(req, res) {
   if (b.customer_id === undefined || b.customer_id === null || b.customer_id === "" || b.customer_id == 0) {
     return res.status(400).send("A registered customer is required.");
   }
-  let methods = ["Cash", "Card", "Bank Transfer", "Mpesa"];
+  let methods = ["Cash", "Card", "Bank Transfer"];
   let method = methods.indexOf(b.method) !== -1 ? b.method : "Cash";
   let amount = round2(parseFloat(amountText));
 
