@@ -79,6 +79,7 @@ function editHistoryEntries(before, after, who) {
   [
     ["name", "Name"],
     ["price", "Price"],
+    ["cost_price", "Cost price"],
     ["category", "Category"],
     ["barcode", "Barcode"],
   ].forEach(function (f) {
@@ -154,9 +155,12 @@ app.post("/product", upload.single("imagename"), function (req, res) {
     }
   }
 
+  // cost price is optional ("" = not set yet); used for profit on the Transactions page
+  let cost = parseFloat(req.body.cost_price);
   let Product = {
     _id: parseInt(req.body.id),
     price: req.body.price,
+    cost_price: isNaN(cost) || cost < 0 ? "" : cost.toFixed(2),
     category: req.body.category,
     quantity: req.body.quantity == "" ? 0 : req.body.quantity,
     name: req.body.name,
@@ -183,6 +187,7 @@ app.post("/product", upload.single("imagename"), function (req, res) {
           qty_before: 0,
           qty_after: product.stock == 1 ? parseInt(product.quantity) || 0 : null,
           price: product.price,
+          cost_price: product.cost_price,
         }, who),
       ]);
       res.send(product);

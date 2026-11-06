@@ -136,6 +136,69 @@ body.transactions-mode.totals-compact #totals #counter{
   line-height: 1.1;
 }
 
+/* ---- Transactions page: Profit section ---- */
+#profitSection .profit-header{
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+#profitSection .profit-tiles{
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+@media (max-width: 767px){
+  #profitSection .profit-tiles{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+#profitSection .profit-tile{
+  border: 1px solid #e3e3e3;
+  border-radius: 5px;
+  padding: 10px 14px;
+  background: #fafbfc;
+}
+#profitSection .profit-tile h5{
+  margin: 0 0 4px;
+  font-size: 12px;
+  letter-spacing: 0.4px;
+  color: #98a6ad;
+}
+#profitSection .profit-tile .profit-value{
+  font-size: 22px;
+  font-weight: bold;
+  color: #4c5667;
+  line-height: 1.2;
+}
+#profitSection .profit-tile small{
+  font-size: 11px;
+}
+#profitSection .profit-tile-main{
+  border-color: #5fbeaa;
+  background: #f1faf8;
+}
+#profitSection .profit-tile-main .profit-value{
+  color: #3e9e8a;
+}
+#profitSection .profit-tile-main .profit-value.profit-negative{
+  color: #d84340;
+}
+#profitSection .profit-notice{
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+#profitSection #profitTable > thead > tr > th,
+#profitSection #profitTable > tbody > tr > td{
+  font-size: 13px;
+  padding: 6px 8px;
+  vertical-align: middle;
+}
+
 /* ---- Filter bar + date range filter (Select Order, Product History) ---- */
 .filter-bar{
   display: flex;

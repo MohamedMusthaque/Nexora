@@ -270,6 +270,24 @@ app.post( "/delete", function ( req, res ) {
 
 
 
+// Returns/exchanges for a list of orders (used by the Transactions page profit
+// section). Body: { ids: [orderId, ...] }
+app.post("/returns/for-orders", function(req, res) {
+  let ids = Array.isArray(req.body && req.body.ids) ? req.body.ids : [];
+  // order ids are usually numbers but may have been stored as text: match both
+  let all = [];
+  ids.forEach(function(id) {
+    all.push(String(id));
+    if (!isNaN(Number(id))) all.push(Number(id));
+  });
+  if (!all.length) return res.send([]);
+  returnsDB.find({ order_id: { $in: all } }, function(err, docs) {
+    if (err) return res.status(500).send(err);
+    res.send(docs || []);
+  });
+});
+
+
 app.get("/returns/order/:orderId", function(req, res) {
   returnsDB.find({ order_id: req.params.orderId }, function(err, docs) {
     if (err) return res.status(500).send(err);

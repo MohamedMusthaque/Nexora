@@ -275,7 +275,52 @@
                             </table>
                         </div>
 
-                      </div>                    
+                      </div>
+                </div>
+
+                <!-- Profit: follows the Till / Cashier / Status / Date filters above -->
+                <div class="card-box" id="profitSection">
+                    <div class="profit-header">
+                        <h3 style="margin: 0;">Profit</h3>
+                        <span class="text-muted" id="profitPeriod"></span>
+                    </div>
+                    <div class="profit-tiles">
+                        <div class="profit-tile">
+                            <h5>NET SALES</h5>
+                            <div class="profit-value" id="profitNetSales">0.00</div>
+                            <small class="text-muted">after discounts &amp; refunds, excl. tax</small>
+                        </div>
+                        <div class="profit-tile">
+                            <h5>COST OF GOODS</h5>
+                            <div class="profit-value" id="profitCost">0.00</div>
+                            <small class="text-muted">cost price &times; quantity sold</small>
+                        </div>
+                        <div class="profit-tile profit-tile-main">
+                            <h5>GROSS PROFIT</h5>
+                            <div class="profit-value" id="profitGross">0.00</div>
+                            <small id="profitGrossNote">net sales &minus; cost of goods</small>
+                        </div>
+                        <div class="profit-tile">
+                            <h5>MARGIN</h5>
+                            <div class="profit-value" id="profitMargin">0%</div>
+                            <small class="text-muted" id="profitMarginNote">gross profit &divide; net sales</small>
+                        </div>
+                    </div>
+                    <div id="profitNotices"></div>
+                    <table class="table table-bordered" id="profitTable" style="width: 100%;">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Qty Sold</th>
+                                <th>Returned</th>
+                                <th>Net Sales</th>
+                                <th>Cost</th>
+                                <th>Profit</th>
+                                <th>Margin</th>
+                            </tr>
+                        </thead>
+                        <tbody id="profit_list"></tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -697,10 +742,17 @@
                             <label for="userName">Product Name</label>
                             <input type="text" required="required"  name="name" parsley-trigger="change" placeholder="Enter a product name" class="form-control" id="productName">
                         </div>
-                        <div class="form-group">
-                            <label for="userName">Price</label>
-                            <input type="text" required="required" name="price" placeholder="Price" class="form-control" id="product_price">
+                        <div class="row">
+                            <div class="form-group col-xs-6">
+                                <label for="product_cost_price">Cost Price</label>
+                                <input type="number" min="0" step="0.01" name="cost_price" placeholder="What you pay" class="form-control" id="product_cost_price">
+                            </div>
+                            <div class="form-group col-xs-6">
+                                <label for="product_price">Selling Price</label>
+                                <input type="text" required="required" name="price" placeholder="What the customer pays" class="form-control" id="product_price">
+                            </div>
                         </div>
+                        <p class="text-muted" id="productMarginHint" style="margin: -8px 0 12px; font-size: 12px;"></p>
                         <div class="form-group">
                             <label for="userName">Barcode
                                 <button type="button" id="fill_barcode" class="btn btn-primary btn-sm ml-2 fill-button">Fill</button>

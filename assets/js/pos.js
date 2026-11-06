@@ -704,6 +704,8 @@ if (!authedThisSession) {
         product_name: data.name,
         sku: data.sku,
         price: data.price,
+        // cost at the time of sale, saved with the transaction for profit
+        cost_price: data.cost_price ?? "",
         img: data.img,
         quantity: 1,
       };
@@ -1358,6 +1360,7 @@ if (!authedThisSession) {
             product_name: product.product_name,
             sku: product.sku,
             price: product.price,
+            cost_price: product.cost_price ?? "",
             quantity: product.quantity,
           };
           cart.push(item);
@@ -1382,6 +1385,7 @@ if (!authedThisSession) {
             product_name: product.product_name,
             sku: product.sku,
             price: product.price,
+            cost_price: product.cost_price ?? "",
             quantity: product.quantity,
           };
           cart.push(item);
@@ -1702,7 +1706,31 @@ if (!authedThisSession) {
     $("#newProductModal").click(function () {
       $("#saveProduct").get(0).reset();
       $("#current_img").text("");
+      updateProductMarginHint();
     });
+
+    // "Profit per item: Rs. 40.00 (20.0% margin)" under the price fields
+    function updateProductMarginHint() {
+      let cost = parseFloat($("#product_cost_price").val());
+      let price = parseFloat($("#product_price").val());
+      let hint = "";
+      if (!isNaN(cost) && !isNaN(price) && price > 0) {
+        let profit = price - cost;
+        hint =
+          (profit < 0 ? "Loss per item: " : "Profit per item: ") +
+          settings.symbol +
+          Math.abs(profit).toFixed(2) +
+          " (" +
+          ((profit / price) * 100).toFixed(1) +
+          "% margin)";
+      } else if (isNaN(cost) && !isNaN(price)) {
+        hint = "Add a cost price to see this product's profit.";
+      }
+      $("#productMarginHint")
+        .text(hint)
+        .toggleClass("text-danger", !isNaN(cost) && !isNaN(price) && price - cost < 0);
+    }
+    $("#product_cost_price, #product_price").on("input", updateProductMarginHint);
 
     $("#saveProduct").submit(function (e) {
       e.preventDefault();
@@ -1794,6 +1822,8 @@ if (!authedThisSession) {
 
       $("#productName").val(allProducts[index].name);
       $("#product_price").val(allProducts[index].price);
+      $("#product_cost_price").val(allProducts[index].cost_price ?? "");
+      updateProductMarginHint();
       $("#product_barcode").val(allProducts[index].barcode);
       $("#quantity").val(allProducts[index].quantity);
 
@@ -2674,6 +2704,7 @@ if (!authedThisSession) {
               : img_path + product.img
           }" id="product_img"></td>
           <td>${product.name}</td>
+          <td>${product.cost_price !== undefined && product.cost_price !== "" ? settings.symbol + parseFloat(product.cost_price).toFixed(2) : '<span class="text-muted" title="No cost price yet">&mdash;</span>'}</td>
           <td>${settings.symbol}${product.price}</td>
           <td>${product.stock == 1 ? product.quantity : "N/A"}</td>
           <td class="nobr">
@@ -2713,6 +2744,7 @@ if (!authedThisSession) {
                   <th>Barcode</th>
                   <th>Item</th>
                   <th>Name</th>
+                  <th>Cost</th>
                   <th>Price</th>
                   <th>Stock</th>
                   <th>Action</th>
@@ -3294,7 +3326,7 @@ if (!authedThisSession) {
   $("#print_list").click(function () {
     $("#loading").show();
 
-    const headers = ["Barcode", "Name", "Category", "Price (LKR)", "Stock"];
+    const headers = ["Barcode", "Name", "Category", "Cost (LKR)", "Price (LKR)", "Stock"];
 
     let workbook = new ExcelJS.Workbook();
     let sheet = workbook.addWorksheet("Products");
@@ -3323,22 +3355,26 @@ if (!authedThisSession) {
         "",
         group.categoryName,
         "",
+        "",
         group.trackedCount > 0 ? group.totalStock : "N/A",
       ]);
       groupRow.font = { bold: true };
-      groupRow.getCell(5).alignment = { horizontal: "right" };
+      groupRow.getCell(6).alignment = { horizontal: "right" };
 
       group.items.forEach((product) => {
+        let hasCost = product.cost_price !== undefined && product.cost_price !== "";
         let row = sheet.addRow([
           product.barcode,
           product.name,
           group.categoryName,
+          hasCost ? "Rs. " + (parseFloat(product.cost_price) || 0).toFixed(2) : "",
           "Rs. " + (parseFloat(product.price) || 0).toFixed(2),
           product.stock == 1 ? product.quantity : "N/A",
         ]);
         row.outlineLevel = 1;
         row.getCell(4).alignment = { horizontal: "right" };
         row.getCell(5).alignment = { horizontal: "right" };
+        row.getCell(6).alignment = { horizontal: "right" };
       });
     });
 
@@ -3484,6 +3520,222 @@ $.fn.print = function () {
   printJS({ printable: receipt, type: "raw-html" });
 };
 
+// ---- Profit (Transactions page) ----
+// Works on the transactions currently loaded (so it follows the Till /
+// Cashier / Status / Date filters):
+//  - net sales: item price x qty, less the order discount (spread over the
+//    order's items in proportion to their value), less refunds; tax excluded
+//  - cost: the cost price saved with each sale; sales made before cost prices
+//    were recorded use the product's current cost (flagged as estimated)
+//  - refunds always reduce sales; they reduce cost only when the item was
+//    restocked (an item that isn't restocked is still a loss)
+//  - items with no cost price at all are left out of profit and margin
+let profitRequestId = 0;
+
+function numberOrNull(value) {
+  if (value === undefined || value === null || value === "") return null;
+  let n = parseFloat(value);
+  return isNaN(n) ? null : n;
+}
+
+function computeProfit(transactions, returns, products) {
+  let byProduct = {};
+  let orders = {};
+  let currentCost = {};
+  (products || []).forEach((p) => (currentCost[p._id] = numberOrNull(p.cost_price)));
+
+  function entry(id, name) {
+    if (!byProduct[id]) {
+      byProduct[id] = {
+        id: id, name: name || "Unknown product",
+        qty: 0, returned: 0,
+        sales: 0, costedSales: 0, cost: 0, salesNoCost: 0,
+        estimated: false, costKnown: false,
+      };
+    }
+    return byProduct[id];
+  }
+
+  // unit cost for a sold/returned line: saved cost, else the product's current cost
+  function unitCostFor(line, fallbackLine) {
+    let saved = numberOrNull(line.cost_price);
+    if (saved === null && fallbackLine) saved = numberOrNull(fallbackLine.cost_price);
+    if (saved !== null) return { cost: saved, estimated: false };
+    let current = currentCost[line.id];
+    return current === undefined || current === null
+      ? { cost: null, estimated: false }
+      : { cost: current, estimated: true };
+  }
+
+  (transactions || []).forEach((t) => {
+    let items = t.items || [];
+    let gross = items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (parseInt(i.quantity) || 0), 0);
+    let net = parseFloat(t.subtotal);
+    let ratio = gross > 0 && !isNaN(net) ? net / gross : 1;
+    orders[String(t._id)] = { ratio: ratio, items: items };
+
+    items.forEach((i) => {
+      let qty = parseInt(i.quantity) || 0;
+      let lineSales = (parseFloat(i.price) || 0) * qty * ratio;
+      let e = entry(i.id, i.product_name);
+      let c = unitCostFor(i);
+      e.qty += qty;
+      e.sales += lineSales;
+      if (c.cost === null) {
+        e.salesNoCost += lineSales;
+      } else {
+        e.costKnown = true;
+        e.costedSales += lineSales;
+        e.cost += c.cost * qty;
+        if (c.estimated) e.estimated = true;
+      }
+    });
+  });
+
+  (returns || []).forEach((r) => {
+    let order = orders[String(r.order_id)];
+    if (!order) return; // the sale itself isn't in the current view
+    (r.items || []).forEach((i) => {
+      let qty = parseInt(i.quantity) || 0;
+      let refund = (parseFloat(i.price) || 0) * qty; // what was paid back
+      let original = order.items.find((o) => o.id == i.id);
+      let e = entry(i.id, i.product_name);
+      let c = unitCostFor(i, original);
+      e.returned += qty;
+      e.sales -= refund;
+      if (c.cost === null) {
+        e.salesNoCost -= refund;
+      } else {
+        e.costKnown = true;
+        e.costedSales -= refund;
+        if (r.restocked) e.cost -= c.cost * qty;
+        if (c.estimated) e.estimated = true;
+      }
+    });
+  });
+
+  let rows = Object.values(byProduct).map((e) => {
+    let hasCost = e.costKnown;
+    let profit = hasCost ? e.costedSales - e.cost : null;
+    return Object.assign(e, {
+      hasCost: hasCost,
+      missingCost: Math.abs(e.salesNoCost) > 0.0001,
+      profit: profit,
+      margin: hasCost && e.costedSales > 0 ? (profit / e.costedSales) * 100 : null,
+    });
+  });
+
+  let totals = rows.reduce(
+    (t, e) => {
+      t.netSales += e.sales;
+      t.costedSales += e.costedSales;
+      t.cost += e.cost;
+      t.salesNoCost += e.salesNoCost;
+      return t;
+    },
+    { netSales: 0, costedSales: 0, cost: 0, salesNoCost: 0 }
+  );
+  totals.profit = totals.costedSales - totals.cost;
+  totals.margin = totals.costedSales > 0 ? (totals.profit / totals.costedSales) * 100 : null;
+  totals.missingCostProducts = rows.filter((e) => e.missingCost).map((e) => e.name);
+  totals.estimatedProducts = rows.filter((e) => e.estimated).map((e) => e.name);
+  return { rows: rows, totals: totals };
+}
+
+function renderProfit(result) {
+  let sym = settings?.symbol || "";
+  let money = (n) => (n < 0 ? "-" : "") + sym + Math.abs(n).toFixed(2);
+  let t = result.totals;
+
+  $("#profitPeriod").text(
+    ($("#transactionsDateRange .date-range-label").text() || "All dates") +
+      " · " +
+      ($("#status option:selected").text() || "Paid")
+  );
+  $("#profitNetSales").text(money(t.netSales));
+  $("#profitCost").text(money(t.cost));
+  $("#profitGross")
+    .text(money(t.profit))
+    .toggleClass("profit-negative", t.profit < 0);
+  $("#profitMargin").text(t.margin === null ? "—" : t.margin.toFixed(1) + "%");
+  // margin only counts sales that have a cost price
+  $("#profitMarginNote").text(
+    t.missingCostProducts.length
+      ? "gross profit ÷ sales with a cost price (" + money(t.costedSales) + ")"
+      : "gross profit ÷ net sales"
+  );
+  $("#profitGrossNote").text(t.profit < 0 ? "loss: cost is higher than sales" : "net sales − cost of goods");
+
+  let notices = "";
+  if (t.missingCostProducts.length) {
+    notices += `<div class="alert alert-warning profit-notice"><i class="fa fa-exclamation-triangle"></i>
+      <b>${t.missingCostProducts.length} product${t.missingCostProducts.length > 1 ? "s have" : " has"} no cost price</b>
+      (${money(t.salesNoCost)} of sales), so ${t.missingCostProducts.length > 1 ? "they are" : "it is"} not included in profit or margin:
+      ${t.missingCostProducts.map((n) => $("<i>").text(n).html()).join(", ")}.
+      Add a cost price in <b>Products</b> to include ${t.missingCostProducts.length > 1 ? "them" : "it"}.</div>`;
+  }
+  if (t.estimatedProducts.length) {
+    notices += `<div class="alert alert-info profit-notice"><i class="fa fa-info-circle"></i>
+      Some sales were made before cost prices were recorded. For those, the product's <b>current</b> cost price is used:
+      ${t.estimatedProducts.map((n) => $("<i>").text(n).html()).join(", ")}.</div>`;
+  }
+  $("#profitNotices").html(notices);
+
+  let rows = "";
+  result.rows.forEach((e) => {
+    let profitCell = e.profit === null
+      ? '<span class="text-muted" title="No cost price">&mdash;</span>'
+      : `<span class="${e.profit < 0 ? "text-danger" : "text-success"}"><b>${money(e.profit)}</b></span>`;
+    let flags =
+      (e.missingCost && e.hasCost ? ' <span class="label label-warning" title="Some of these sales have no cost price">part no cost</span>' : "") +
+      (e.estimated ? ' <span class="label label-info" title="Uses the current cost price for older sales">est.</span>' : "");
+    rows += `<tr>
+        <td>${$("<i>").text(e.name).html()}${flags}</td>
+        <td class="text-right" data-order="${e.qty}">${e.qty}</td>
+        <td class="text-right" data-order="${e.returned}">${e.returned || ""}</td>
+        <td class="text-right nobr" data-order="${e.sales}">${money(e.sales)}</td>
+        <td class="text-right nobr" data-order="${e.hasCost ? e.cost : -1e15}">${e.hasCost ? money(e.cost) : '<span class="text-muted">&mdash;</span>'}</td>
+        <td class="text-right nobr" data-order="${e.profit === null ? -1e15 : e.profit}">${profitCell}</td>
+        <td class="text-right nobr" data-order="${e.margin === null ? -1e15 : e.margin}">${e.margin === null ? '<span class="text-muted">&mdash;</span>' : e.margin.toFixed(1) + "%"}</td>
+      </tr>`;
+  });
+
+  if ($.fn.DataTable.isDataTable("#profitTable")) {
+    $("#profitTable").DataTable().destroy();
+  }
+  $("#profit_list").html(rows);
+  $("#profitTable").DataTable(
+    Object.assign(
+      standardTableOptions({
+        noun: "products",
+        searchPlaceholder: "Search products...",
+        exportTitle: "Profit - " + $("#profitPeriod").text(),
+        emptyTable: "No sales in the selected period",
+      }),
+      { order: [[5, "desc"]] }
+    )
+  );
+}
+
+// loads the refunds for the shown transactions, then calculates and shows profit
+function loadProfit(transactions) {
+  let requestId = ++profitRequestId;
+  let ids = (transactions || []).map((t) => t._id);
+  let done = (returns) => {
+    if (requestId !== profitRequestId) return; // a newer filter change won
+    renderProfit(computeProfit(transactions, returns, allProducts));
+  };
+  if (!ids.length) return done([]);
+  $.ajax({
+    url: api + "returns/for-orders",
+    type: "POST",
+    data: JSON.stringify({ ids: ids }),
+    contentType: "application/json; charset=utf-8",
+  })
+    .done((returns) => done(returns || []))
+    .fail(() => done([]));
+}
+
 function loadTransactions() {
   let tills = [];
   let users = [];
@@ -3504,6 +3756,7 @@ function loadTransactions() {
       $("#transactionList").DataTable().destroy();
 
       allTransactions = [...transactions];
+      loadProfit(allTransactions);
 
       transactions?.forEach((trans, index) => {
         const total = parseFloat(trans?.total);
@@ -3625,6 +3878,7 @@ function loadTransactions() {
       $("#transaction_list").empty();
       $("#product_sales").empty();
       allTransactions = [];
+      loadProfit([]);
       $("#total_sales #counter").text(settings.symbol + "0.00");
       $("#total_transactions #counter").text(0);
       $("#total_items #counter").text(0);
@@ -4141,6 +4395,7 @@ $.fn.openReturnModal = function (mode) {
         product_name: item.product_name,
         sku: item.sku,
         price: item.price,
+        cost_price: item.cost_price ?? "",
         remaining: remaining,
       });
 
@@ -4189,6 +4444,7 @@ $.fn.submitReturn = function () {
         product_name: match.product_name,
         sku: match.sku,
         price: match.price,
+        cost_price: match.cost_price,
         quantity: qty,
       });
     }
