@@ -288,9 +288,7 @@ if (!authedThisSession) {
         });
 
         $("#parent").text("");
-        $("#categories").html(
-          `<button type="button" id="all" class="btn btn-categories btn-white waves-effect waves-light">All</button> `
-        );
+        categories = [];
 
         // group products with the same name inside the same category so
         // they share one tile; each group's variants keep their own price,
@@ -357,23 +355,32 @@ if (!authedThisSession) {
           $("#parent").append(item_info);
         });
 
-        categories.forEach((category) => {
-          let c = allCategories.filter(function (ctg) {
-            return ctg._id == category;
-          });
+        renderCategoryButtons();
+      });
+    }
 
-          $("#categories").append(
-            `<button type="button" id="${category}" class="btn btn-categories btn-white waves-effect waves-light">${
-              c.length > 0 ? c[0].name : ""
-            }</button> `
-          );
-        });
+    // Products and categories load in parallel, so this runs after either
+    // finishes; otherwise buttons built before the category names arrive
+    // end up with empty labels.
+    function renderCategoryButtons() {
+      $("#categories").html(
+        `<button type="button" id="all" class="btn btn-categories btn-white waves-effect waves-light">All</button> `
+      );
+
+      categories.forEach((category) => {
+        let c = allCategories.find((ctg) => ctg._id == category);
+        let label = c ? c.name : "Uncategorized";
+
+        $("#categories").append(
+          `<button type="button" id="${category}" class="btn btn-categories btn-white waves-effect waves-light">${label}</button> `
+        );
       });
     }
 
     function loadCategories() {
       $.get(api + "categories/all", function (data) {
         allCategories = data;
+        renderCategoryButtons();
         loadCategoryList();
         $("#category").html(`<option value="0">Select</option>`);
         allCategories.forEach((category) => {
