@@ -76,6 +76,10 @@ $(document).ready(function(){
 
 
     var $list = $('.list-group-item').click(function () {
+       // disabled options (e.g. Credit for a walk-in customer) can't be selected;
+       // the message is shown by the handler in pos.js
+       if ($(this).hasClass('disabled')) return;
+
        $list.removeClass('active');
        $(this).addClass('active');
        if(this.id == 'check'){
@@ -89,7 +93,11 @@ $(document).ready(function(){
         $("#cardInfo").show();
         $("#cardInfo .input-group-addon").text("Mpesa Code");
         }
-       else if(this.id == 'cash'){
+       else if(this.id == 'bank'){
+           $("#cardInfo").show();
+           $("#cardInfo .input-group-addon").text("Bank Info");
+       }
+       else if(this.id == 'cash' || this.id == 'credit'){
            $("#cardInfo").hide();
        }
     });

@@ -746,12 +746,15 @@ if (!authedThisSession) {
         $("#mpesa").toggle(settings.mpesa_disabled != "on");
         $("#bank").toggle(settings.bank_disabled != "on");
         
+        // Credit is always listed, but only usable for a registered customer
         let customer = JSON.parse($("#customer").val());
-        if (customer == 0) {
-            $("#credit").hide();
-        } else {
-            $("#credit").show();
-        }
+        $("#credit")
+          .show()
+          .toggleClass("disabled", customer == 0)
+          .attr(
+            "title",
+            customer == 0 ? "Available for registered customers only" : ""
+          );
 
         if (
           (paymentType == 2 && settings.card_disabled == "on") ||
@@ -785,6 +788,17 @@ if (!authedThisSession) {
 
     $(document).ready(function () {
       $(".list-group-item").click(function () {
+        if ($(this).hasClass("disabled")) {
+          if (this.id == "credit") {
+            Swal.fire(
+              "Credit not available",
+              "Credit payment is available for registered customers only. Please select a registered customer (or add a new one) before choosing Credit.",
+              "info"
+            );
+          }
+          return;
+        }
+
         var buttonValue = $(this).text().trim();
         if (buttonValue == "Cash") {
           paymentType = 1;

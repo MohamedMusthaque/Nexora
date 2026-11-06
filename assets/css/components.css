@@ -37,6 +37,17 @@
   margin-right: 10px !important;
   height: fit-content !important;
 }
+#paymentModel #credit.disabled{
+  cursor: not-allowed;
+  color: #9a9a9a;
+}
+#paymentModel #credit.disabled::after{
+  content: "Registered customers only";
+  float: right;
+  font-size: 11px;
+  line-height: 20px;
+  color: #b0b0b0;
+}
 #customerTransactionsModal .transactions-banner{
   flex: 1;
   padding: 8px 12px;
