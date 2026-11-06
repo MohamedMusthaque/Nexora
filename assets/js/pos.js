@@ -66,10 +66,10 @@ let storage = new Store();
 let settings;
 let platform;
 let user = {};
-// Transactions page date range (ISO strings; "" = no limit). Kept in sync
-// with the date filter set up below.
-let start_date = moment().startOf("month").toDate().toJSON();
-let end_date = moment().endOf("day").toDate().toJSON();
+// Transactions page date range (ISO strings; "" = no limit, i.e. "All dates",
+// the default). Kept in sync with the date filter set up below.
+let start_date = "";
+let end_date = "";
 let by_till = 0;
 let by_user = 0;
 let by_status = 1;
@@ -248,8 +248,8 @@ function initDateRangeFilter(container, onChange, options) {
   };
 }
 
-// Transactions page date filter: starts on this month; "Clear" shows all dates
-// (start_date/end_date empty = no date limit in the by-date query).
+// Transactions page date filter: starts on "All dates" like every other date
+// filter (start_date/end_date empty = no date limit in the by-date query).
 $(function () {
   let transactionsDateFilter = initDateRangeFilter(
     "#transactionsDateRange",
@@ -258,13 +258,8 @@ $(function () {
       start_date = range ? range.start.toDate().toJSON() : "";
       end_date = range ? range.end.toDate().toJSON() : "";
       loadTransactions();
-    },
-    { initial: { start: moment().startOf("month"), end: moment() } }
+    }
   );
-
-  let range = transactionsDateFilter.getRange();
-  start_date = range.start.toDate().toJSON();
-  end_date = range.end.toDate().toJSON();
 });
 
 $.fn.serializeObject = function () {
