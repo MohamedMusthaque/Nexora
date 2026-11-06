@@ -1706,8 +1706,17 @@ if (!authedThisSession) {
     $("#newProductModal").click(function () {
       $("#saveProduct").get(0).reset();
       $("#current_img").text("");
+      clearPriceInputErrors();
       updateProductMarginHint();
     });
+
+    function clearPriceInputErrors() {
+      $(".price-input").each(function () {
+        clearTimeout(this._priceErrorTimer);
+      });
+      $(".price-input-error").text("");
+      $(".price-input").closest(".form-group").removeClass("has-error");
+    }
 
     // "Profit per item: Rs. 40.00 (20.0% margin)" under the price fields
     function updateProductMarginHint() {
@@ -1732,8 +1741,74 @@ if (!authedThisSession) {
     }
     $("#product_cost_price, #product_price").on("input", updateProductMarginHint);
 
+    // ---- Cost / Selling price: positive numbers only ----
+    // Keeps digits and a single decimal point (max 2 decimals). Anything else
+    // (letters, "-", "+", "e", symbols, pasted text) is removed as it's typed.
+    function cleanPriceText(value) {
+      // drop thousands separators, then keep the first number in the text, so
+      // pasting "Rs. 1,250.00" gives "1250.00" (not the "." from "Rs.")
+      let text = String(value).replace(/,/g, "");
+      let match = text.match(/\d+(\.\d*)?|\.\d+|^\.$/);
+      let cleaned = match ? match[0] : "";
+      let dot = cleaned.indexOf(".");
+      if (dot !== -1) cleaned = cleaned.slice(0, dot + 1) + cleaned.slice(dot + 1, dot + 3);
+      return cleaned;
+    }
+
+    function showPriceInputError(input, message) {
+      let $err = $(input).siblings(".price-input-error");
+      $(input).closest(".form-group").toggleClass("has-error", !!message);
+      $err.text(message || "");
+      clearTimeout(input._priceErrorTimer);
+      if (message) {
+        input._priceErrorTimer = setTimeout(() => showPriceInputError(input, ""), 2500);
+      }
+    }
+
+    $(".price-input")
+      .on("keydown", function (e) {
+        // block the characters number fields usually let through: - + e E ,
+        if (["-", "+", "e", "E", ","].includes(e.key)) {
+          e.preventDefault();
+          showPriceInputError(this, "Only positive numbers are allowed.");
+        }
+      })
+      .on("input", function () {
+        let before = this.value;
+        let cleaned = cleanPriceText(before);
+        if (cleaned !== before) {
+          let caret = this.selectionStart - (before.length - cleaned.length);
+          this.value = cleaned;
+          try { this.setSelectionRange(Math.max(0, caret), Math.max(0, caret)); } catch (e) {}
+          showPriceInputError(
+            this,
+            /[^0-9.]/.test(before)
+              ? "Only numbers are allowed."
+              : "Use one decimal point and up to 2 decimals."
+          );
+          updateProductMarginHint();
+        }
+      });
+
+    // returns an error message, or "" if the cost/selling prices are valid
+    function validateProductPrices() {
+      let price = $("#product_price").val().trim();
+      let cost = $("#product_cost_price").val().trim();
+      let valid = (v) => /^\d+(\.\d{1,2})?$/.test(v) || /^\d*\.\d{1,2}$/.test(v);
+      if (price === "") return "Please enter the selling price.";
+      if (!valid(price)) return "Selling price must be a positive number (e.g. 150 or 150.50).";
+      if (cost !== "" && !valid(cost)) return "Cost price must be a positive number (e.g. 120 or 120.50).";
+      return "";
+    }
+
     $("#saveProduct").submit(function (e) {
       e.preventDefault();
+
+      let priceError = validateProductPrices();
+      if (priceError) {
+        Swal.fire("Check the prices", priceError, "warning");
+        return;
+      }
 
       $(this).attr("action", api + "inventory/product");
       $(this).attr("method", "POST");
@@ -1766,7 +1841,11 @@ if (!authedThisSession) {
           console.log(data);
           Swal.fire({
             title: "Could not save product",
-            text: "Please try again.",
+            // show the server's reason for invalid input (e.g. a bad price)
+            text:
+              data && data.status === 400 && data.responseText
+                ? data.responseText
+                : "Please try again.",
             icon: "error",
           });
         },
@@ -1823,6 +1902,7 @@ if (!authedThisSession) {
       $("#productName").val(allProducts[index].name);
       $("#product_price").val(allProducts[index].price);
       $("#product_cost_price").val(allProducts[index].cost_price ?? "");
+      clearPriceInputErrors();
       updateProductMarginHint();
       $("#product_barcode").val(allProducts[index].barcode);
       $("#quantity").val(allProducts[index].quantity);

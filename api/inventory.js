@@ -132,6 +132,25 @@ app.get("/products", function (req, res) {
 });
 
 app.post("/product", upload.single("imagename"), function (req, res) {
+  // Selling price (required) and cost price (optional, "" = not set yet) must
+  // be plain positive numbers: digits with an optional decimal part, no signs,
+  // letters or symbols. The form checks this too; this guards the database.
+  // Checked first, before any image is removed; a rejected save also discards
+  // the picture uploaded with it.
+  const PRICE_PATTERN = /^(\d+(\.\d{1,2})?|\d*\.\d{1,2})$/;
+  let priceText = String(req.body.price ?? "").trim();
+  let costText = String(req.body.cost_price ?? "").trim();
+  function reject(message) {
+    if (req.file) fs.unlink(req.file.path, () => {});
+    return res.status(400).send(message);
+  }
+  if (!PRICE_PATTERN.test(priceText)) {
+    return reject("Selling price must be a positive number (e.g. 150 or 150.50).");
+  }
+  if (costText !== "" && !PRICE_PATTERN.test(costText)) {
+    return reject("Cost price must be a positive number (e.g. 120 or 120.50).");
+  }
+
   let image = "";
 
   if (req.body.img != "") {
@@ -155,12 +174,10 @@ app.post("/product", upload.single("imagename"), function (req, res) {
     }
   }
 
-  // cost price is optional ("" = not set yet); used for profit on the Transactions page
-  let cost = parseFloat(req.body.cost_price);
   let Product = {
     _id: parseInt(req.body.id),
-    price: req.body.price,
-    cost_price: isNaN(cost) || cost < 0 ? "" : cost.toFixed(2),
+    price: priceText.startsWith(".") ? "0" + priceText : priceText, // ".75" -> "0.75"
+    cost_price: costText === "" ? "" : parseFloat(costText).toFixed(2),
     category: req.body.category,
     quantity: req.body.quantity == "" ? 0 : req.body.quantity,
     name: req.body.name,
