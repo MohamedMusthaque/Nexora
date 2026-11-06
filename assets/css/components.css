@@ -56,19 +56,105 @@
 #customerList .customer-actions > .btn{
   float: none;
 }
-#customerTransactionsModal .transactions-banner{
+#customerTransactionsModal .transactions-banner,
+#productHistoryModal .transactions-banner{
   flex: 1;
   padding: 8px 12px;
   border-radius: 4px;
   text-align: center;
   cursor: default;
 }
-#customerTransactionsModal .transactions-banner:last-child{
+#customerTransactionsModal .transactions-banner:last-child,
+#productHistoryModal .transactions-banner:last-child{
   margin-right: 0 !important;
 }
-#customerTransactionsModal .transactions-banner > div{
+#customerTransactionsModal .transactions-banner > div,
+#productHistoryModal .transactions-banner > div{
   font-size: 22px;
   font-weight: bold;
+}
+/* ---- Product history popup ---- */
+#productHistoryModal .modal-body{
+  padding: 16px 20px !important;
+}
+#productHistoryModal .transactions-banner{
+  padding: 6px 10px;
+}
+#productHistoryModal .transactions-banner h5{
+  margin: 2px 0;
+  font-size: 12px;
+}
+#productHistoryModal .transactions-banner > div{
+  font-size: 20px;
+}
+/* compact rows; header and body are separate tables when scrolling */
+#productHistoryModal .dataTables_wrapper table.table > thead > tr > th,
+#productHistoryModal .dataTables_wrapper table.table > tbody > tr > td{
+  font-size: 13px !important;
+  padding: 6px 8px !important;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+/* only the Details column wraps */
+#productHistoryModal .dataTables_wrapper table.table > tbody > tr > td:nth-child(7){
+  white-space: normal;
+  min-width: 180px;
+}
+#productHistoryModal .dataTables_wrapper table.table .btn-sm{
+  padding: 3px 8px;
+}
+#productHistoryModal .dataTables_scrollBody{
+  border-bottom: 1px solid #ddd;
+}
+#productHistoryModal .ph-toolbar,
+#productHistoryModal .ph-footer{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+#productHistoryModal .ph-toolbar{
+  margin-bottom: 8px;
+}
+#productHistoryModal .ph-footer{
+  margin-top: 8px;
+}
+#productHistoryModal .ph-toolbar-left{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+#productHistoryModal .ph-toolbar .dt-buttons{
+  float: none;
+}
+#productHistoryModal .ph-toolbar .dt-button{
+  padding: 4px 14px !important;
+  font-size: 13px !important;
+  margin: 0 4px 0 0;
+}
+#productHistoryModal .dataTables_length,
+#productHistoryModal .dataTables_filter,
+#productHistoryModal .dataTables_info,
+#productHistoryModal .dataTables_paginate{
+  float: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  text-align: left;
+}
+#productHistoryModal .dataTables_length select{
+  display: inline-block;
+  width: auto;
+  height: 30px;
+  padding: 2px 6px;
+  margin: 0 4px;
+}
+#productHistoryModal .dataTables_filter input{
+  height: 30px;
+  margin: 0;
+}
+#productHistoryModal div.dataTables_paginate ul.pagination{
+  margin: 0 !important;
 }
 #counter{
   font-size: 25px !important;

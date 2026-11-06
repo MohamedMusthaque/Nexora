@@ -1530,6 +1530,8 @@ if (!authedThisSession) {
 
       $(this).ajaxSubmit({
         contentType: "application/json",
+        // recorded in the product history
+        data: { history_user: user?.fullname || "", history_user_id: user?._id || "" },
         success: function (response) {
           $("#saveProduct").get(0).reset();
           $("#current_img").text("");
@@ -1795,7 +1797,16 @@ if (!authedThisSession) {
       }).then((result) => {
         if (result.value) {
           $.ajax({
-            url: api + "inventory/product/" + id + "?image_path=" + imagePath,
+            url:
+              api +
+              "inventory/product/" +
+              id +
+              "?image_path=" +
+              encodeURIComponent(imagePath) +
+              "&user=" +
+              encodeURIComponent(user?.fullname || "") +
+              "&user_id=" +
+              encodeURIComponent(user?._id || ""),
             type: "DELETE",
             success: function (result) {
               loadProducts();
@@ -2168,7 +2179,7 @@ if (!authedThisSession) {
     // The receipt modal opens on top of the history modal; Bootstrap 3 drops
     // body.modal-open when it closes, which would stop the history scrolling.
     $("#orderModal").on("hidden.bs.modal", function () {
-      if ($("#customerTransactionsModal").hasClass("in")) {
+      if ($("#customerTransactionsModal, #productHistoryModal").hasClass("in")) {
         $("body").addClass("modal-open");
       }
     });
@@ -2177,6 +2188,253 @@ if (!authedThisSession) {
       $("#customerTransactionsModal").modal("hide");
       $("#customerModal").modal("show");
       loadCustomerList();
+    });
+
+    // ---- Product history (sales, returns, stock adjustments, edits) ----
+    let productHistoryEvents = [];
+    let productHistoryProduct = null;
+
+    const PRODUCT_HISTORY_TYPES = {
+      sale: { label: "Sale", css: "label-success", group: "sales" },
+      credit_sale: { label: "Credit sale", css: "label-warning", group: "sales" },
+      held: { label: "Held order", css: "label-default", group: "sales" },
+      return: { label: "Return", css: "label-danger", group: "returns" },
+      exchange: { label: "Exchange", css: "label-danger", group: "returns" },
+      stock_adjustment: { label: "Stock adjustment", css: "label-info", group: "changes" },
+      updated: { label: "Product edited", css: "label-primary", group: "changes" },
+      created: { label: "Created", css: "label-primary", group: "changes" },
+      deleted: { label: "Deleted", css: "label-inverse", group: "changes" },
+    };
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      }[c]));
+    }
+
+    function historyCategoryName(id) {
+      let c = allCategories.find((ctg) => ctg._id == id);
+      return c ? c.name : id === "" || id == null ? "None" : "Unknown (" + id + ")";
+    }
+
+    function productHistoryDetails(e) {
+      let sym = settings.symbol;
+      switch (e.type) {
+        case "sale":
+        case "credit_sale":
+        case "held": {
+          let badge =
+            e.return_status == "full"
+              ? ' <span class="label label-danger">Returned</span>'
+              : e.return_status == "partial"
+              ? ' <span class="label label-warning">Partial return</span>'
+              : "";
+          return escapeHtml(e.payment_type) + " · " + escapeHtml(e.customer) + badge;
+        }
+        case "return":
+        case "exchange":
+          return [
+            e.returned_qty + " returned",
+            e.restocked ? "restocked" : "not restocked",
+            e.refund_method ? "refund: " + escapeHtml(e.refund_method) : "",
+            e.reason ? "reason: " + escapeHtml(e.reason) : "",
+          ].filter(Boolean).join(" · ");
+        case "stock_adjustment":
+          return `Stock ${e.qty_before} → ${e.qty_after}`;
+        case "created":
+          return [
+            e.qty_after != null ? "Opening stock " + e.qty_after : "Stock not tracked",
+            e.price != null ? "price " + sym + parseFloat(e.price).toFixed(2) : "",
+          ].filter(Boolean).join(" · ");
+        case "updated":
+          return (e.changes || [])
+            .map((c) => {
+              let from = c.from, to = c.to;
+              if (c.field === "category") { from = historyCategoryName(from); to = historyCategoryName(to); }
+              if (c.field === "price") {
+                from = sym + (parseFloat(from) || 0).toFixed(2);
+                to = sym + (parseFloat(to) || 0).toFixed(2);
+              }
+              return `${escapeHtml(c.label)}: ${escapeHtml(from)} → ${escapeHtml(to)}`;
+            })
+            .join("<br>");
+        case "deleted":
+          return e.qty_before != null ? "Stock at deletion: " + e.qty_before : "";
+        default:
+          return "";
+      }
+    }
+
+    function renderProductHistory() {
+      let filter = $("#productHistoryFilter").val() || "all";
+      let sym = settings.symbol;
+      let rows = "";
+
+      let unitsSold = 0, salesValue = 0, returned = 0;
+      productHistoryEvents.forEach((e) => {
+        if (e.type === "sale" || e.type === "credit_sale") {
+          unitsSold += -e.qty_change;
+          salesValue += parseFloat(e.amount) || 0;
+        }
+        if (e.type === "return" || e.type === "exchange") returned += e.returned_qty || 0;
+      });
+
+      productHistoryEvents.forEach((e, index) => {
+        let meta = PRODUCT_HISTORY_TYPES[e.type] || { label: e.type, css: "label-default", group: "changes" };
+        if (filter !== "all" && meta.group !== filter) return;
+
+        let qty =
+          e.qty_change == null
+            ? ""
+            : e.qty_change > 0
+            ? `<span class="text-success"><b>+${e.qty_change}</b></span>`
+            : e.qty_change < 0
+            ? `<span class="text-danger"><b>${e.qty_change}</b></span>`
+            : `<span class="text-muted">0</span>`;
+        let canView = e.transaction_id != null;
+
+        rows += `<tr>
+            <td class="nobr" data-order="${moment(e.date).valueOf()}">${moment(e.date).format("DD MMM YYYY, hh:mm A")}</td>
+            <td><span class="label ${meta.css}">${meta.label}</span></td>
+            <td>${e.reference != null ? escapeHtml(e.reference) : ""}</td>
+            <td class="text-right">${qty}</td>
+            <td class="text-right nobr">${e.price != null && meta.group !== "changes" ? sym + parseFloat(e.price).toFixed(2) : ""}</td>
+            <td class="text-right nobr">${e.amount != null ? sym + parseFloat(e.amount).toFixed(2) : ""}</td>
+            <td>${productHistoryDetails(e)}</td>
+            <td>${escapeHtml(e.user)}</td>
+            <td>${canView ? `<button onClick="$(this).viewProductHistoryTransaction(${index})" class="btn btn-info btn-sm" title="View receipt"><i class="fa fa-search-plus"></i></button>` : ""}</td>
+          </tr>`;
+      });
+
+      let p = productHistoryProduct;
+      $("#productHistUnits").text(unitsSold);
+      $("#productHistSales").text(sym + salesValue.toFixed(2));
+      $("#productHistReturned").text(returned);
+      $("#productHistStock").text(p && p.stock == 1 ? p.quantity : "N/A");
+
+      if ($.fn.DataTable.isDataTable("#productHistoryTable")) {
+        $("#productHistoryTable").DataTable().destroy();
+      }
+      $("#product_history_list").html(rows);
+      $("#productHistoryTable").DataTable({
+        order: [[0, "desc"]],
+        autoWidth: false,
+        info: true,
+        ordering: true,
+        paging: true,
+        pageLength: 10,
+        lengthMenu: [10, 25, 50, 100],
+        // The table scrolls inside the popup (both ways) so the popup always
+        // fits the screen and the pagination below the table stays visible.
+        scrollX: true,
+        scrollY: "40vh", // initial size; adjustProductHistoryColumns() fits it to the window
+        scrollCollapse: true,
+        dom:
+          "<'ph-toolbar'<'ph-toolbar-left'Bl><'ph-toolbar-right'f>>" +
+          "rt" +
+          "<'ph-footer'<'ph-footer-left'i><'ph-footer-right'p>>",
+        columnDefs: [
+          { targets: [8], orderable: false },
+          { targets: [3, 4, 5], className: "text-right" },
+        ],
+        buttons: [
+          { extend: "csv", title: "Product history - " + (p ? p.name : "") },
+          { extend: "pdf", title: "Product history - " + (p ? p.name : ""), orientation: "landscape" },
+        ],
+        language: {
+          search: "_INPUT_",
+          searchPlaceholder: "Search history...",
+          lengthMenu: "Show _MENU_ rows",
+          info: "Showing _START_ to _END_ of _TOTAL_ entries",
+          emptyTable: "No history for this product yet",
+        },
+      });
+      adjustProductHistoryColumns();
+    }
+
+    // Sizes the table's scroll area to the space left in the window so the
+    // whole popup (incl. pagination) fits on screen, then realigns the header
+    // (header and body are separate tables when scrolling, and widths can't be
+    // measured while the popup is hidden).
+    function adjustProductHistoryColumns() {
+      if (!$.fn.DataTable.isDataTable("#productHistoryTable")) return;
+      let modal = $("#productHistoryModal");
+      let scrollBody = modal.find(".dataTables_scrollBody");
+
+      if (modal.hasClass("in") && scrollBody.length) {
+        let dialog = modal.find(".modal-dialog")[0];
+        let content = modal.find(".modal-content")[0];
+        let margins =
+          (parseFloat(getComputedStyle(dialog).marginTop) || 0) +
+          (parseFloat(getComputedStyle(dialog).marginBottom) || 0);
+        // everything in the popup except the table rows
+        let chrome = content.offsetHeight - scrollBody[0].offsetHeight;
+        let available = window.innerHeight - margins - chrome;
+        scrollBody.css("max-height", Math.max(160, Math.floor(available)) + "px");
+      }
+
+      $("#productHistoryTable").DataTable().columns.adjust();
+    }
+    $("#productHistoryModal").on("shown.bs.modal", adjustProductHistoryColumns);
+    $(window).on("resize", adjustProductHistoryColumns);
+
+    $.fn.viewProductHistory = function (productId) {
+      let product = allProducts.find((p) => p._id == productId);
+      if (!product) return;
+      productHistoryProduct = product;
+      productHistoryEvents = [];
+
+      $("#productHistoryTitle").text("Product History - " + product.name);
+      $("#productHistoryInfo").html(
+        `Barcode: <b>${escapeHtml(product.barcode)}</b> &nbsp;·&nbsp; ` +
+          `Category: <b>${escapeHtml(historyCategoryName(product.category))}</b> &nbsp;·&nbsp; ` +
+          `Price: <b>${settings.symbol}${(parseFloat(product.price) || 0).toFixed(2)}</b> &nbsp;·&nbsp; ` +
+          `Stock tracking: <b>${product.stock == 1 ? "On" : "Off"}</b>`
+      );
+      $("#productHistoryFilter").val("all");
+      if ($.fn.DataTable.isDataTable("#productHistoryTable")) {
+        $("#productHistoryTable").DataTable().destroy();
+      }
+      $("#product_history_list").html('<tr><td colspan="9">Loading...</td></tr>');
+
+      $("#Products").modal("hide");
+      $("#productHistoryModal").modal("show");
+
+      $.get(api + "product-history/" + product._id)
+        .done(function (events) {
+          productHistoryEvents = events || [];
+          renderProductHistory();
+        })
+        .fail(function () {
+          $("#product_history_list").html('<tr><td colspan="9">Could not load the product history.</td></tr>');
+        });
+    };
+
+    $.fn.viewProductHistoryTransaction = function (index) {
+      let e = productHistoryEvents[index];
+      if (!e || e.transaction_id == null) return;
+      $.get(api + encodeURIComponent(e.transaction_id))
+        .done(function (transaction) {
+          if (!transaction) {
+            Swal.fire("Not found", "This transaction no longer exists.", "warning");
+            return;
+          }
+          $(this).viewTransaction(0, [transaction]);
+        })
+        .fail(function (xhr) {
+          if (xhr.status == 404) {
+            Swal.fire("Not found", "This transaction no longer exists.", "warning");
+          } else {
+            Swal.fire("Error", "Could not load the transaction.", "error");
+          }
+        });
+    };
+
+    $("#productHistoryFilter").on("change", renderProductHistory);
+
+    $("#productHistoryBack").on("click", function () {
+      $("#productHistoryModal").modal("hide");
+      $("#Products").modal("show");
     });
 
     // builds the row markup for one product inside a category's detail table
@@ -2200,6 +2458,7 @@ if (!authedThisSession) {
       }', '${
         product.price
       }')" class="btn btn-dark btn-sm" title="Print barcode"><i class="fa fa-print"></i></button>
+            <button onClick="$(this).viewProductHistory(${product._id})" class="btn btn-info btn-sm" title="History"><i class="fa fa-history"></i></button>
             <button onClick="$(this).editProduct(${index})" class="btn btn-warning btn-sm"><i class="fa fa-edit"></i></button>
             <button onClick="$(this).deleteProduct(${product._id}, '${
         product.img
