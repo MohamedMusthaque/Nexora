@@ -1170,8 +1170,19 @@
 
                     <!-- money paid back against Credit sales -->
                     <div role="tabpanel" class="tab-pane" id="customerTabPayments">
-                        <div class="table-responsive">
-                            <table class="table table-bordered customer-subtable" id="customerPaymentsTable">
+                        <div class="filter-bar" style="margin-bottom: 10px;">
+                            <label style="margin: 0;">Date</label>
+                            <div class="date-range-filter" id="customerPaymentsDateRange">
+                                <div class="date-range-input" title="Filter by date">
+                                    <i class="fa fa-calendar"></i>&nbsp;
+                                    <span class="date-range-label">All dates</span>
+                                    <i class="fa fa-caret-down"></i>
+                                </div>
+                                <button type="button" class="btn btn-default date-range-clear" title="Clear date filter" style="display: none;"><i class="fa fa-times"></i> Clear</button>
+                            </div>
+                        </div>
+                        <div>
+                            <table class="table table-bordered customer-subtable" id="customerPaymentsTable" style="width: 100%;">
                                 <thead>
                                     <tr>
                                         <th>Receipt</th>
@@ -1195,12 +1206,23 @@
                             Advance balance: <b id="customerAdvanceBalance">0.00</b>
                             <span class="text-muted">· money the customer paid in advance, used on their next bills</span>
                         </p>
-                        <div class="table-responsive">
-                            <table class="table table-bordered customer-subtable" id="customerAdvanceTable">
+                        <div class="filter-bar" style="margin-bottom: 10px;">
+                            <label style="margin: 0;">Date</label>
+                            <div class="date-range-filter" id="customerAdvanceDateRange">
+                                <div class="date-range-input" title="Filter by date">
+                                    <i class="fa fa-calendar"></i>&nbsp;
+                                    <span class="date-range-label">All dates</span>
+                                    <i class="fa fa-caret-down"></i>
+                                </div>
+                                <button type="button" class="btn btn-default date-range-clear" title="Clear date filter" style="display: none;"><i class="fa fa-times"></i> Clear</button>
+                            </div>
+                        </div>
+                        <div>
+                            <table class="table table-bordered customer-subtable" id="customerAdvanceTable" style="width: 100%;">
                                 <thead>
                                     <tr>
                                         <th>Date</th>
-                                        <th></th>
+                                        <th>Type</th>
                                         <th class="text-right">Amount</th>
                                         <th>From</th>
                                         <th>Reference</th>

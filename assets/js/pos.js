@@ -482,7 +482,15 @@ function tableExportButtons(title, options) {
   options = options || {};
   let exportOptions = Object.assign({}, options.exportOptions || {}, {
     stripHtml: false,
-    format: { body: (data) => exportCellText(data), header: (data) => exportCellText(data) },
+    format: {
+      // a cell can set data-export="..." to say exactly what goes into the
+      // Excel / PDF file (e.g. just the amount, without the extra lines shown on screen)
+      body: (data, row, column, node) =>
+        node && node.hasAttribute && node.hasAttribute("data-export")
+          ? node.getAttribute("data-export")
+          : exportCellText(data),
+      header: (data) => exportCellText(data),
+    },
   });
   let subtitle = () => (typeof options.subtitle === "function" ? options.subtitle() : options.subtitle || "");
   let fileBase = () => safeFileName(title) + " " + moment().format("YYYY-MM-DD HHmm");
@@ -3039,6 +3047,11 @@ if (!authedThisSession) {
       $('#customerTransactionsModal .customer-tabs a[href="#customerTabTransactions"]').tab("show");
       $("#customerTabTxnCount, #customerTabPaymentCount, #customerTabAdvanceCount").text("0");
       $("#customerTxnAdvance").text(creditMoney(0));
+      customerPaymentsDateFilter.reset();
+      customerAdvanceDateFilter.reset();
+      ["#customerPaymentsTable", "#customerAdvanceTable"].forEach((sel) => {
+        if ($.fn.DataTable.isDataTable(sel)) $(sel).DataTable().destroy();
+      });
       $("#customer_payments_list, #customer_advance_list").empty();
 
       $("#customerModal").modal("hide");
@@ -3125,72 +3138,119 @@ if (!authedThisSession) {
       $("#settleCreditBtn").toggle(creditState.balance > 0);
     }
 
-    function renderCustomerPayments() {
-      let payments = creditState.payments;
-      $("#customerTabPaymentCount").text(payments.length);
-      if (!payments.length) {
-        $("#customer_payments_list").html(
-          '<tr><td colspan="8" class="customer-subtable-empty">No credit payments yet.</td></tr>'
-        );
-        return;
+    // Credit payments / Advance tabs: DataTables with the shared toolbar
+    // (Excel / PDF, Show N rows, search), pagination and their own date filter.
+    let customerSubtablePageLength = { "#customerPaymentsTable": 10, "#customerAdvanceTable": 10 };
+
+    function buildCustomerSubtable(selector, rows, options) {
+      if ($.fn.DataTable.isDataTable(selector)) {
+        customerSubtablePageLength[selector] = $(selector).DataTable().page.len();
+        $(selector).DataTable().destroy();
       }
-      $("#customer_payments_list").html(
-        payments
-          .map((p, i) => {
-            let ref = [p.reference, p.note].filter(Boolean).map((t) => $("<i>").text(t).html()).join(" · ");
-            let toAdvance = parseFloat(p.advance_added) || 0;
-            return `<tr>
-              <td class="nobr">${$("<i>").text(p.receipt_no || "").html()}</td>
-              <td class="payment-date">${moment(p.date).format("DD MMM YYYY")}<br><small class="text-muted">${moment(p.date).format("hh:mm A")}</small></td>
-              <td class="text-right">
-                <b class="text-success nobr">${creditMoney(parseFloat(p.received ?? p.amount) || 0)}</b>${
-                  toAdvance > 0
-                    ? `<div class="payment-split"><span>to credit ${creditMoney(parseFloat(p.amount) || 0)}</span><span>to advance ${creditMoney(toAdvance)}</span></div>`
-                    : ""
-                }
-              </td>
-              <td>${$("<i>").text(p.method || "").html()}</td>
-              <td class="payment-ref">${ref || '<span class="text-muted">—</span>'}</td>
-              <td class="text-right nobr">${creditMoney(parseFloat(p.balance_after) || 0)}</td>
-              <td>${$("<i>").text(p.user || "").html()}</td>
-              <td class="text-center"><button type="button" class="btn btn-default btn-sm" onclick="$(this).showCreditPaymentReceipt(${i})" title="View / print receipt"><i class="fa fa-print"></i></button></td>
-            </tr>`;
-          })
-          .join("")
+      $(selector).find("tbody").html(rows);
+      $(selector).DataTable(
+        Object.assign(standardTableOptions(options), {
+          order: [[options.dateColumn, "desc"]],
+          pageLength: customerSubtablePageLength[selector],
+        })
       );
+    }
+
+    function customerFileTitle(what) {
+      return what + " - " + (creditState.customer ? creditState.customer.name : "");
+    }
+
+    function renderCustomerPayments() {
+      let all = creditState.payments;
+      $("#customerTabPaymentCount").text(all.length);
+      let rows = all
+        .map((p, i) => ({ p, i }))
+        .filter(({ p }) => customerPaymentsDateFilter.matches(p.date))
+        .map(({ p, i }) => {
+          let ref = [p.reference, p.note].filter(Boolean).map((t) => $("<i>").text(t).html()).join(" · ");
+          let toAdvance = parseFloat(p.advance_added) || 0;
+          let received = parseFloat(p.received ?? p.amount) || 0;
+          return `<tr>
+            <td class="nobr">${$("<i>").text(p.receipt_no || "").html()}</td>
+            <td class="payment-date" data-order="${moment(p.date).valueOf()}" data-export="${moment(p.date).format("DD MMM YYYY, hh:mm A")}">${moment(p.date).format("DD MMM YYYY")}<br><small class="text-muted">${moment(p.date).format("hh:mm A")}</small></td>
+            <td class="text-right" data-order="${received}" data-export="${creditMoney(received)}">
+              <b class="text-success nobr">${creditMoney(received)}</b>${
+                toAdvance > 0
+                  ? `<div class="payment-split"><span>to credit ${creditMoney(parseFloat(p.amount) || 0)}</span><span>to advance ${creditMoney(toAdvance)}</span></div>`
+                  : ""
+              }
+            </td>
+            <td>${$("<i>").text(p.method || "").html()}</td>
+            <td class="payment-ref">${ref || '<span class="text-muted">—</span>'}</td>
+            <td class="text-right nobr" data-order="${parseFloat(p.balance_after) || 0}">${creditMoney(parseFloat(p.balance_after) || 0)}</td>
+            <td>${$("<i>").text(p.user || "").html()}</td>
+            <td class="text-center"><button type="button" class="btn btn-default btn-sm" onclick="$(this).showCreditPaymentReceipt(${i})" title="View / print receipt"><i class="fa fa-print"></i></button></td>
+          </tr>`;
+        })
+        .join("");
+
+      buildCustomerSubtable("#customerPaymentsTable", rows, {
+        noun: "payments",
+        searchPlaceholder: "Search payments...",
+        exportTitle: customerFileTitle("Credit payments"),
+        exportSubtitle: () => $("#customerPaymentsDateRange .date-range-label").text(),
+        exportColumns: [0, 1, 2, 3, 4, 5, 6],
+        sumColumns: [2], // amount received
+        actionColumns: [7],
+        dateColumn: 1,
+        emptyTable: all.length ? "No credit payments in the selected dates." : "No credit payments yet.",
+      });
     }
 
     // advance (money paid in advance for the next bill): added / used history
     function renderCustomerAdvance() {
-      let entries = creditState.advanceEntries;
-      $("#customerTabAdvanceCount").text(entries.length);
+      let all = creditState.advanceEntries;
+      $("#customerTabAdvanceCount").text(all.length);
       $("#customerTxnAdvance").text(creditMoney(creditState.advance));
       $("#customerAdvanceBalance").text(creditMoney(creditState.advance));
-      if (!entries.length) {
-        $("#customer_advance_list").html(
-          '<tr><td colspan="6" class="customer-subtable-empty">No advance payments yet. When the customer pays extra at the till or while settling credit, it shows here.</td></tr>'
-        );
-        return;
-      }
-      $("#customer_advance_list").html(
-        entries
-          .map((e) => {
-            let deposit = e.type === "deposit";
-            let source =
-              e.source === "settlement" ? "Extra paid when settling credit" :
-              deposit ? "Extra paid at the till" : "Used on a bill";
-            return `<tr>
-              <td class="nobr">${moment(e.date).format("DD MMM YYYY, hh:mm A")}</td>
-              <td>${deposit ? '<span class="label label-success">Added</span>' : '<span class="label label-info">Used</span>'}</td>
-              <td class="text-right nobr"><b class="${deposit ? "text-success" : ""}">${deposit ? "+" : "−"}${creditMoney(parseFloat(e.amount) || 0)}</b></td>
-              <td>${source}</td>
-              <td>${$("<i>").text(e.reference || "").html()}</td>
-              <td>${$("<i>").text(e.user || "").html()}</td>
-            </tr>`;
-          })
-          .join("")
-      );
+      let rows = all
+        .filter((e) => customerAdvanceDateFilter.matches(e.date))
+        .map((e) => {
+          let deposit = e.type === "deposit";
+          let amount = parseFloat(e.amount) || 0;
+          let source =
+            e.source === "settlement" ? "Extra paid when settling credit" :
+            deposit ? "Extra paid at the till" : "Used on a bill";
+          return `<tr>
+            <td class="nobr" data-order="${moment(e.date).valueOf()}">${moment(e.date).format("DD MMM YYYY, hh:mm A")}</td>
+            <td>${deposit ? '<span class="label label-success">Added</span>' : '<span class="label label-info">Used</span>'}</td>
+            <td class="text-right nobr" data-order="${deposit ? amount : -amount}" data-export="${(deposit ? "" : "-") + creditMoney(amount)}"><b class="${deposit ? "text-success" : ""}">${deposit ? "+" : "−"}${creditMoney(amount)}</b></td>
+            <td>${source}</td>
+            <td>${$("<i>").text(e.reference || "").html()}</td>
+            <td>${$("<i>").text(e.user || "").html()}</td>
+          </tr>`;
+        })
+        .join("");
+
+      buildCustomerSubtable("#customerAdvanceTable", rows, {
+        noun: "entries",
+        searchPlaceholder: "Search advance...",
+        exportTitle: customerFileTitle("Advance"),
+        exportSubtitle: () =>
+          $("#customerAdvanceDateRange .date-range-label").text() +
+          "   ·   Advance balance now: " + creditMoney(creditState.advance),
+        sumColumns: [2], // net: added minus used
+        dateColumn: 0,
+        emptyTable: all.length
+          ? "No advance entries in the selected dates."
+          : "No advance payments yet. When the customer pays extra at the till or while settling credit, it shows here.",
+      });
     }
+
+    let customerPaymentsDateFilter = initDateRangeFilter("#customerPaymentsDateRange", renderCustomerPayments);
+    let customerAdvanceDateFilter = initDateRangeFilter("#customerAdvanceDateRange", renderCustomerAdvance);
+
+    // tables in a tab that was hidden need re-measuring once shown
+    $('#customerTransactionsModal .customer-tabs a[data-toggle="tab"]').on("shown.bs.tab", function () {
+      ["#customerPaymentsTable", "#customerAdvanceTable"].forEach((sel) => {
+        if ($.fn.DataTable.isDataTable(sel)) $(sel).DataTable().columns.adjust();
+      });
+    });
 
     // receipt in the same receipt window (and print button) as sales receipts
     $.fn.showCreditPaymentReceipt = function (index) {
