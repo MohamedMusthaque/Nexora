@@ -48,6 +48,14 @@
   line-height: 20px;
   color: #b0b0b0;
 }
+/* keep the history / edit / delete buttons on one row */
+#customerList .customer-actions{
+  display: inline-flex;
+  flex-wrap: nowrap;
+}
+#customerList .customer-actions > .btn{
+  float: none;
+}
 #customerTransactionsModal .transactions-banner{
   flex: 1;
   padding: 8px 12px;

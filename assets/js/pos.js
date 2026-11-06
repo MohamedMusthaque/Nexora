@@ -2003,7 +2003,7 @@ if (!authedThisSession) {
             <td>${
               customer._id == 1
                 ? '<span class="btn-group"><button class="btn btn-dark"><i class="fa fa-edit"></i></button><button class="btn btn-dark"><i class="fa fa-trash"></i></button></span>'
-                : '<span class="btn-group"><button onClick="$(this).viewCustomerTransactions(' +
+                : '<span class="btn-group customer-actions"><button onClick="$(this).viewCustomerTransactions(' +
                   index +
                   ')" class="btn btn-info" title="View transactions"><i class="fa fa-history"></i></button><button onClick="$(this).editCustomer(' +
                   index +
@@ -2905,6 +2905,107 @@ if (!authedThisSession) {
       })
       .catch((err) => {
         console.error("Failed to generate product list Excel file:", err);
+        Swal.fire("Oops!", "Could not generate the download. Please try again.", "warning");
+      })
+      .finally(() => {
+        $("#loading").hide();
+      });
+  });
+
+  // Customers "Download": Excel list of customers with their credit position.
+  // Credit used = total of the customer's Credit sales (same rule as the
+  // credit-limit check at the till).
+  $("#print_customer_list").click(function () {
+    $("#loading").show();
+    let sym = settings?.symbol || "";
+
+    Promise.all([$.get(api + "customers/all"), $.get(api + "all")])
+      .then(([customers, transactions]) => {
+        let creditUsed = {};
+        (transactions || []).forEach((t) => {
+          if (t.payment_type === "Credit" && t.customer && t.customer.id != null) {
+            creditUsed[t.customer.id] =
+              (creditUsed[t.customer.id] || 0) + (parseFloat(t.total) || 0);
+          }
+        });
+
+        let cur = sym.trim() ? " (" + sym.trim() + ")" : "";
+        const headers = [
+          "Name",
+          "Phone",
+          "Email",
+          "Address",
+          "Credit",
+          "Credit Limit" + cur,
+          "Credit Used" + cur,
+          "Credit Available" + cur,
+        ];
+
+        let workbook = new ExcelJS.Workbook();
+        let sheet = workbook.addWorksheet("Customers");
+
+        sheet.mergeCells(1, 1, 1, headers.length);
+        let titleCell = sheet.getCell(1, 1);
+        titleCell.value = "Customer List";
+        titleCell.font = { bold: true, size: 14 };
+        titleCell.alignment = { horizontal: "center" };
+
+        let headerRow = sheet.addRow(headers);
+        headerRow.font = { bold: true };
+        headerRow.alignment = { horizontal: "center" };
+
+        (customers || [])
+          .slice()
+          .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")))
+          .forEach((c) => {
+            let limited = c.credit_type === "limited";
+            let limit = parseFloat(c.credit_limit) || 0;
+            let used = creditUsed[c._id] || 0;
+
+            let row = sheet.addRow([
+              c.name || "",
+              c.phone || "",
+              c.email || "",
+              c.address || "",
+              limited ? "Limited" : "Unlimited",
+              limited ? limit : "",
+              used,
+              limited ? Math.max(limit - used, 0) : "Unlimited",
+            ]);
+            [6, 7, 8].forEach((i) => {
+              row.getCell(i).numFmt = "#,##0.00";
+              row.getCell(i).alignment = { horizontal: "right" };
+            });
+          });
+
+        sheet.addRow([]);
+        sheet.addRow([
+          "Total customers: " + (customers || []).length,
+        ]);
+        sheet.addRow([
+          "This report is generated on " + moment().format("DD-MM-YYYY hh:mm:ss A"),
+        ]);
+
+        [24, 16, 26, 30, 12, 18, 18, 20].forEach((w, i) => {
+          sheet.getColumn(i + 1).width = w;
+        });
+
+        // Same Blob/<a download> approach as the product list, so Electron's
+        // will-download handler shows a native Save dialog.
+        return workbook.xlsx.writeBuffer().then((buffer) => {
+          let blob = new Blob([buffer], { type: "application/octet-stream" });
+          let url = URL.createObjectURL(blob);
+          let link = document.createElement("a");
+          link.href = url;
+          link.download = "customerList.xlsx";
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        });
+      })
+      .catch((err) => {
+        console.error("Failed to generate customer list Excel file:", err);
         Swal.fire("Oops!", "Could not generate the download. Please try again.", "warning");
       })
       .finally(() => {
