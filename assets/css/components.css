@@ -84,24 +84,23 @@
   flex: 1 1 260px;
   width: auto;
 }
-/* Select Order: search + date range always on one row */
-#selectOrderModal .filter-bar{
-  flex-wrap: nowrap;
+/* Select Order: compact rows like Product History */
+#selectOrderModal #selectOrderTable > thead > tr > th,
+#selectOrderModal #selectOrderTable > tbody > tr > td{
+  font-size: 13px;
+  padding: 6px 8px;
+  vertical-align: middle;
 }
-#selectOrderModal .filter-bar .filter-bar-grow{
-  flex: 1 1 auto;
-  min-width: 0;
+#selectOrderModal #selectOrderTable .btn-sm{
+  padding: 3px 10px;
 }
-#selectOrderModal .filter-bar .date-range-filter{
-  flex: 0 0 auto;
+#selectOrderModal .dataTables_filter input{
+  width: 280px !important;
 }
-#selectOrderModal .filter-bar #selectOrderSearch,
+/* Select Order: date filter the same height as the toolbar controls row */
 #selectOrderModal .filter-bar .date-range-input,
 #selectOrderModal .filter-bar .date-range-clear{
-  height: 38px;
-}
-#selectOrderModal .filter-bar .date-range-input{
-  min-width: 210px;
+  height: 34px;
 }
 .date-range-filter{
   display: inline-flex;
@@ -183,54 +182,140 @@
 #productHistoryModal .dataTables_scrollBody{
   border-bottom: 1px solid #ddd;
 }
-#productHistoryModal .ph-toolbar,
-#productHistoryModal .ph-footer{
+/* ---- Shared table toolbar + footer ----
+   Used by every list table (Transactions, Customers, Users, Categories,
+   Products, Customer Transactions, Product History, Select Order):
+   [CSV][PDF]  Show [10] rows ............ [search]
+   table
+   Showing 1 to 10 of N ............ Previous 1 2 3 Next              */
+.ph-toolbar,
+.ph-footer{
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
-#productHistoryModal .ph-toolbar{
+.ph-toolbar{
   margin-bottom: 8px;
 }
-#productHistoryModal .ph-footer{
+.ph-footer{
   margin-top: 8px;
 }
-#productHistoryModal .ph-toolbar-left{
+.ph-toolbar-left{
   display: flex;
   align-items: center;
   gap: 12px;
 }
-#productHistoryModal .ph-toolbar .dt-buttons{
+/* compact outlined export buttons (CSV / PDF) */
+.ph-toolbar .dt-buttons{
+  display: inline-flex;
+  gap: 6px;
   float: none;
 }
-#productHistoryModal .ph-toolbar .dt-button{
-  padding: 4px 14px !important;
-  font-size: 13px !important;
-  margin: 0 4px 0 0;
+.ph-toolbar .dt-button.export-btn{
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  margin: 0 !important;
+  padding: 0 10px !important;
+  font-size: 12px !important;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  line-height: 1;
+  color: #4c5667 !important;
+  background: #fff !important;
+  background-image: none !important;
+  border: 1px solid #dfe3e8 !important;
+  border-radius: 4px !important;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  cursor: pointer;
 }
-#productHistoryModal .dataTables_length,
-#productHistoryModal .dataTables_filter,
-#productHistoryModal .dataTables_info,
-#productHistoryModal .dataTables_paginate{
+/* DataTables wraps the button content in a <span> */
+.ph-toolbar .dt-button.export-btn > span{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ph-toolbar .dt-button.export-btn .fa{
+  font-size: 13px;
+}
+.ph-toolbar .dt-button.export-csv .fa{
+  color: #5fbeaa;
+}
+.ph-toolbar .dt-button.export-pdf .fa{
+  color: #ef5350;
+}
+.ph-toolbar .dt-button.export-csv:hover{
+  background: #f1faf8 !important;
+  border-color: #5fbeaa !important;
+  color: #3e9e8a !important;
+}
+.ph-toolbar .dt-button.export-pdf:hover{
+  background: #fdf1f1 !important;
+  border-color: #ef5350 !important;
+  color: #d84340 !important;
+}
+.ph-toolbar .dt-button.export-btn:active{
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.ph-toolbar .dt-button.export-btn:focus{
+  outline: none;
+}
+/* "Show N rows", search, info and pager sit in the flex rows above */
+.ph-toolbar .dataTables_length,
+.ph-toolbar .dataTables_filter,
+.ph-footer .dataTables_info,
+.ph-footer .dataTables_paginate{
   float: none !important;
   margin: 0 !important;
   padding: 0 !important;
   text-align: left;
 }
-#productHistoryModal .dataTables_length select{
+.ph-toolbar .dataTables_length label,
+.ph-toolbar .dataTables_filter label{
+  margin: 0;
+  font-weight: normal;
+  white-space: nowrap;
+}
+/* "Show N" box and search box: the app input style (not the DataTables
+   default grey #aaa border), the same in every table and the Products list.
+   The .dataTables_wrapper variants outrank jquery.dataTables.min.css, which
+   loads after this file. */
+.ph-toolbar .dataTables_length select,
+.ph-toolbar .dataTables_filter input,
+.dataTables_wrapper .ph-toolbar .dataTables_length select,
+.dataTables_wrapper .ph-toolbar .dataTables_filter input{
+  height: 30px;
+  font-size: 12px;
+  color: #4c5667;
+  background-color: #fff;
+  border: 1px solid #e3e3e3;
+  border-radius: 4px;
+  box-shadow: none;
+  transition: border-color 0.15s;
+}
+.ph-toolbar .dataTables_length select,
+.dataTables_wrapper .ph-toolbar .dataTables_length select{
   display: inline-block;
   width: auto;
-  height: 30px;
   padding: 2px 6px;
   margin: 0 4px;
 }
-#productHistoryModal .dataTables_filter input{
-  height: 30px;
+.ph-toolbar .dataTables_filter input,
+.dataTables_wrapper .ph-toolbar .dataTables_filter input{
+  padding: 4px 10px;
   margin: 0;
 }
-#productHistoryModal div.dataTables_paginate ul.pagination{
+.ph-toolbar .dataTables_length select:focus,
+.ph-toolbar .dataTables_filter input:focus{
+  border-color: #5fbeaa;
+  outline: none;
+}
+.ph-footer div.dataTables_paginate ul.pagination,
+.ph-footer ul.pagination{
   margin: 0 !important;
 }
 #counter{

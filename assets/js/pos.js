@@ -74,6 +74,82 @@ let by_till = 0;
 let by_user = 0;
 let by_status = 1;
 
+// CSV / PDF export buttons used by the Product History, Customer Transactions
+// and Select Order tables (styled by .ph-toolbar .dt-button in components.css).
+// options: extra DataTables button settings shared by both, e.g. exportOptions.
+function tableExportButtons(title, options) {
+  options = options || {};
+  return [
+    Object.assign(
+      {
+        extend: "csv",
+        title: title,
+        text: '<i class="fa fa-file-text-o"></i><span>CSV</span>',
+        titleAttr: "Download as CSV",
+        className: "export-btn export-csv",
+      },
+      options
+    ),
+    Object.assign(
+      {
+        extend: "pdf",
+        title: title,
+        orientation: "landscape",
+        text: '<i class="fa fa-file-pdf-o"></i><span>PDF</span>',
+        titleAttr: "Download as PDF",
+        className: "export-btn export-pdf",
+      },
+      options
+    ),
+  ];
+}
+
+// Shared table layout (styled by .ph-toolbar / .ph-footer in components.css):
+//   [CSV][PDF]  Show [10] rows ............ [search]
+//   table
+//   Showing 1 to 10 of N <noun> ........... Previous 1 2 3 Next
+const TABLE_TOOLBAR_DOM =
+  "<'ph-toolbar'<'ph-toolbar-left'Bl><'ph-toolbar-right'f>>" +
+  "rt" +
+  "<'ph-footer'<'ph-footer-left'i><'ph-footer-right'p>>";
+
+// DataTables options for a list table with the shared layout.
+// o.noun: what the rows are ("customers"); o.searchPlaceholder;
+// o.exportTitle (omit for no CSV/PDF buttons) + o.exportColumns;
+// o.actionColumns: button columns (not sortable/searchable/exported).
+function standardTableOptions(o) {
+  o = o || {};
+  let noun = o.noun || "entries";
+  return {
+    autoWidth: false,
+    info: true,
+    ordering: true,
+    paging: true,
+    pageLength: o.pageLength || 10,
+    lengthMenu: [10, 25, 50, 100],
+    dom: o.exportTitle ? TABLE_TOOLBAR_DOM : TABLE_TOOLBAR_DOM.replace("Bl>", "l>"),
+    buttons: o.exportTitle
+      ? tableExportButtons(
+          o.exportTitle,
+          o.exportColumns ? { exportOptions: { columns: o.exportColumns } } : {}
+        )
+      : [],
+    columnDefs: o.actionColumns
+      ? [{ targets: o.actionColumns, orderable: false, searchable: false }]
+      : [],
+    language: {
+      search: "_INPUT_",
+      searchPlaceholder: o.searchPlaceholder || "Search...",
+      lengthMenu: "Show _MENU_ rows",
+      info: "Showing _START_ to _END_ of _TOTAL_ " + noun,
+      infoEmpty: "Showing 0 " + noun,
+      infoFiltered: "(filtered from _MAX_)",
+      emptyTable: o.emptyTable || "No " + noun + " yet",
+      zeroRecords: "No matching " + noun + " found",
+    },
+  };
+}
+
 // Reusable date range filter with a Clear option.
 // Markup (see index.html): .date-range-filter > .date-range-input (span label)
 // + .date-range-clear button. onChange() is called whenever the range is set
@@ -1997,18 +2073,18 @@ if (!authedThisSession) {
           if (counter == users.length) {
             $("#user_list").html(user_list);
 
-            $("#userList").DataTable({
-              order: [[1, "desc"]],
-              autoWidth: false,
-              info: true,
-              JQueryUI: true,
-              ordering: true,
-              paging: false,
-              language: {
-                search: "_INPUT_",
-                searchPlaceholder: "Search",
-              },
-            });
+            $("#userList").DataTable(
+              Object.assign(
+                standardTableOptions({
+                  noun: "users",
+                  searchPlaceholder: "Search users...",
+                  exportTitle: "Users",
+                  exportColumns: [0, 1, 2],
+                  actionColumns: [3],
+                }),
+                { order: [[1, "desc"]] }
+              )
+            );
           }
         });
       });
@@ -2098,18 +2174,18 @@ if (!authedThisSession) {
           if (counter == customers.length) {
             $("#customer_list").html(customer_list);
 
-            $("#customerList").DataTable({
-              order: [[1, "desc"]],
-              autoWidth: false,
-              info: true,
-              JQueryUI: true,
-              ordering: true,
-              paging: true,
-              language: {
-                search: "_INPUT_",
-                searchPlaceholder: "Search",
-              },
-            });
+            $("#customerList").DataTable(
+              Object.assign(
+                standardTableOptions({
+                  noun: "customers",
+                  searchPlaceholder: "Search customers...",
+                  exportTitle: "Customers",
+                  exportColumns: [0, 1, 2, 3, 4],
+                  actionColumns: [5],
+                }),
+                { order: [[1, "desc"]] }
+              )
+            );
           }
         });
       });
@@ -2122,6 +2198,12 @@ if (!authedThisSession) {
     // ---- Customer transaction history (Cash, Card, Mpesa, Bank Transfer, Credit) ----
     let customerTransactions = [];
     let customerTransactionsAll = [];
+    let customerTxnPageLength = 10;
+    let customerTxnCustomerName = "";
+
+    function customerTxnExportTitle() {
+      return "Customer transactions - " + customerTxnCustomerName;
+    }
 
     function renderCustomerTransactions() {
       let filter = $("#customerTransactionsFilter").val() || "all";
@@ -2176,7 +2258,9 @@ if (!authedThisSession) {
       $("#customerTxnPaid").text(sym + paidTotal.toFixed(2));
       $("#customerTxnCredit").text(sym + creditTotal.toFixed(2));
 
+      // keep the chosen "Show N transactions" when the filters rebuild the table
       if ($.fn.DataTable.isDataTable("#customerTransactionsTable")) {
+        customerTxnPageLength = $("#customerTransactionsTable").DataTable().page.len();
         $("#customerTransactionsTable").DataTable().destroy();
       }
       $("#customer_transactions_list").html(rows);
@@ -2186,11 +2270,26 @@ if (!authedThisSession) {
         info: true,
         ordering: true,
         paging: true,
-        dom: "Bfrtip",
-        buttons: ["csv", "excel", "pdf"],
+        pageLength: customerTxnPageLength,
+        lengthMenu: [10, 25, 50, 100],
+        // same toolbar layout as Product History:
+        // export buttons + "Show N transactions" | search, then info | pages
+        dom:
+          "<'ph-toolbar'<'ph-toolbar-left'Bl><'ph-toolbar-right'f>>" +
+          "rt" +
+          "<'ph-footer'<'ph-footer-left'i><'ph-footer-right'p>>",
+        // same export buttons as Product History (Excel needs JSZip, which
+        // isn't loaded, so it never appeared anyway)
+        buttons: tableExportButtons(customerTxnExportTitle(), {
+          exportOptions: { columns: [0, 1, 2, 3, 4, 5, 6] }, // not the View button
+        }),
         language: {
           search: "_INPUT_",
           searchPlaceholder: "Search transactions...",
+          lengthMenu: "Show _MENU_ rows",
+          info: "Showing _START_ to _END_ of _TOTAL_ transactions",
+          infoEmpty: "Showing 0 transactions",
+          infoFiltered: "(filtered from _MAX_)",
           emptyTable: customerTransactionsAll.length
             ? "No transactions match the selected payment type / date range"
             : "No transactions for this customer",
@@ -2201,6 +2300,7 @@ if (!authedThisSession) {
     $.fn.viewCustomerTransactions = function (index) {
       let customer = allCustomers[index];
       if (!customer) return;
+      customerTxnCustomerName = customer.name || "";
 
       $("#customerTransactionsTitle").text("Transactions - " + customer.name);
       $("#customerTransactionsFilter").val("all");
@@ -2423,10 +2523,9 @@ if (!authedThisSession) {
           { targets: [8], orderable: false },
           { targets: [3, 4, 5], className: "text-right" },
         ],
-        buttons: [
-          { extend: "csv", title: "Product history - " + (p ? p.name : "") },
-          { extend: "pdf", title: "Product history - " + (p ? p.name : ""), orientation: "landscape" },
-        ],
+        buttons: tableExportButtons("Product history - " + (p ? p.name : ""), {
+          exportOptions: { columns: [0, 1, 2, 3, 4, 5, 6, 7] }, // not the View button
+        }),
         language: {
           search: "_INPUT_",
           searchPlaceholder: "Search history...",
@@ -2697,50 +2796,34 @@ if (!authedThisSession) {
           : `Showing ${start} to ${end} of ${totalEntries} categories`
       );
 
+      // same Bootstrap pagination markup as the DataTables pagers, so all
+      // list tables look alike
       let pager = $("#productListPager").empty();
+      let ul = $("<ul>", { class: "pagination" }).appendTo(pager);
 
-      pager.append(
-        $("<button>", {
-          type: "button",
-          class: "btn btn-white btn-sm",
-          text: "Previous",
-        })
-          .prop("disabled", productListPage <= 1)
+      function pageItem(label, page, disabled, active, extraClass) {
+        let li = $("<li>", {
+          class:
+            "paginate_button " +
+            (extraClass || "") +
+            (disabled ? " disabled" : "") +
+            (active ? " active" : ""),
+        });
+        $("<a>", { href: "javascript:void(0)", text: label })
           .click(function () {
-            productListPage -= 1;
+            if (disabled || active) return;
+            productListPage = page;
             renderProductList();
           })
-      );
-
-      for (let i = 1; i <= totalPages; i++) {
-        pager.append(
-          $("<button>", {
-            type: "button",
-            class:
-              "btn btn-default btn-sm" +
-              (i === productListPage ? " active" : ""),
-            text: i,
-            style: "margin-left: 4px;",
-          }).click(function () {
-            productListPage = i;
-            renderProductList();
-          })
-        );
+          .appendTo(li);
+        return li.appendTo(ul);
       }
 
-      pager.append(
-        $("<button>", {
-          type: "button",
-          class: "btn btn-white btn-sm",
-          text: "Next",
-          style: "margin-left: 4px;",
-        })
-          .prop("disabled", productListPage >= totalPages)
-          .click(function () {
-            productListPage += 1;
-            renderProductList();
-          })
-      );
+      pageItem("Previous", productListPage - 1, productListPage <= 1, false, "previous");
+      for (let i = 1; i <= totalPages; i++) {
+        pageItem(i, i, false, i === productListPage);
+      }
+      pageItem("Next", productListPage + 1, productListPage >= totalPages, false, "next");
     }
 
     // expand/collapse a category group in the products list
@@ -2786,17 +2869,15 @@ if (!authedThisSession) {
 
       if (counter == allCategories.length) {
         $("#category_list").html(category_list);
-        $("#categoryList").DataTable({
-          autoWidth: false,
-          info: true,
-          JQueryUI: true,
-          ordering: true,
-          paging: false,
-          language: {
-            search: "_INPUT_",
-            searchPlaceholder: "Search",
-          },
-        });
+        $("#categoryList").DataTable(
+          standardTableOptions({
+            noun: "categories",
+            searchPlaceholder: "Search categories...",
+            exportTitle: "Categories",
+            exportColumns: [0],
+            actionColumns: [1],
+          })
+        );
       }
     }
 
@@ -3486,20 +3567,20 @@ function loadTransactions() {
           }
 
           $("#transaction_list").html(transaction_list);
-          $("#transactionList").DataTable({
-            order: [[1, "desc"]],
-            autoWidth: false,
-            info: true,
-            JQueryUI: true,
-            ordering: true,
-            paging: true,
-            dom: "Bfrtip",
-            buttons: ["csv", "excel", "pdf"],
-            language: {
-              search: "_INPUT_",
-              searchPlaceholder: "Search transactions...",
-            },
-          });
+          $("#transactionList").DataTable(
+            Object.assign(
+              standardTableOptions({
+                noun: "transactions",
+                searchPlaceholder: "Search transactions...",
+                exportTitle:
+                  "Transactions - " +
+                  ($("#transactionsDateRange .date-range-label").text() || "All dates"),
+                exportColumns: [0, 1, 2, 3, 4, 5, 6, 7],
+                actionColumns: [8],
+              }),
+              { order: [[1, "desc"]] }
+            )
+          );
         }
       });
     } else {
@@ -3841,8 +3922,13 @@ $.fn.openSelectOrderModal = function (mode) {
   $("#selectOrderModalLabel").text(
     mode == "exchange" ? "Select Order to Exchange" : "Select Order to Return/Refund"
   );
-  $("#selectOrderSearch").val("");
   selectOrderDateFilter.reset();
+  selectOrderSearchText = "";
+  selectableOrders = [];
+  if ($.fn.DataTable.isDataTable("#selectOrderTable")) {
+    selectOrderPageLength = $("#selectOrderTable").DataTable().page.len();
+    $("#selectOrderTable").DataTable().destroy();
+  }
   $("#selectOrderList").html("<tr><td colspan='5'>Loading...</td></tr>");
 
   $.get(api + "all", function (data) {
@@ -3860,62 +3946,98 @@ $.fn.openSelectOrderModal = function (mode) {
   $("#selectOrderModal").modal("show");
 };
 
+let selectOrderPageLength = 10;
+let selectOrderSearchText = "";
+
+function selectOrderEscape(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+// Builds the orders table (DataTable with the same toolbar/footer as Product
+// History). The date range is applied here; the toolbar search box searches
+// invoice, reference, date, customer and total.
 $.fn.renderSelectOrderList = function (orders) {
-  let filtering =
-    $("#selectOrderSearch").val() != "" || selectOrderDateFilter.isActive();
-  $("#selectOrderCount").text(
-    filtering
-      ? orders.length + " of " + selectableOrders.length + " orders"
-      : selectableOrders.length + " orders"
-  );
-
-  if (orders.length == 0) {
-    $("#selectOrderList").html(
-      "<tr><td colspan='5'>" +
-        (filtering && selectableOrders.length
-          ? "No orders match the selected search / date range."
-          : "No paid orders found.") +
-        "</td></tr>"
-    );
-    return;
-  }
-
+  let sym = settings.symbol;
   let rows = "";
 
   orders.forEach((order) => {
-    rows += `<tr>
-                    <td>${order.order}${
+    let badge =
       order.return_status == "full"
         ? ' <span class="label label-danger">Returned</span>'
         : order.return_status == "partial"
         ? ' <span class="label label-warning">Partial Return</span>'
-        : ""
-    }</td>
-                    <td class="nobr">${moment(order.date).format("YYYY MMM DD hh:mm:ss")}</td>
-                    <td>${order.customer == 0 ? "Walk in Customer" : order.customer?.name}</td>
-                    <td>${settings.symbol}${order.total}</td>
-                    <td><button class="btn btn-info" onclick="$(this).selectOrderForReturn('${order._id}')"><i class="fa fa-check"></i> Select</button></td>
-                </tr>`;
+        : "";
+    let ref =
+      order.ref_number && String(order.ref_number) !== String(order.order)
+        ? `<br><small class="text-muted">Ref: ${selectOrderEscape(order.ref_number)}</small>`
+        : "";
+    let customer =
+      order.customer == 0 ? "Walk in Customer" : order.customer?.name || "";
+    let total = parseFloat(order.total) || 0;
+
+    rows += `<tr>
+        <td>${selectOrderEscape(order.order)}${badge}${ref}</td>
+        <td class="nobr" data-order="${moment(order.date).valueOf()}">${moment(order.date).format("DD MMM YYYY, hh:mm A")}</td>
+        <td>${selectOrderEscape(customer)}</td>
+        <td class="text-right nobr" data-order="${total}">${sym}${total.toFixed(2)}</td>
+        <td><button class="btn btn-info btn-sm" onclick="$(this).selectOrderForReturn('${order._id}')"><i class="fa fa-check"></i> Select</button></td>
+      </tr>`;
   });
 
+  // keep the chosen page size and search text when the table is rebuilt
+  if ($.fn.DataTable.isDataTable("#selectOrderTable")) {
+    let dt = $("#selectOrderTable").DataTable();
+    selectOrderPageLength = dt.page.len();
+    selectOrderSearchText = dt.search();
+    dt.destroy();
+  }
   $("#selectOrderList").html(rows);
+
+  let exportTitle =
+    ($("#selectOrderModalLabel").text() || "Select Order") +
+    (selectOrderDateFilter.isActive()
+      ? " (" + $("#selectOrderDateRange .date-range-label").text() + ")"
+      : "");
+
+  $("#selectOrderTable").DataTable({
+    order: [[1, "desc"]],
+    autoWidth: false,
+    info: true,
+    ordering: true,
+    paging: true,
+    pageLength: selectOrderPageLength,
+    lengthMenu: [10, 25, 50, 100],
+    search: { search: selectOrderSearchText },
+    dom:
+      "<'ph-toolbar'<'ph-toolbar-left'Bl><'ph-toolbar-right'f>>" +
+      "rt" +
+      "<'ph-footer'<'ph-footer-left'i><'ph-footer-right'p>>",
+    columnDefs: [{ targets: [4], orderable: false, searchable: false }],
+    buttons: tableExportButtons(exportTitle, {
+      exportOptions: { columns: [0, 1, 2, 3] }, // not the Select button
+      orientation: "portrait",
+    }),
+    language: {
+      search: "_INPUT_",
+      searchPlaceholder: "Search invoice, reference or customer...",
+      lengthMenu: "Show _MENU_ rows",
+      info: "Showing _START_ to _END_ of _TOTAL_ orders",
+      infoEmpty: "Showing 0 orders",
+      infoFiltered: "(filtered from _MAX_)",
+      emptyTable: selectableOrders.length
+        ? "No orders in the selected date range."
+        : "No paid orders found.",
+      zeroRecords: "No orders match your search.",
+    },
+  });
 };
 
-// search text + date range, applied together
+// date range filter (the search box is part of the table toolbar)
 function applySelectOrderFilters() {
-  let query = ($("#selectOrderSearch").val() || "").toLowerCase();
-
   let filtered = selectableOrders.filter(function (order) {
-    if (!selectOrderDateFilter.matches(order.date)) return false;
-
-    let customerName =
-      order.customer == 0 ? "walk in customer" : (order.customer?.name || "").toLowerCase();
-
-    return (
-      String(order.order).toLowerCase().includes(query) ||
-      String(order.ref_number || "").toLowerCase().includes(query) ||
-      customerName.includes(query)
-    );
+    return selectOrderDateFilter.matches(order.date);
   });
 
   $(document).renderSelectOrderList(filtered);
@@ -3934,8 +4056,6 @@ $(function () {
     applySelectOrderFilters
   );
 });
-
-$("#selectOrderSearch").on("input", applySelectOrderFilters);
 
 $.fn.selectOrderForReturn = function (orderId) {
   let order = selectableOrders.find(function (o) {

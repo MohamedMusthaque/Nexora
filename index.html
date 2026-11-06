@@ -765,18 +765,25 @@
                         </h4>                        
                     </div>
                      <div class="modal-body" id="all_products" style="padding: 20px; padding-right: 40px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                            <div>
-                                Show
-                                <select id="productListPageSize" class="form-control" style="display: inline-block; width: auto;">
-                                    <option value="10">10</option>
-                                    <option value="25">25</option>
-                                    <option value="50">50</option>
-                                    <option value="100">100</option>
-                                </select>
-                                categories
+                        <!-- same toolbar layout/styles as the DataTables lists (.ph-toolbar) -->
+                        <div class="ph-toolbar">
+                            <div class="ph-toolbar-left">
+                                <div class="dataTables_length">
+                                    <label>Show
+                                        <select id="productListPageSize" class="form-control input-sm">
+                                            <option value="10">10</option>
+                                            <option value="25">25</option>
+                                            <option value="50">50</option>
+                                            <option value="100">100</option>
+                                        </select>
+                                        categories</label>
+                                </div>
                             </div>
-                            <input type="text" id="productListSearch" class="form-control" placeholder="Search categories or products" style="max-width: 320px;">
+                            <div class="ph-toolbar-right">
+                                <div class="dataTables_filter">
+                                    <label><input type="search" id="productListSearch" class="form-control input-sm" placeholder="Search categories or products..." style="width: 280px;"></label>
+                                </div>
+                            </div>
                         </div>
                         <table class="table table-bordered" id="productList">
                             <thead>
@@ -789,9 +796,9 @@
                             </thead>
                             <tbody id="product_list"></tbody>
                         </table>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-                            <div id="productListInfo"></div>
-                            <div id="productListPager"></div>
+                        <div class="ph-footer">
+                            <div class="ph-footer-left"><div class="dataTables_info" id="productListInfo"></div></div>
+                            <div class="ph-footer-right"><div class="dataTables_paginate paging_simple_numbers" id="productListPager"></div></div>
                         </div>
 
                     </div>
@@ -1153,8 +1160,8 @@
                 <h4 class="modal-title" id="selectOrderModalLabel">Select Order</h4>
             </div>
             <div class="modal-body">
-                <div class="filter-bar">
-                    <input type="text" id="selectOrderSearch" placeholder="Search by invoice, reference or customer" class="form-control filter-bar-grow">
+                <div class="filter-bar" style="margin-bottom: 10px;">
+                    <label style="margin: 0;">Date</label>
                     <div class="date-range-filter" id="selectOrderDateRange">
                         <div class="date-range-input" title="Filter by date">
                             <i class="fa fa-calendar"></i>&nbsp;
@@ -1164,21 +1171,18 @@
                         <button type="button" class="btn btn-default date-range-clear" title="Clear date filter" style="display: none;"><i class="fa fa-times"></i> Clear</button>
                     </div>
                 </div>
-                <p class="text-muted" id="selectOrderCount" style="margin: 8px 0;"></p>
-                <div style="max-height: 460px; overflow-y: auto;">
-                    <table class="table table-bordered" id="selectOrderTable">
-                        <thead>
-                            <tr>
-                                <th>Invoice</th>
-                                <th>Date</th>
-                                <th>Customer</th>
-                                <th>Total</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="selectOrderList"></tbody>
-                    </table>
-                </div>
+                <table class="table table-bordered" id="selectOrderTable" style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th>Invoice</th>
+                            <th>Date</th>
+                            <th>Customer</th>
+                            <th>Total</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="selectOrderList"></tbody>
+                </table>
             </div>
         </div>
     </div>
