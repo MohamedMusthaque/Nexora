@@ -600,6 +600,17 @@
                           <label for="userName">Customer Address</label>
                           <input type="text" name="address" parsley-trigger="change" placeholder="Enter address" class="form-control" id="userAddress">
                       </div>
+                      <div class="form-group">
+                          <label for="creditType">Credit</label>
+                          <select id="creditType" class="form-control credit-type-select" data-limit-group="#creditLimitGroup">
+                              <option value="unlimited">Unlimited credit</option>
+                              <option value="limited">Credit limit</option>
+                          </select>
+                      </div>
+                      <div class="form-group" id="creditLimitGroup" style="display: none;">
+                          <label for="creditLimit">Credit limit amount*</label>
+                          <input type="number" min="0" step="0.01" placeholder="Maximum outstanding credit" class="form-control" id="creditLimit">
+                      </div>
 
                       <input type="submit" class="btn btn-primary btn-block waves-effect waves-light">
                   </form>
@@ -636,6 +647,17 @@
                     <div class="form-group">
                         <label for="userName">Customer Address</label>
                         <input type="text" name="address" parsley-trigger="change" placeholder="Enter address" class="form-control" id="userAddressEdit">
+                    </div>
+                    <div class="form-group">
+                        <label for="creditTypeEdit">Credit</label>
+                        <select id="creditTypeEdit" class="form-control credit-type-select" data-limit-group="#creditLimitGroupEdit">
+                            <option value="unlimited">Unlimited credit</option>
+                            <option value="limited">Credit limit</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="creditLimitGroupEdit" style="display: none;">
+                        <label for="creditLimitEdit">Credit limit amount*</label>
+                        <input type="number" min="0" step="0.01" placeholder="Maximum outstanding credit" class="form-control" id="creditLimitEdit">
                     </div>
 
                     <input type="submit" class="btn btn-primary btn-block waves-effect waves-light">
@@ -942,6 +964,7 @@
                             <th>Phone</th>
                             <th>Email</th>
                             <th>Address</th>
+                            <th>Credit</th>
                             <th>Action</th>
                         </tr>
                     </thead>
@@ -979,6 +1002,7 @@
                         <div id="customerTxnCredit">0.00</div>
                     </div>
                 </div>
+                <p id="customerTxnCreditInfo" class="text-muted" style="margin: 12px 0 0;"></p>
                 <br>
                 <div class="form-inline" style="margin-bottom: 10px;">
                     <label for="customerTransactionsFilter">Payment type&nbsp;</label>

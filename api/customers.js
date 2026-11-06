@@ -18,6 +18,21 @@ let customerDB = new Datastore( {
 customerDB.ensureIndex({ fieldName: '_id', unique: true });
 
 
+// credit_type: "unlimited" (default, also for customers saved before this
+// setting existed) or "limited", in which case credit_limit is the maximum
+// total of outstanding Credit sales allowed.
+function normalizeCredit( customer ) {
+    if ( customer.credit_type === "limited" ) {
+        let limit = parseFloat( customer.credit_limit );
+        customer.credit_limit = isNaN( limit ) || limit < 0 ? 0 : limit;
+    } else {
+        customer.credit_type = "unlimited";
+        customer.credit_limit = null;
+    }
+    return customer;
+}
+
+
 app.get( "/", function ( req, res ) {
     res.send( "Customer API" );
 } );
@@ -44,7 +59,7 @@ app.get( "/all", function ( req, res ) {
 
  
 app.post( "/customer", function ( req, res ) {
-    var newCustomer = req.body;
+    var newCustomer = normalizeCredit( req.body );
     customerDB.insert( newCustomer, function ( err, customer ) {
         if ( err ) res.status( 500 ).send( err );
         else res.sendStatus( 200 );
@@ -72,7 +87,7 @@ app.put("/customer", function (req, res) {
     if (Number.isInteger(customerId)) {
       customerDB.update(
         { _id: customerId },
-        req.body,
+        normalizeCredit( req.body ),
         {},
         function (err, numReplaced, customer) {
           if (err) res.status(500).send(err);

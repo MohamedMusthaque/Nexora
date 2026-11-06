@@ -117,6 +117,27 @@ app.get("/by-customer/:customerId", function(req, res) {
 });
 
 
+// Total of a customer's Credit sales, used to enforce their credit limit.
+// ?exclude=<orderId> leaves out an order that is being re-saved.
+app.get("/customer-credit/:customerId", function(req, res) {
+  let rawId = req.params.customerId;
+  let numericId = parseInt(rawId);
+  let ids = isNaN(numericId) ? [rawId] : [numericId, String(numericId)];
+  let exclude = req.query.exclude;
+
+  transactionsDB.find(
+    { $and: [{ "customer.id": { $in: ids } }, { payment_type: "Credit" }] },
+    function(err, docs) {
+      if (err) return res.status(500).send(err);
+      let used = (docs || [])
+        .filter(function(t) { return !exclude || String(t._id) !== String(exclude); })
+        .reduce(function(sum, t) { return sum + (parseFloat(t.total) || 0); }, 0);
+      res.send({ used: Math.round(used * 100) / 100 });
+    }
+  );
+});
+
+
 app.post("/new", function(req, res) {
   let newTransaction = req.body;
   transactionsDB.insert(newTransaction, function(err, transaction) {    

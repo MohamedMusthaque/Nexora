@@ -398,8 +398,12 @@ if (!authedThisSession) {
         );
 
         customers.forEach((cust) => {
-          let customer = `<option value='{"id": ${cust._id}, "name": "${cust.name}"}'>${cust.name}</option>`;
-          $("#customer").append(customer);
+          $("#customer").append(
+            $("<option>", {
+              text: cust.name,
+              value: JSON.stringify({ id: cust._id, name: cust.name }),
+            })
+          );
         });
 
         // Initialize or update Chosen plugin for searchable dropdown
@@ -818,7 +822,23 @@ if (!authedThisSession) {
       });
     });
 
-    $.fn.submitDueOrder = function (status) {
+    // creditChecked: internal flag, set once the credit limit has been verified
+    $.fn.submitDueOrder = function (status, creditChecked) {
+      // Credit sales must fit within the customer's credit limit (if any).
+      // Printing (status 3) doesn't save anything, so it isn't checked.
+      if (paymentType === 5 && status != 3 && !creditChecked) {
+        let creditCustomer = JSON.parse($("#customer").val());
+        if (creditCustomer != 0) {
+          let self = this;
+          checkCreditLimit(creditCustomer, orderTotal, holdOrder || null).then(
+            (ok) => {
+              if (ok) $(self).submitDueOrder(status, true);
+            }
+          );
+          return;
+        }
+      }
+
       // setting value of card info/mpesa code to empty
       $("#paymentInfo").val("");
 
@@ -1282,9 +1302,99 @@ if (!authedThisSession) {
       });
     };
 
+    // ---- Customer credit settings ----
+
+    // Show the limit amount only when "Credit limit" is chosen
+    $(".credit-type-select").on("change", function () {
+      $($(this).data("limit-group")).toggle($(this).val() === "limited");
+    });
+
+    // Reads and validates a form's credit fields; returns null when invalid
+    function readCreditFields(typeSelector, limitSelector) {
+      if ($(typeSelector).val() !== "limited") {
+        return { credit_type: "unlimited", credit_limit: null };
+      }
+      let limit = parseFloat($(limitSelector).val());
+      if (isNaN(limit) || limit < 0) {
+        Swal.fire(
+          "Credit limit required",
+          "Please enter a credit limit amount of 0 or more, or choose Unlimited credit.",
+          "warning"
+        );
+        return null;
+      }
+      return { credit_type: "limited", credit_limit: limit };
+    }
+
+    function creditLabel(customer) {
+      return customer?.credit_type === "limited"
+        ? "Limit " + settings.symbol + parseFloat(customer.credit_limit || 0).toFixed(2)
+        : "Unlimited";
+    }
+
+    // Adds/replaces the customer in the POS customer dropdown and selects it
+    function selectCustomerOption(cust) {
+      let value = JSON.stringify({ id: cust._id, name: cust.name });
+      $("#customer option").each(function () {
+        try {
+          if (JSON.parse(this.value).id == cust._id) $(this).remove();
+        } catch (e) {}
+      });
+      $("#customer").append($("<option>", { text: cust.name, value: value }));
+      $("#customer").val(value).trigger("chosen:updated");
+    }
+
+    // Resolves true if a Credit sale of `amount` fits the customer's limit.
+    // excludeOrder: id of an order being re-saved, so it isn't counted twice.
+    function checkCreditLimit(customer, amount, excludeOrder) {
+      return new Promise((resolve) => {
+        $.get(api + "customers/customer/" + customer.id)
+          .done(function (cust) {
+            if (!cust || cust.credit_type !== "limited") return resolve(true);
+
+            let query = excludeOrder ? "?exclude=" + excludeOrder : "";
+            $.get(api + "customer-credit/" + customer.id + query)
+              .done(function (credit) {
+                let limit = parseFloat(cust.credit_limit) || 0;
+                let used = parseFloat(credit?.used) || 0;
+                let available = Math.max(limit - used, 0);
+                let total = parseFloat(amount) || 0;
+
+                if (total <= available + 0.005) return resolve(true);
+
+                let sym = settings.symbol;
+                Swal.fire({
+                  icon: "error",
+                  title: "Credit limit exceeded",
+                  html: `${cust.name} does not have enough credit for this sale.<br><br>
+                    <table style="margin: 0 auto; text-align: left;">
+                      <tr><td>Credit limit</td><td>&nbsp;:&nbsp;</td><td>${sym}${limit.toFixed(2)}</td></tr>
+                      <tr><td>Already on credit</td><td>&nbsp;:&nbsp;</td><td>${sym}${used.toFixed(2)}</td></tr>
+                      <tr><td>Available</td><td>&nbsp;:&nbsp;</td><td><b>${sym}${available.toFixed(2)}</b></td></tr>
+                      <tr><td>This sale</td><td>&nbsp;:&nbsp;</td><td>${sym}${total.toFixed(2)}</td></tr>
+                    </table><br>
+                    Please take another payment method or increase the customer's credit limit.`,
+                });
+                resolve(false);
+              })
+              .fail(function () {
+                Swal.fire("Error", "Could not check the customer's credit. Please try again.", "error");
+                resolve(false);
+              });
+          })
+          .fail(function () {
+            Swal.fire("Error", "Could not load the customer's credit settings. Please try again.", "error");
+            resolve(false);
+          });
+      });
+    }
+
     // adding a new customer
     $("#saveCustomer").on("submit", function (e) {
       e.preventDefault();
+
+      let credit = readCreditFields("#creditType", "#creditLimit");
+      if (!credit) return;
 
       let custData = {
         _id: Math.floor(Date.now() / 1000),
@@ -1292,6 +1402,8 @@ if (!authedThisSession) {
         phone: $("#phoneNumber").val(),
         email: $("#emailAddress").val(),
         address: $("#userAddress").val(),
+        credit_type: credit.credit_type,
+        credit_limit: credit.credit_limit,
       };
 
       $.ajax({
@@ -1308,18 +1420,9 @@ if (!authedThisSession) {
             "Customer added successfully!",
             "success"
           );
-          $("#customer option:selected").removeAttr("selected");
-          $("#customer").append(
-            $("<option>", {
-              text: custData.name,
-              value: `{"id": ${custData._id}, "name": ${custData.name}}`,
-              selected: "selected",
-            })
-          );
-
-          $("#customer")
-            .val(`{"id": ${custData._id}, "name": ${custData.name}}`)
-            .trigger("chosen:updated");
+          $("#saveCustomer")[0].reset();
+          $("#creditType").trigger("change");
+          selectCustomerOption(custData);
         },
         error: function (data) {
           $("#newCustomer").modal("hide");
@@ -1332,12 +1435,17 @@ if (!authedThisSession) {
     $("#editCustomer").on("submit", function (e) {
       e.preventDefault();
 
+      let credit = readCreditFields("#creditTypeEdit", "#creditLimitEdit");
+      if (!credit) return;
+
       let custData = {
         _id: parseInt($("#customer_id_edit").val()),
         name: $("#userNameEdit").val(),
         phone: $("#phoneNumberEdit").val(),
         email: $("#emailAddressEdit").val(),
         address: $("#userAddressEdit").val(),
+        credit_type: credit.credit_type,
+        credit_limit: credit.credit_limit,
       };
 
       $.ajax({
@@ -1354,18 +1462,7 @@ if (!authedThisSession) {
             "Customer updated successfully!",
             "success"
           );
-          $("#customer option:selected").removeAttr("selected");
-          $("#customer").append(
-            $("<option>", {
-              text: custData.name,
-              value: `{"id": ${custData._id}, "name": ${custData.name}}`,
-              selected: "selected",
-            })
-          );
-
-          $("#customer")
-            .val(`{"id": ${custData._id}, "name": ${custData.name}}`)
-            .trigger("chosen:updated");
+          selectCustomerOption(custData);
         },
         error: function (data) {
           $("#editCustomer").modal("hide");
@@ -1847,6 +1944,12 @@ if (!authedThisSession) {
       $("#emailAddressEdit").val(allCustomers[index].email);
       $("#userAddressEdit").val(allCustomers[index].address);
 
+      let limited = allCustomers[index].credit_type === "limited";
+      $("#creditTypeEdit")
+        .val(limited ? "limited" : "unlimited")
+        .trigger("change");
+      $("#creditLimitEdit").val(limited ? allCustomers[index].credit_limit : "");
+
       $("#editCustomer").modal("show");
     };
 
@@ -1896,6 +1999,7 @@ if (!authedThisSession) {
             <td>${customer.phone}</td>
             <td>${customer.email}</td>
             <td>${customer.address}</td>
+            <td class="nobr">${creditLabel(customer)}</td>
             <td>${
               customer._id == 1
                 ? '<span class="btn-group"><button class="btn btn-dark"><i class="fa fa-edit"></i></button><button class="btn btn-dark"><i class="fa fa-trash"></i></button></span>'
@@ -2012,6 +2116,7 @@ if (!authedThisSession) {
 
       $("#customerTransactionsTitle").text("Transactions - " + customer.name);
       $("#customerTransactionsFilter").val("all");
+      $("#customerTxnCreditInfo").empty();
       customerTransactionsAll = [];
       customerTransactions = [];
       if ($.fn.DataTable.isDataTable("#customerTransactionsTable")) {
@@ -2028,6 +2133,24 @@ if (!authedThisSession) {
         .done(function (transactions) {
           customerTransactionsAll = transactions || [];
           renderCustomerTransactions();
+
+          // credit used = all Credit sales (same rule as the sale-time check)
+          let used = customerTransactionsAll
+            .filter((t) => t.payment_type === "Credit")
+            .reduce((sum, t) => sum + (parseFloat(t.total) || 0), 0);
+          let sym = settings.symbol;
+          if (customer.credit_type === "limited") {
+            let limit = parseFloat(customer.credit_limit) || 0;
+            $("#customerTxnCreditInfo").html(
+              `Credit limit: <b>${sym}${limit.toFixed(2)}</b> &nbsp;·&nbsp; ` +
+                `Used: <b>${sym}${used.toFixed(2)}</b> &nbsp;·&nbsp; ` +
+                `Available: <b>${sym}${Math.max(limit - used, 0).toFixed(2)}</b>`
+            );
+          } else {
+            $("#customerTxnCreditInfo").html(
+              `Credit: <b>Unlimited</b> &nbsp;·&nbsp; Used: <b>${sym}${used.toFixed(2)}</b>`
+            );
+          }
         })
         .fail(function () {
           $("#customer_transactions_list").html(
