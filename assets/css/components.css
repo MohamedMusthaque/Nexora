@@ -37,6 +37,20 @@
   margin-right: 10px !important;
   height: fit-content !important;
 }
+#customerTransactionsModal .transactions-banner{
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 4px;
+  text-align: center;
+  cursor: default;
+}
+#customerTransactionsModal .transactions-banner:last-child{
+  margin-right: 0 !important;
+}
+#customerTransactionsModal .transactions-banner > div{
+  font-size: 22px;
+  font-weight: bold;
+}
 #counter{
   font-size: 25px !important;
   font-weight: bold !important;

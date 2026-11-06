@@ -98,6 +98,25 @@ app.get("/by-date", function(req, res) {
 });
 
 
+// All completed (Cash / Card / Bank Transfer / Mpesa) and Credit transactions
+// for one registered customer, newest first. Held orders are excluded.
+app.get("/by-customer/:customerId", function(req, res) {
+  let rawId = req.params.customerId;
+  let numericId = parseInt(rawId);
+  let ids = isNaN(numericId) ? [rawId] : [numericId, String(numericId)];
+
+  let paidQuery = { $and: [{ status: 1 }, { payment_type: { $in: ["Cash", "Card", "Bank Transfer", "Mpesa"] } }] };
+  let creditQuery = { payment_type: "Credit" };
+
+  transactionsDB.find(
+    { $and: [{ "customer.id": { $in: ids } }, { $or: [paidQuery, creditQuery] }] }
+  ).sort({ date: -1 }).exec(function(err, docs) {
+    if (err) return res.status(500).send(err);
+    res.send(docs || []);
+  });
+});
+
+
 app.post("/new", function(req, res) {
   let newTransaction = req.body;
   transactionsDB.insert(newTransaction, function(err, transaction) {    

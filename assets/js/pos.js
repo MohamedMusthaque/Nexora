@@ -1878,7 +1878,9 @@ if (!authedThisSession) {
             <td>${
               customer._id == 1
                 ? '<span class="btn-group"><button class="btn btn-dark"><i class="fa fa-edit"></i></button><button class="btn btn-dark"><i class="fa fa-trash"></i></button></span>'
-                : '<span class="btn-group"><button onClick="$(this).editCustomer(' +
+                : '<span class="btn-group"><button onClick="$(this).viewCustomerTransactions(' +
+                  index +
+                  ')" class="btn btn-info" title="View transactions"><i class="fa fa-history"></i></button><button onClick="$(this).editCustomer(' +
                   index +
                   ')" class="btn btn-warning"><i class="fa fa-edit"></i></button><button onClick="$(this).deleteCustomer(' +
                   customer._id +
@@ -1906,6 +1908,130 @@ if (!authedThisSession) {
     }
 
     $("#viewCustomerOrders").click(function () {
+      loadCustomerList();
+    });
+
+    // ---- Customer transaction history (Cash, Card, Mpesa, Bank Transfer, Credit) ----
+    let customerTransactions = [];
+    let customerTransactionsAll = [];
+
+    function renderCustomerTransactions() {
+      let filter = $("#customerTransactionsFilter").val() || "all";
+      customerTransactions = customerTransactionsAll.filter(
+        (t) => filter === "all" || t.payment_type === filter
+      );
+
+      let sym = settings?.symbol || "";
+      let total = 0;
+      let paidTotal = 0;
+      let creditTotal = 0;
+      let rows = "";
+
+      customerTransactions.forEach((trans, index) => {
+        let amount = parseFloat(trans.total) || 0;
+        total += amount;
+        if (trans.payment_type === "Credit") creditTotal += amount;
+        else paidTotal += amount;
+
+        let typeLabel =
+          trans.payment_type === "Credit"
+            ? '<span class="label label-warning">Credit</span>'
+            : '<span class="label label-success">' + trans.payment_type + "</span>";
+        let returnBadge =
+          trans.return_status == "full"
+            ? ' <span class="label label-danger">Returned</span>'
+            : trans.return_status == "partial"
+            ? ' <span class="label label-warning">Partial Return</span>'
+            : "";
+        let itemCount = (trans.items || []).reduce(
+          (sum, i) => sum + (parseInt(i.quantity) || 0),
+          0
+        );
+
+        rows += `<tr>
+            <td>${trans.order}${returnBadge}</td>
+            <td class="nobr" data-order="${moment(trans.date).valueOf()}">${moment(trans.date).format("YYYY MMM DD hh:mm:ss")}</td>
+            <td>${itemCount}</td>
+            <td>${sym + amount.toFixed(2)}</td>
+            <td>${trans.paid === "" || trans.paid == null ? "" : sym + parseFloat(trans.paid).toFixed(2)}</td>
+            <td>${typeLabel}</td>
+            <td>${trans.user || ""}</td>
+            <td><button onClick="$(this).viewCustomerTransaction(${index})" class="btn btn-info"><i class="fa fa-search-plus"></i></button></td>
+          </tr>`;
+      });
+
+      $("#customerTxnCount").text(customerTransactions.length);
+      $("#customerTxnTotal").text(sym + total.toFixed(2));
+      $("#customerTxnPaid").text(sym + paidTotal.toFixed(2));
+      $("#customerTxnCredit").text(sym + creditTotal.toFixed(2));
+
+      if ($.fn.DataTable.isDataTable("#customerTransactionsTable")) {
+        $("#customerTransactionsTable").DataTable().destroy();
+      }
+      $("#customer_transactions_list").html(rows);
+      $("#customerTransactionsTable").DataTable({
+        order: [[1, "desc"]],
+        autoWidth: false,
+        info: true,
+        ordering: true,
+        paging: true,
+        dom: "Bfrtip",
+        buttons: ["csv", "excel", "pdf"],
+        language: {
+          search: "_INPUT_",
+          searchPlaceholder: "Search transactions...",
+          emptyTable: "No transactions for this customer",
+        },
+      });
+    }
+
+    $.fn.viewCustomerTransactions = function (index) {
+      let customer = allCustomers[index];
+      if (!customer) return;
+
+      $("#customerTransactionsTitle").text("Transactions - " + customer.name);
+      $("#customerTransactionsFilter").val("all");
+      customerTransactionsAll = [];
+      customerTransactions = [];
+      if ($.fn.DataTable.isDataTable("#customerTransactionsTable")) {
+        $("#customerTransactionsTable").DataTable().destroy();
+      }
+      $("#customer_transactions_list").html(
+        '<tr><td colspan="8">Loading...</td></tr>'
+      );
+
+      $("#customerModal").modal("hide");
+      $("#customerTransactionsModal").modal("show");
+
+      $.get(api + "by-customer/" + customer._id)
+        .done(function (transactions) {
+          customerTransactionsAll = transactions || [];
+          renderCustomerTransactions();
+        })
+        .fail(function () {
+          $("#customer_transactions_list").html(
+            '<tr><td colspan="8">Could not load transactions.</td></tr>'
+          );
+        });
+    };
+
+    $.fn.viewCustomerTransaction = function (index) {
+      $(this).viewTransaction(index, customerTransactions);
+    };
+
+    $("#customerTransactionsFilter").on("change", renderCustomerTransactions);
+
+    // The receipt modal opens on top of the history modal; Bootstrap 3 drops
+    // body.modal-open when it closes, which would stop the history scrolling.
+    $("#orderModal").on("hidden.bs.modal", function () {
+      if ($("#customerTransactionsModal").hasClass("in")) {
+        $("body").addClass("modal-open");
+      }
+    });
+
+    $("#customerTransactionsBack").on("click", function () {
+      $("#customerTransactionsModal").modal("hide");
+      $("#customerModal").modal("show");
       loadCustomerList();
     });
 
@@ -2875,23 +3001,23 @@ function tillFilter(tills) {
   });
 }
 
-$.fn.viewTransaction = function (index) {
+// index: position in `source` (defaults to the Transactions page list)
+$.fn.viewTransaction = function (index, source) {
   transaction_index = index;
+  let trans = (source || allTransactions)[index];
+  if (!trans) return;
 
-  let discount = allTransactions[index].discount;
-  let customer =
-    allTransactions[index]?.customer == 0
-      ? "Walk in Customer"
-      : allTransactions[index].customer.username;
+  let payment = 0;
+  let discount = trans.discount;
   let refNumber =
-    allTransactions[index]?.ref_number != ""
-      ? allTransactions[index].ref_number
-      : allTransactions[index]?.order;
-  let orderNumber = allTransactions[index]?.order;
+    trans?.ref_number != ""
+      ? trans.ref_number
+      : trans?.order;
+  let orderNumber = trans?.order;
   let type = "";
   let tax_row = "";
   let items = "";
-  let products = allTransactions[index]?.items;
+  let products = trans?.items;
 
   products.forEach((item) => {
     items +=
@@ -2905,7 +3031,7 @@ $.fn.viewTransaction = function (index) {
       "</td></tr>";
   });
 
-  switch (allTransactions[index]?.payment_type) {
+  switch (trans?.payment_type) {
     case 1:
       type = "Cash";
       break;
@@ -2921,33 +3047,40 @@ $.fn.viewTransaction = function (index) {
 
   // console.log("Method Type: ", type)
 
-  if (allTransactions[index]?.paid != "") {
+  if (trans?.paid != "") {
     payment = `<tr>
                     <td>Paid</td>
                     <td>:</td>
-                    <td>${settings.symbol + allTransactions[index]?.paid}</td>
+                    <td>${settings.symbol + trans?.paid}</td>
                 </tr>
                 <tr>
                     <td>Change</td>
                     <td>:</td>
                     <td>${
                       settings.symbol +
-                      Math.abs(allTransactions[index]?.change).toFixed(2)
+                      Math.abs(trans?.change).toFixed(2)
                     }</td>
                 </tr>
                 <tr>
                     <td>Method</td>
                     <td>:</td>
-                    <td>${allTransactions[index]?.payment_type}</td>
+                    <td>${trans?.payment_type}</td>
                 </tr>
                 ${
-                  allTransactions[index]?.payment_info &&
-                  `<tr>
+                  trans?.payment_info
+                    ? `<tr>
                     <td>Transaction Code</td>
                     <td>:</td>
-                    <td>${allTransactions[index]?.payment_info}</td>
+                    <td>${trans?.payment_info}</td>
                 </tr>`
+                    : ""
                 }`;
+  } else if (trans?.payment_type) {
+    payment = `<tr>
+                    <td>Method</td>
+                    <td>:</td>
+                    <td>${trans.payment_type}</td>
+                </tr>`;
   }
 
   if (settings.charge_tax) {
@@ -2955,7 +3088,7 @@ $.fn.viewTransaction = function (index) {
                 <td>Vat(${settings.percentage})% </td>
                 <td>:</td>
                 <td>${settings.symbol}${parseFloat(
-      allTransactions[index].tax
+      trans.tax
     ).toFixed(2)}</td>
             </tr>`;
   }
@@ -2984,12 +3117,12 @@ $.fn.viewTransaction = function (index) {
         Invoice : ${orderNumber} <br>
         Ref No : ${refNumber} <br>
         Customer : ${
-          allTransactions[index]?.customer == 0
+          trans?.customer == 0
             ? "Walk in Customer"
-            : allTransactions[index]?.customer?.name
+            : trans?.customer?.name
         } <br>
-        Cashier : ${allTransactions[index]?.user} <br>
-        Date : ${moment(allTransactions[index]?.date).format(
+        Cashier : ${trans?.user} <br>
+        Date : ${moment(trans?.date).format(
           "DD MMM YYYY HH:mm:ss"
         )}<br>
         </p>
@@ -3011,7 +3144,7 @@ $.fn.viewTransaction = function (index) {
             <td><b>Subtotal</b></td>
             <td>:</td>
             <td><b>${settings.symbol}${
-    allTransactions[index]?.subtotal
+    trans?.subtotal
   }</b></td>
         </tr>
         <tr>
@@ -3020,7 +3153,7 @@ $.fn.viewTransaction = function (index) {
             <td>${
               discount > 0
                 ? settings.symbol +
-                  parseFloat(allTransactions[index]?.discount).toFixed(2)
+                  parseFloat(trans?.discount).toFixed(2)
                 : ""
             }</td>
         </tr>
@@ -3031,7 +3164,7 @@ $.fn.viewTransaction = function (index) {
             <td><h3>Total</h3></td>
             <td><h3>:</h3></td>
             <td>
-                <h3>${settings.symbol}${allTransactions[index]?.total}</h3>
+                <h3>${settings.symbol}${trans?.total}</h3>
             </td>
         </tr>
         ${payment == 0 ? "" : payment}
@@ -3048,18 +3181,18 @@ $.fn.viewTransaction = function (index) {
   $("#viewTransaction").html("");
   $("#viewTransaction").html(receipt);
 
-  if (allTransactions[index]?.return_status == "partial") {
+  if (trans?.return_status == "partial") {
     $("#viewTransaction").append(
       '<p style="text-align:center;"><span class="label label-warning">Partially Returned</span></p>'
     );
-  } else if (allTransactions[index]?.return_status == "full") {
+  } else if (trans?.return_status == "full") {
     $("#viewTransaction").append(
       '<p style="text-align:center;"><span class="label label-danger">Returned</span></p>'
     );
   }
 
   $.get(
-    api + "returns/order/" + allTransactions[index]?._id,
+    api + "returns/order/" + trans?._id,
     function (returns) {
       if (returns && returns.length > 0) {
         let historyRows = "";
