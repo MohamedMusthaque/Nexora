@@ -4477,8 +4477,8 @@ function loadTransactions() {
 
         transaction_list += `<tr>
                                 <td>${trans?.order}${returnBadge}</td>
-                                <td class="nobr">${moment(trans?.date).format(
-                                  "YYYY MMM DD hh:mm:ss"
+                                <td class="nobr" data-order="${moment(trans?.date).valueOf() || 0}">${moment(trans?.date).format(
+                                  "DD MMM YYYY, hh:mm:ss A"
                                 )}</td>
                                 <td>${settings.symbol + trans?.total}</td>
                                 <td>${
@@ -4859,7 +4859,7 @@ $.fn.viewTransaction = function (index, source) {
             .map((i) => i.product_name + " x" + i.quantity)
             .join(", ");
           historyRows += `<tr>
-                        <td>${moment(ret.date).format("YYYY MMM DD hh:mm:ss")}</td>
+                        <td>${moment(ret.date).format("DD MMM YYYY, hh:mm A")}</td>
                         <td>${ret.type == "exchange" ? "Exchange" : "Return"}</td>
                         <td>${itemsSummary}</td>
                         <td>${settings.symbol}${parseFloat(ret.refund_amount).toFixed(2)}</td>
