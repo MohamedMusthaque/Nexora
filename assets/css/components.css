@@ -311,7 +311,7 @@ body.transactions-mode.totals-compact #totals #counter{
 /* ---- Shared table toolbar + footer ----
    Used by every list table (Transactions, Customers, Users, Categories,
    Products, Customer Transactions, Product History, Select Order):
-   [CSV][PDF]  Show [10] rows ............ [search]
+   [Excel][PDF]  Show [10] rows ............ [search]
    table
    Showing 1 to 10 of N ............ Previous 1 2 3 Next              */
 .ph-toolbar,
@@ -333,7 +333,7 @@ body.transactions-mode.totals-compact #totals #counter{
   align-items: center;
   gap: 12px;
 }
-/* compact outlined export buttons (CSV / PDF) */
+/* compact outlined export buttons (Excel / PDF) */
 .ph-toolbar .dt-buttons{
   display: inline-flex;
   gap: 6px;
@@ -368,16 +368,17 @@ body.transactions-mode.totals-compact #totals #counter{
 .ph-toolbar .dt-button.export-btn .fa{
   font-size: 13px;
 }
-.ph-toolbar .dt-button.export-csv .fa{
-  color: #5fbeaa;
+/* Excel green / PDF red icons */
+.ph-toolbar .dt-button.export-excel .fa{
+  color: #1d6f42;
 }
 .ph-toolbar .dt-button.export-pdf .fa{
   color: #ef5350;
 }
-.ph-toolbar .dt-button.export-csv:hover{
-  background: #f1faf8 !important;
-  border-color: #5fbeaa !important;
-  color: #3e9e8a !important;
+.ph-toolbar .dt-button.export-excel:hover{
+  background: #eef7f1 !important;
+  border-color: #1d6f42 !important;
+  color: #1d6f42 !important;
 }
 .ph-toolbar .dt-button.export-pdf:hover{
   background: #fdf1f1 !important;

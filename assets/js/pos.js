@@ -74,38 +74,381 @@ let by_till = 0;
 let by_user = 0;
 let by_status = 1;
 
-// CSV / PDF export buttons used by the Product History, Customer Transactions
-// and Select Order tables (styled by .ph-toolbar .dt-button in components.css).
-// options: extra DataTables button settings shared by both, e.g. exportOptions.
+// ======================================================================
+// Report exports: styled Excel (.xlsx) and PDF files for every list table
+// (and the Products / Customers "Download" buttons).
+// ======================================================================
+const REPORT_STYLE = {
+  brand: "5FBEAA",      // header fill (app green)
+  brandDark: "3E9E8A",  // report title
+  ink: "4C5667",        // main text
+  muted: "98A6AD",      // subtitles, footers
+  zebra: "F6F8FA",      // alternate rows
+  border: "DFE3E8",     // cell borders
+  totalFill: "E8F6F3",  // totals row
+  groupFill: "EEF2F5",  // group rows (Products download)
+};
+
+function reportStoreName() {
+  return (settings && settings.store) || "NEXORA POS";
+}
+
+function reportCurrency() {
+  return ((settings && settings.symbol) || "").trim();
+}
+
+function reportGeneratedText() {
+  return "Generated " + moment().format("DD MMM YYYY, hh:mm A");
+}
+
+function safeFileName(text) {
+  return String(text || "report").replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
+}
+
+// Turns an exported cell's text into a typed value:
+//   "Rs. 1,250.00" -> 1250 (money)   "33.3%" -> 0.333 (percent)   "12" -> 12
+// Long digit strings (invoice numbers, phones, barcodes) and numbers with a
+// leading zero stay text so Excel doesn't change them.
+function parseReportCell(text) {
+  if (typeof text === "number") return { value: text, kind: "number" };
+  let t = String(text ?? "").trim();
+  if (t === "") return { value: "", kind: "empty" };
+  let s = t, negative = false, money = false;
+  if (s.startsWith("-")) { negative = true; s = s.slice(1).trim(); }
+  let sym = reportCurrency();
+  if (sym && s.startsWith(sym)) { money = true; s = s.slice(sym.length).trim(); }
+  else if (/^Rs\.?\s*/i.test(s)) { money = true; s = s.replace(/^Rs\.?\s*/i, ""); }
+  if (/^(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$/.test(s)) {
+    let digits = s.replace(/,/g, "");
+    let isInt = !digits.includes(".");
+    if (!money && isInt && (digits.length >= 8 || (digits.length > 1 && digits[0] === "0"))) {
+      return { value: t, kind: "text" };
+    }
+    let v = parseFloat(digits) * (negative ? -1 : 1);
+    return { value: v, kind: money ? "money" : isInt ? "int" : "number" };
+  }
+  if (/^-?\d+(\.\d+)?%$/.test(t)) return { value: parseFloat(t) / 100, kind: "percent" };
+  return { value: t, kind: "text" };
+}
+
+function reportNumFmt(kind) {
+  let sym = reportCurrency().replace(/"/g, "");
+  if (kind === "money") return sym ? `"${sym} "#,##0.00;[Red]-"${sym} "#,##0.00` : "#,##0.00;[Red]-#,##0.00";
+  if (kind === "percent") return "0.0%";
+  if (kind === "int") return "#,##0";
+  if (kind === "number") return "#,##0.00";
+  return undefined;
+}
+
+// --- Excel building blocks (also used by the Products / Customers downloads) ---
+function reportBorder() {
+  let side = { style: "thin", color: { argb: "FF" + REPORT_STYLE.border } };
+  return { top: side, left: side, bottom: side, right: side };
+}
+
+// rows 1-3: store name, report title, generated/filters line; returns next row number
+function addReportHeader(ws, title, subtitle, columnCount) {
+  let lines = [
+    { text: reportStoreName(), font: { bold: true, size: 16, color: { argb: "FF" + REPORT_STYLE.ink } }, height: 24 },
+    { text: title, font: { bold: true, size: 13, color: { argb: "FF" + REPORT_STYLE.brandDark } }, height: 20 },
+    { text: [reportGeneratedText(), subtitle].filter(Boolean).join("   ·   "), font: { italic: true, size: 10, color: { argb: "FF" + REPORT_STYLE.muted } }, height: 16 },
+  ];
+  lines.forEach((line, i) => {
+    let row = ws.getRow(i + 1);
+    row.getCell(1).value = line.text;
+    row.getCell(1).font = line.font;
+    row.getCell(1).alignment = { vertical: "middle" };
+    row.height = line.height;
+    if (columnCount > 1) ws.mergeCells(i + 1, 1, i + 1, columnCount);
+  });
+  return 5; // row 4 left blank
+}
+
+function styleReportHeaderRow(row) {
+  row.height = 22;
+  row.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + REPORT_STYLE.brand } };
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    cell.border = reportBorder();
+  });
+}
+
+// puts a value into a data cell with number format, alignment, zebra and borders
+function setReportCell(cell, raw, zebra, forcedKind) {
+  let parsed = forcedKind && typeof raw === "number"
+    ? { value: raw, kind: forcedKind }
+    : parseReportCell(raw);
+  cell.value = parsed.kind === "empty" ? null : parsed.value;
+  let fmt = reportNumFmt(parsed.kind);
+  if (fmt) cell.numFmt = fmt;
+  let numeric = ["money", "percent", "int", "number"].includes(parsed.kind);
+  cell.alignment = { vertical: "top", horizontal: numeric ? "right" : "left", wrapText: !numeric };
+  cell.font = { size: 10, color: { argb: "FF" + REPORT_STYLE.ink } };
+  if (zebra) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + REPORT_STYLE.zebra } };
+  cell.border = reportBorder();
+  return parsed;
+}
+
+// column widths from content, frozen header, filter buttons, print setup
+function finishReportSheet(ws, headerRowNumber, columnCount, lastRowNumber) {
+  for (let c = 1; c <= columnCount; c++) {
+    let longest = 0;
+    for (let r = headerRowNumber; r <= lastRowNumber; r++) {
+      let v = ws.getRow(r).getCell(c).value;
+      if (v === null || v === undefined) continue;
+      let text = typeof v === "number" ? v.toLocaleString("en-US", { maximumFractionDigits: 2 }) + "    " : String(v.formula ? "" : v);
+      text.split("\n").forEach((line) => (longest = Math.max(longest, line.length)));
+    }
+    ws.getColumn(c).width = Math.min(50, Math.max(10, longest + 3));
+  }
+  ws.views = [{ state: "frozen", ySplit: headerRowNumber, showGridLines: false }];
+  ws.autoFilter = { from: { row: headerRowNumber, column: 1 }, to: { row: headerRowNumber, column: columnCount } };
+  ws.pageSetup = {
+    orientation: columnCount > 5 ? "landscape" : "portrait",
+    fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+    margins: { left: 0.4, right: 0.4, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 },
+    printTitlesRow: headerRowNumber + ":" + headerRowNumber,
+  };
+  ws.headerFooter.oddFooter = "&L&8" + reportStoreName() + "&R&8Page &P of &N";
+}
+
+function downloadWorkbook(workbook, fileName) {
+  // Blob + <a download> so Electron's will-download handler shows a Save dialog
+  return workbook.xlsx.writeBuffer().then((buffer) => {
+    let blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    let url = URL.createObjectURL(blob);
+    let link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  });
+}
+
+// A complete styled report sheet from a header + rows.
+// sumColumns: 0-based column indexes to total; columnKinds: { index: "money" }
+// for columns given as plain numbers.
+function buildReportWorkbook({ title, subtitle, sheetName, header, rows, sumColumns, columnKinds }) {
+  let wb = new ExcelJS.Workbook();
+  wb.creator = reportStoreName();
+  wb.created = new Date();
+  let ws = wb.addWorksheet(String(sheetName || title || "Report").replace(/[\[\]:*?\/\\]/g, "-").slice(0, 31));
+  let cols = header.length;
+  let headerRowNumber = addReportHeader(ws, title, subtitle, cols);
+
+  let headerRow = ws.getRow(headerRowNumber);
+  header.forEach((h, i) => (headerRow.getCell(i + 1).value = h));
+  styleReportHeaderRow(headerRow);
+
+  let kinds = header.map(() => null);
+  rows.forEach((values, r) => {
+    let row = ws.getRow(headerRowNumber + 1 + r);
+    values.forEach((v, c) => {
+      let parsed = setReportCell(row.getCell(c + 1), v, r % 2 === 1, columnKinds && columnKinds[c]);
+      if (parsed.kind !== "empty" && parsed.kind !== "text" && !kinds[c]) kinds[c] = parsed.kind;
+    });
+  });
+  // number columns: header and text placeholders ("—", "Unlimited", "N/A")
+  // are right-aligned too, so the column lines up
+  kinds.forEach((k, c) => {
+    if (!k) return;
+    headerRow.getCell(c + 1).alignment = { vertical: "middle", horizontal: "right", wrapText: true };
+    for (let r = 0; r < rows.length; r++) {
+      let cell = ws.getRow(headerRowNumber + 1 + r).getCell(c + 1);
+      if (typeof cell.value === "string") cell.alignment = { vertical: "top", horizontal: "right" };
+    }
+  });
+
+  let last = headerRowNumber + rows.length;
+  if (sumColumns && sumColumns.length && rows.length) {
+    last += 1;
+    let totalRow = ws.getRow(last);
+    totalRow.getCell(1).value = "Total";
+    for (let c = 1; c <= cols; c++) {
+      let cell = totalRow.getCell(c);
+      if (sumColumns.includes(c - 1)) {
+        let col = ws.getColumn(c).letter;
+        let sum = rows.reduce((s, r) => { let p = parseReportCell(r[c - 1]); return s + (typeof p.value === "number" ? p.value : 0); }, 0);
+        cell.value = { formula: `SUM(${col}${headerRowNumber + 1}:${col}${last - 1})`, result: sum };
+        cell.numFmt = reportNumFmt(kinds[c - 1] || "number");
+        cell.alignment = { horizontal: "right" };
+      }
+      cell.font = { bold: true, size: 10, color: { argb: "FF" + REPORT_STYLE.ink } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + REPORT_STYLE.totalFill } };
+      cell.border = Object.assign(reportBorder(), { top: { style: "medium", color: { argb: "FF" + REPORT_STYLE.brand } } });
+    }
+  }
+  finishReportSheet(ws, headerRowNumber, cols, last);
+
+  let note = ws.getRow(last + 2);
+  note.getCell(1).value = rows.length + (rows.length === 1 ? " row" : " rows");
+  note.getCell(1).font = { italic: true, size: 9, color: { argb: "FF" + REPORT_STYLE.muted } };
+  return wb;
+}
+
+// --- PDF styling (pdfmake document from DataTables' pdfHtml5) ---
+// opts.textColumns: column indexes that are always text (e.g. barcodes)
+function styleReportPdf(doc, title, subtitle, sumColumns, opts) {
+  opts = opts || {};
+  const C = (hex) => "#" + hex.toLowerCase();
+  let tableNode = doc.content.find((c) => c && c.table);
+  if (!tableNode) return;
+  let body = tableNode.table.body;
+  let cols = body[0].length;
+  doc.content = [tableNode];
+  doc.pageOrientation = cols > 5 ? "landscape" : "portrait";
+  doc.pageMargins = [32, 78, 32, 44];
+  doc.defaultStyle = { fontSize: 8.5, color: C(REPORT_STYLE.ink) };
+
+  // which columns hold numbers (right-aligned, totals)
+  let numeric = body[0].map((_, c) => {
+    if ((opts.textColumns || []).includes(c)) return false;
+    let cells = body.slice(1).map((r) => parseReportCell(r[c].text)).filter((p) => p.kind !== "empty");
+    return cells.length > 0 && cells.filter((p) => p.kind !== "text").length >= cells.length * 0.6;
+  });
+
+  body[0].forEach((cell, c) => Object.assign(cell, {
+    fillColor: C(REPORT_STYLE.brand), color: "#ffffff", bold: true, fontSize: 9,
+    alignment: numeric[c] ? "right" : "left", margin: [4, 5, 4, 5],
+  }));
+  body.slice(1).forEach((row, r) => row.forEach((cell, c) => Object.assign(cell, {
+    fillColor: r % 2 ? C(REPORT_STYLE.zebra) : "#ffffff",
+    alignment: numeric[c] ? "right" : "left", margin: [4, 3.5, 4, 3.5], fontSize: 8.5,
+  })));
+
+  if (sumColumns && sumColumns.length && body.length > 1) {
+    let sym = reportCurrency();
+    body.push(body[0].map((_, c) => {
+      if (c === 0) return { text: "Total", bold: true };
+      if (!sumColumns.includes(c)) return { text: "" };
+      let parsed = body.slice(1).map((r) => parseReportCell(r[c].text));
+      let sum = parsed.reduce((s, p) => s + (typeof p.value === "number" ? p.value : 0), 0);
+      let money = parsed.some((p) => p.kind === "money");
+      let text = (sum < 0 ? "-" : "") + (money && sym ? sym + " " : "") +
+        Math.abs(sum).toLocaleString("en-US", { minimumFractionDigits: money ? 2 : 0, maximumFractionDigits: 2 });
+      return { text: text, bold: true, alignment: "right" };
+    }).map((cell) => Object.assign(cell, { fillColor: C(REPORT_STYLE.totalFill), margin: [4, 5, 4, 5], fontSize: 9 })));
+  }
+
+  tableNode.table.headerRows = 1; // repeat the header on every page
+  // Column widths from content (header included): each column gets what its
+  // longest text needs, spare page width goes to the text columns in
+  // proportion, and if space is short everything shrinks evenly. Keeps codes
+  // like barcodes on one line and avoids big gaps between short columns.
+  let usable = (doc.pageOrientation === "landscape" ? 841.89 : 595.28) - 64;
+  let longestLine = (t) => String(t ?? "").split("\n").reduce((m, l) => Math.max(m, l.length), 0);
+  let need = body[0].map((h, c) => {
+    let cells = Math.max(0, ...body.slice(1).map((r) => longestLine(r[c].text)));
+    return Math.max(cells * 4.7, longestLine(h.text) * 5.2) + 10; // ~pt per character at 8.5-9pt, + cell padding
+  });
+  let total = need.reduce((s, w) => s + w, 0);
+  if (total < usable) {
+    let grow = need.map((_, c) => !numeric[c]);
+    if (!grow.some(Boolean)) grow = need.map(() => true);
+    let growTotal = need.reduce((s, w, c) => s + (grow[c] ? w : 0), 0);
+    let extra = usable - total;
+    need = need.map((w, c) => (grow[c] ? w + (extra * w) / growTotal : w));
+  } else {
+    need = need.map((w) => (w * usable) / total);
+  }
+  tableNode.table.widths = need.map((w) => Math.floor(w * 10) / 10);
+  let lastRow = body.length;
+  let hasTotal = sumColumns && sumColumns.length && body.length > 2;
+  tableNode.layout = {
+    hLineWidth: (i) => (i === 0 || i === 1 ? 0 : hasTotal && i === lastRow - 1 ? 1 : 0.5),
+    hLineColor: (i) => (hasTotal && i === lastRow - 1 ? C(REPORT_STYLE.brand) : C(REPORT_STYLE.border)),
+    vLineWidth: () => 0,
+    paddingLeft: () => 0, paddingRight: () => 0, paddingTop: () => 0, paddingBottom: () => 0,
+  };
+
+  let generated = reportGeneratedText();
+  let pageWidth = doc.pageOrientation === "landscape" ? 841.89 : 595.28;
+  doc.header = () => ({
+    margin: [32, 20, 32, 0],
+    stack: [
+      {
+        columns: [
+          { stack: [
+            { text: reportStoreName(), fontSize: 15, bold: true, color: C(REPORT_STYLE.ink) },
+            { text: title, fontSize: 11, bold: true, color: C(REPORT_STYLE.brandDark), margin: [0, 2, 0, 0] },
+          ] },
+          { stack: [generated, subtitle].filter(Boolean).map((t) => ({ text: t, fontSize: 8, color: C(REPORT_STYLE.muted), alignment: "right" })), width: "auto", margin: [0, 4, 0, 0] },
+        ],
+      },
+      { canvas: [{ type: "line", x1: 0, y1: 6, x2: pageWidth - 64, y2: 6, lineWidth: 1.2, lineColor: C(REPORT_STYLE.brand) }] },
+    ],
+  });
+  doc.footer = (page, pages) => ({
+    margin: [32, 14, 32, 0],
+    columns: [
+      { text: reportStoreName() + "  ·  " + (body.length - 1 - (hasTotal ? 1 : 0)) + " rows", fontSize: 7.5, color: C(REPORT_STYLE.muted) },
+      { text: "Page " + page + " of " + pages, fontSize: 7.5, color: C(REPORT_STYLE.muted), alignment: "right" },
+    ],
+  });
+}
+
+// exported cell text: <br> becomes a line break, other HTML is dropped
+function exportCellText(data) {
+  let html = String(data ?? "").replace(/<br\s*\/?>/gi, "\n");
+  let text = $("<div>").html(html).text();
+  return text.replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").trim();
+}
+
+// Excel (.xlsx) / PDF export buttons used by every list table
+// (styled by .ph-toolbar .dt-button in components.css).
+// options.exportOptions: which columns etc.; options.sumColumns: indexes
+// (within the exported columns) to total; options.subtitle: string or
+// function shown under the title (e.g. the date range).
 function tableExportButtons(title, options) {
   options = options || {};
+  let exportOptions = Object.assign({}, options.exportOptions || {}, {
+    stripHtml: false,
+    format: { body: (data) => exportCellText(data), header: (data) => exportCellText(data) },
+  });
+  let subtitle = () => (typeof options.subtitle === "function" ? options.subtitle() : options.subtitle || "");
+  let fileBase = () => safeFileName(title) + " " + moment().format("YYYY-MM-DD HHmm");
+
   return [
-    Object.assign(
-      {
-        extend: "csv",
-        title: title,
-        text: '<i class="fa fa-file-text-o"></i><span>CSV</span>',
-        titleAttr: "Download as CSV",
-        className: "export-btn export-csv",
+    {
+      text: '<i class="fa fa-file-excel-o"></i><span>Excel</span>',
+      titleAttr: "Download as Excel (.xlsx)",
+      className: "export-btn export-excel",
+      exportOptions: exportOptions,
+      action: function (e, dt, node, config) {
+        let data = dt.buttons.exportData(config.exportOptions);
+        let wb = buildReportWorkbook({
+          title: title,
+          subtitle: subtitle(),
+          header: data.header,
+          rows: data.body,
+          sumColumns: options.sumColumns,
+        });
+        downloadWorkbook(wb, fileBase() + ".xlsx").catch((err) => {
+          console.error("Excel export failed:", err);
+          Swal.fire("Oops!", "Could not create the Excel file. Please try again.", "warning");
+        });
       },
-      options
-    ),
-    Object.assign(
-      {
-        extend: "pdf",
-        title: title,
-        orientation: "landscape",
-        text: '<i class="fa fa-file-pdf-o"></i><span>PDF</span>',
-        titleAttr: "Download as PDF",
-        className: "export-btn export-pdf",
-      },
-      options
-    ),
+    },
+    {
+      extend: "pdf",
+      title: title,
+      filename: () => fileBase(),
+      text: '<i class="fa fa-file-pdf-o"></i><span>PDF</span>',
+      titleAttr: "Download as PDF",
+      className: "export-btn export-pdf",
+      exportOptions: exportOptions,
+      customize: (doc) => styleReportPdf(doc, title, subtitle(), options.sumColumns),
+    },
   ];
 }
 
 // Shared table layout (styled by .ph-toolbar / .ph-footer in components.css):
-//   [CSV][PDF]  Show [10] rows ............ [search]
+//   [Excel][PDF]  Show [10] rows ............ [search]
 //   table
 //   Showing 1 to 10 of N <noun> ........... Previous 1 2 3 Next
 const TABLE_TOOLBAR_DOM =
@@ -115,7 +458,8 @@ const TABLE_TOOLBAR_DOM =
 
 // DataTables options for a list table with the shared layout.
 // o.noun: what the rows are ("customers"); o.searchPlaceholder;
-// o.exportTitle (omit for no CSV/PDF buttons) + o.exportColumns;
+// o.exportTitle (omit for no Excel/PDF buttons) + o.exportColumns,
+// o.sumColumns (exported column indexes to total), o.exportSubtitle;
 // o.actionColumns: button columns (not sortable/searchable/exported).
 function standardTableOptions(o) {
   o = o || {};
@@ -129,10 +473,11 @@ function standardTableOptions(o) {
     lengthMenu: [10, 25, 50, 100],
     dom: o.exportTitle ? TABLE_TOOLBAR_DOM : TABLE_TOOLBAR_DOM.replace("Bl>", "l>"),
     buttons: o.exportTitle
-      ? tableExportButtons(
-          o.exportTitle,
-          o.exportColumns ? { exportOptions: { columns: o.exportColumns } } : {}
-        )
+      ? tableExportButtons(o.exportTitle, {
+          exportOptions: o.exportColumns ? { columns: o.exportColumns } : {},
+          sumColumns: o.sumColumns,
+          subtitle: o.exportSubtitle,
+        })
       : [],
     columnDefs: o.actionColumns
       ? [{ targets: o.actionColumns, orderable: false, searchable: false }]
@@ -2422,10 +2767,13 @@ if (!authedThisSession) {
           "<'ph-toolbar'<'ph-toolbar-left'Bl><'ph-toolbar-right'f>>" +
           "rt" +
           "<'ph-footer'<'ph-footer-left'i><'ph-footer-right'p>>",
-        // same export buttons as Product History (Excel needs JSZip, which
-        // isn't loaded, so it never appeared anyway)
+        // same export buttons as the other tables
         buttons: tableExportButtons(customerTxnExportTitle(), {
           exportOptions: { columns: [0, 1, 2, 3, 4, 5, 6] }, // not the View button
+          sumColumns: [2, 3, 4], // Items, Total, Paid
+          subtitle: () =>
+            "Payment type: " + $("#customerTransactionsFilter option:selected").text() +
+            "   ·   " + $("#customerTransactionsDateRange .date-range-label").text(),
         }),
         language: {
           search: "_INPUT_",
@@ -2669,6 +3017,9 @@ if (!authedThisSession) {
         ],
         buttons: tableExportButtons("Product history - " + (p ? p.name : ""), {
           exportOptions: { columns: [0, 1, 2, 3, 4, 5, 6, 7] }, // not the View button
+          subtitle: () =>
+            $("#productHistoryFilter option:selected").text() +
+            "   ·   " + $("#productHistoryDateRange .date-range-label").text(),
         }),
         language: {
           search: "_INPUT_",
@@ -2884,10 +3235,12 @@ if (!authedThisSession) {
 
     // renders the current page of (optionally search-filtered) category
     // groups and refreshes the pagination controls
-    function renderProductList() {
+    // categories + products matching the Products search box (used by the
+    // list and by its Excel / PDF exports, so both show the same rows)
+    function productListMatches() {
       let term = $("#productListSearch").val().trim().toLowerCase();
 
-      let filtered = productGroups
+      return productGroups
         .map((group) => {
           if (term === "") {
             return { group, itemsToShow: group.items, expand: false };
@@ -2903,6 +3256,156 @@ if (!authedThisSession) {
           return { group, itemsToShow, expand: true, matched: categoryMatches || itemsToShow.length > 0 };
         })
         .filter((entry) => term === "" || entry.matched);
+    }
+
+    // ---- Products page: Excel / PDF exports (same look as the table exports) ----
+    // Both export what the search box currently shows (all pages).
+    function productExportSubtitle(entries) {
+      let products = entries.reduce((n, e) => n + e.itemsToShow.length, 0);
+      let term = $("#productListSearch").val().trim();
+      return (
+        entries.length + (entries.length === 1 ? " category" : " categories") +
+        " · " + products + (products === 1 ? " product" : " products") +
+        (term ? ' · Search: "' + term + '"' : "")
+      );
+    }
+
+    // cost / selling / profit / margin for one product (null = not available)
+    function productPriceFigures(product) {
+      let price = parseFloat(product.price);
+      let cost = product.cost_price === undefined || product.cost_price === "" ? null : parseFloat(product.cost_price);
+      let profit = cost === null || isNaN(price) ? null : price - cost;
+      return {
+        price: isNaN(price) ? null : price,
+        cost: cost,
+        profit: profit,
+        margin: profit === null || !price ? null : profit / price,
+      };
+    }
+
+    // Excel: products grouped under category rows (groups can be collapsed)
+    function exportProductsExcel() {
+      let entries = productListMatches();
+      const headers = ["Barcode", "Product", "Cost Price", "Selling Price", "Profit / Item", "Margin", "Stock"];
+      let cols = headers.length;
+      let wb = new ExcelJS.Workbook();
+      wb.creator = reportStoreName();
+      let ws = wb.addWorksheet("Products");
+      // keep groups expanded; the +/- control sits above each group
+      ws.properties.outlineLevelRow = 2;
+      ws.properties.outlineProperties = { summaryBelow: false };
+
+      let headerRowNumber = addReportHeader(ws, "Product List", productExportSubtitle(entries), cols);
+      let headerRow = ws.getRow(headerRowNumber);
+      headers.forEach((h, i) => (headerRow.getCell(i + 1).value = h));
+      styleReportHeaderRow(headerRow);
+      [3, 4, 5, 6, 7].forEach((c) => (headerRow.getCell(c).alignment = { vertical: "middle", horizontal: "right", wrapText: true }));
+
+      let r = headerRowNumber;
+      entries.forEach(({ group, itemsToShow }) => {
+        // category row
+        let g = ws.getRow(++r);
+        g.getCell(1).value = group.categoryName + "  (" + itemsToShow.length + (itemsToShow.length === 1 ? " product)" : " products)");
+        let tracked = itemsToShow.filter((p) => p.stock == 1);
+        g.getCell(7).value = tracked.length ? tracked.reduce((s, p) => s + (parseInt(p.quantity) || 0), 0) : "N/A";
+        for (let c = 1; c <= cols; c++) {
+          let cell = g.getCell(c);
+          cell.font = { bold: true, size: 10.5, color: { argb: "FF" + REPORT_STYLE.ink } };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + REPORT_STYLE.groupFill } };
+          cell.border = reportBorder();
+          cell.alignment = { vertical: "middle", horizontal: c === 7 ? "right" : "left" };
+        }
+        if (typeof g.getCell(7).value === "number") g.getCell(7).numFmt = reportNumFmt("int");
+
+        // product rows
+        itemsToShow.forEach((product, i) => {
+          let row = ws.getRow(++r);
+          row.outlineLevel = 1;
+          let zebra = i % 2 === 1;
+          let f = productPriceFigures(product);
+
+          // barcode always text (keeps leading zeros / long codes intact)
+          let barcode = row.getCell(1);
+          setReportCell(barcode, "", zebra);
+          barcode.value = String(product.barcode ?? "");
+          barcode.numFmt = "@";
+          setReportCell(row.getCell(2), product.name || "", zebra);
+          setReportCell(row.getCell(3), f.cost === null ? "" : f.cost, zebra, "money");
+          setReportCell(row.getCell(4), f.price === null ? "" : f.price, zebra, "money");
+          setReportCell(row.getCell(5), f.profit === null ? "" : f.profit, zebra, "money");
+          setReportCell(row.getCell(6), f.margin === null ? "" : f.margin, zebra, "percent");
+          setReportCell(row.getCell(7), product.stock == 1 ? parseInt(product.quantity) || 0 : "N/A", zebra, "int");
+          row.getCell(7).alignment = { vertical: "top", horizontal: "right" };
+          if (f.cost === null) {
+            let c = row.getCell(3);
+            c.value = "not set";
+            c.font = { italic: true, size: 10, color: { argb: "FF" + REPORT_STYLE.muted } };
+            c.alignment = { horizontal: "right" };
+          }
+          if (f.profit !== null && f.profit < 0) row.getCell(6).font = { size: 10, color: { argb: "FFD84340" } };
+        });
+      });
+
+      finishReportSheet(ws, headerRowNumber, cols, r);
+      ws.getColumn(1).width = Math.max(ws.getColumn(1).width, 26); // category names live in column A
+      let note = ws.getRow(r + 2);
+      note.getCell(1).value = "Profit / Item and Margin use the cost and selling prices. Products without a cost price show \"not set\".";
+      note.getCell(1).font = { italic: true, size: 9, color: { argb: "FF" + REPORT_STYLE.muted } };
+
+      $("#loading").show();
+      downloadWorkbook(wb, "Product List " + moment().format("YYYY-MM-DD HHmm") + ".xlsx")
+        .catch((err) => {
+          console.error("Failed to generate product list Excel file:", err);
+          Swal.fire("Oops!", "Could not create the Excel file. Please try again.", "warning");
+        })
+        .finally(() => $("#loading").hide());
+    }
+
+    // PDF: one table with a Category column, styled like the other PDF exports
+    function exportProductsPdf() {
+      let entries = productListMatches();
+      let sym = reportCurrency();
+      let money = (n) => (n < 0 ? "-" : "") + (sym ? sym + " " : "") +
+        Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      let body = [["Category", "Product", "Barcode", "Cost Price", "Selling Price", "Profit / Item", "Margin", "Stock"].map((t) => ({ text: t }))];
+      entries.forEach(({ group, itemsToShow }) => {
+        itemsToShow.forEach((product) => {
+          let f = productPriceFigures(product);
+          body.push([
+            group.categoryName,
+            product.name || "",
+            String(product.barcode ?? ""),
+            f.cost === null ? "not set" : money(f.cost),
+            f.price === null ? "" : money(f.price),
+            f.profit === null ? "—" : money(f.profit),
+            f.margin === null ? "—" : (f.margin * 100).toFixed(1) + "%",
+            product.stock == 1 ? String(parseInt(product.quantity) || 0) : "N/A",
+          ].map((t) => ({ text: t })));
+        });
+      });
+      if (body.length === 1) {
+        Swal.fire("Nothing to export", "No products match the current search.", "info");
+        return;
+      }
+
+      let doc = { content: [{ table: { body: body } }] };
+      styleReportPdf(doc, "Product List", productExportSubtitle(entries), null, { textColumns: [2] });
+      // margin text in red when it's a loss
+      body.slice(1).forEach((row) => { if (String(row[5].text).startsWith("-")) row[5].color = row[6].color = "#d84340"; });
+      try {
+        pdfMake.createPdf(doc).download("Product List " + moment().format("YYYY-MM-DD HHmm") + ".pdf");
+      } catch (err) {
+        console.error("Failed to generate product list PDF:", err);
+        Swal.fire("Oops!", "Could not create the PDF file. Please try again.", "warning");
+      }
+    }
+
+    $("#productsExportExcel").on("click", exportProductsExcel);
+    $("#productsExportPdf").on("click", exportProductsPdf);
+
+    function renderProductList() {
+      let filtered = productListMatches();
 
       let totalEntries = filtered.length;
       let totalPages = Math.max(1, Math.ceil(totalEntries / productListPageSize));
@@ -3402,198 +3905,6 @@ if (!authedThisSession) {
     $(this).hide(500);
     $("#imagename").show(500);
   });
-
-  $("#print_list").click(function () {
-    $("#loading").show();
-
-    const headers = ["Barcode", "Name", "Category", "Cost (LKR)", "Price (LKR)", "Stock"];
-
-    let workbook = new ExcelJS.Workbook();
-    let sheet = workbook.addWorksheet("Products");
-
-    // Keep grouped rows expanded by default: a row is only auto-collapsed
-    // when its outlineLevel >= the sheet's outlineLevelRow, and detail rows
-    // below use level 1, so this just needs to be higher than that.
-    sheet.properties.outlineLevelRow = 2;
-    // The category row sits above its detail rows, so the +/- outline
-    // control for a collapsed group should show above the group too.
-    sheet.properties.outlineProperties = { summaryBelow: false };
-
-    sheet.mergeCells(1, 1, 1, headers.length);
-    let titleCell = sheet.getCell(1, 1);
-    titleCell.value = "Product List";
-    titleCell.font = { bold: true, size: 14 };
-    titleCell.alignment = { horizontal: "center" };
-
-    let headerRow = sheet.addRow(headers);
-    headerRow.font = { bold: true };
-    headerRow.alignment = { horizontal: "center" };
-
-    productGroups.forEach((group) => {
-      let groupRow = sheet.addRow([
-        "",
-        "",
-        group.categoryName,
-        "",
-        "",
-        group.trackedCount > 0 ? group.totalStock : "N/A",
-      ]);
-      groupRow.font = { bold: true };
-      groupRow.getCell(6).alignment = { horizontal: "right" };
-
-      group.items.forEach((product) => {
-        let hasCost = product.cost_price !== undefined && product.cost_price !== "";
-        let row = sheet.addRow([
-          product.barcode,
-          product.name,
-          group.categoryName,
-          hasCost ? "Rs. " + (parseFloat(product.cost_price) || 0).toFixed(2) : "",
-          "Rs. " + (parseFloat(product.price) || 0).toFixed(2),
-          product.stock == 1 ? product.quantity : "N/A",
-        ]);
-        row.outlineLevel = 1;
-        row.getCell(4).alignment = { horizontal: "right" };
-        row.getCell(5).alignment = { horizontal: "right" };
-        row.getCell(6).alignment = { horizontal: "right" };
-      });
-    });
-
-    sheet.addRow([]);
-    sheet.addRow([
-      "This report is generated on " + moment().format("DD-MM-YYYY hh:mm:ss A"),
-    ]);
-
-    sheet.columns.forEach((col) => {
-      col.width = 22;
-    });
-
-    // workbook.xlsx.writeFile() would silently write straight to disk via fs
-    // in this nodeIntegration renderer (same class of bug jsPDF had), with
-    // no Save dialog. Building the Blob/<a download> link ourselves instead
-    // lets Electron's will-download handler (see start.js) intercept it and
-    // show a native Save dialog.
-    workbook.xlsx
-      .writeBuffer()
-      .then((buffer) => {
-        let blob = new Blob([buffer], { type: "application/octet-stream" });
-        let url = URL.createObjectURL(blob);
-        let link = document.createElement("a");
-        link.href = url;
-        link.download = "productList.xlsx";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      })
-      .catch((err) => {
-        console.error("Failed to generate product list Excel file:", err);
-        Swal.fire("Oops!", "Could not generate the download. Please try again.", "warning");
-      })
-      .finally(() => {
-        $("#loading").hide();
-      });
-  });
-
-  // Customers "Download": Excel list of customers with their credit position.
-  // Credit used = total of the customer's Credit sales (same rule as the
-  // credit-limit check at the till).
-  $("#print_customer_list").click(function () {
-    $("#loading").show();
-    let sym = settings?.symbol || "";
-
-    Promise.all([$.get(api + "customers/all"), $.get(api + "all")])
-      .then(([customers, transactions]) => {
-        let creditUsed = {};
-        (transactions || []).forEach((t) => {
-          if (t.payment_type === "Credit" && t.customer && t.customer.id != null) {
-            creditUsed[t.customer.id] =
-              (creditUsed[t.customer.id] || 0) + (parseFloat(t.total) || 0);
-          }
-        });
-
-        let cur = sym.trim() ? " (" + sym.trim() + ")" : "";
-        const headers = [
-          "Name",
-          "Phone",
-          "Email",
-          "Address",
-          "Credit",
-          "Credit Limit" + cur,
-          "Credit Used" + cur,
-          "Credit Available" + cur,
-        ];
-
-        let workbook = new ExcelJS.Workbook();
-        let sheet = workbook.addWorksheet("Customers");
-
-        sheet.mergeCells(1, 1, 1, headers.length);
-        let titleCell = sheet.getCell(1, 1);
-        titleCell.value = "Customer List";
-        titleCell.font = { bold: true, size: 14 };
-        titleCell.alignment = { horizontal: "center" };
-
-        let headerRow = sheet.addRow(headers);
-        headerRow.font = { bold: true };
-        headerRow.alignment = { horizontal: "center" };
-
-        (customers || [])
-          .slice()
-          .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")))
-          .forEach((c) => {
-            let limited = c.credit_type === "limited";
-            let limit = parseFloat(c.credit_limit) || 0;
-            let used = creditUsed[c._id] || 0;
-
-            let row = sheet.addRow([
-              c.name || "",
-              c.phone || "",
-              c.email || "",
-              c.address || "",
-              limited ? "Limited" : "Unlimited",
-              limited ? limit : "",
-              used,
-              limited ? Math.max(limit - used, 0) : "Unlimited",
-            ]);
-            [6, 7, 8].forEach((i) => {
-              row.getCell(i).numFmt = "#,##0.00";
-              row.getCell(i).alignment = { horizontal: "right" };
-            });
-          });
-
-        sheet.addRow([]);
-        sheet.addRow([
-          "Total customers: " + (customers || []).length,
-        ]);
-        sheet.addRow([
-          "This report is generated on " + moment().format("DD-MM-YYYY hh:mm:ss A"),
-        ]);
-
-        [24, 16, 26, 30, 12, 18, 18, 20].forEach((w, i) => {
-          sheet.getColumn(i + 1).width = w;
-        });
-
-        // Same Blob/<a download> approach as the product list, so Electron's
-        // will-download handler shows a native Save dialog.
-        return workbook.xlsx.writeBuffer().then((buffer) => {
-          let blob = new Blob([buffer], { type: "application/octet-stream" });
-          let url = URL.createObjectURL(blob);
-          let link = document.createElement("a");
-          link.href = url;
-          link.download = "customerList.xlsx";
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        });
-      })
-      .catch((err) => {
-        console.error("Failed to generate customer list Excel file:", err);
-        Swal.fire("Oops!", "Could not generate the download. Please try again.", "warning");
-      })
-      .finally(() => {
-        $("#loading").hide();
-      });
-  });
 }
 
 $.fn.print = function () {
@@ -3789,7 +4100,9 @@ function renderProfit(result) {
       standardTableOptions({
         noun: "products",
         searchPlaceholder: "Search products...",
-        exportTitle: "Profit - " + $("#profitPeriod").text(),
+        exportTitle: "Profit",
+        exportSubtitle: () => $("#profitPeriod").text(),
+        sumColumns: [1, 2, 3, 4, 5], // Qty, Returned, Net Sales, Cost, Profit
         emptyTable: "No sales in the selected period",
       }),
       { order: [[5, "desc"]] }
@@ -3939,10 +4252,16 @@ function loadTransactions() {
               standardTableOptions({
                 noun: "transactions",
                 searchPlaceholder: "Search transactions...",
-                exportTitle:
-                  "Transactions - " +
-                  ($("#transactionsDateRange .date-range-label").text() || "All dates"),
+                exportTitle: "Transactions",
+                exportSubtitle: () =>
+                  [
+                    $("#transactionsDateRange .date-range-label").text() || "All dates",
+                    "Status: " + $("#status option:selected").text(),
+                    $("#tills").val() && $("#tills").val() != 0 ? "Till: " + $("#tills option:selected").text() : "",
+                    $("#users").val() && $("#users").val() != 0 ? "Cashier: " + $("#users option:selected").text() : "",
+                  ].filter(Boolean).join("   ·   "),
                 exportColumns: [0, 1, 2, 3, 4, 5, 6, 7],
+                sumColumns: [2, 3], // Total, Paid
                 actionColumns: [8],
               }),
               { order: [[1, "desc"]] }
@@ -4363,11 +4682,7 @@ $.fn.renderSelectOrderList = function (orders) {
   }
   $("#selectOrderList").html(rows);
 
-  let exportTitle =
-    ($("#selectOrderModalLabel").text() || "Select Order") +
-    (selectOrderDateFilter.isActive()
-      ? " (" + $("#selectOrderDateRange .date-range-label").text() + ")"
-      : "");
+  let exportTitle = $("#selectOrderModalLabel").text() || "Select Order";
 
   $("#selectOrderTable").DataTable({
     order: [[1, "desc"]],
@@ -4385,7 +4700,7 @@ $.fn.renderSelectOrderList = function (orders) {
     columnDefs: [{ targets: [4], orderable: false, searchable: false }],
     buttons: tableExportButtons(exportTitle, {
       exportOptions: { columns: [0, 1, 2, 3] }, // not the Select button
-      orientation: "portrait",
+      subtitle: () => $("#selectOrderDateRange .date-range-label").text(),
     }),
     language: {
       search: "_INPUT_",

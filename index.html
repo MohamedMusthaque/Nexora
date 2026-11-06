@@ -818,13 +818,17 @@
                         <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
                         <h4 class="modal-title" id="mySmallModalLabel">Products
                             <img  class="loading m-t-5" style="margin-left: 35%" height="50px" src="assets/images/loading.gif" alt="">
-                            <button class="btn btn-white pull-right" id="print_list">Download</button>
-                        </h4>                        
+                        </h4>
                     </div>
                      <div class="modal-body" id="all_products" style="padding: 20px; padding-right: 40px;">
                         <!-- same toolbar layout/styles as the DataTables lists (.ph-toolbar) -->
                         <div class="ph-toolbar">
                             <div class="ph-toolbar-left">
+                                <!-- same Excel / PDF buttons as the other tables (pos.js: exportProductsExcel / exportProductsPdf) -->
+                                <div class="dt-buttons">
+                                    <button type="button" class="dt-button export-btn export-excel" id="productsExportExcel" title="Download as Excel (.xlsx)"><span><i class="fa fa-file-excel-o"></i><span>Excel</span></span></button>
+                                    <button type="button" class="dt-button export-btn export-pdf" id="productsExportPdf" title="Download as PDF"><span><i class="fa fa-file-pdf-o"></i><span>PDF</span></span></button>
+                                </div>
                                 <div class="dataTables_length">
                                     <label>Show
                                         <select id="productListPageSize" class="form-control input-sm">
@@ -1014,9 +1018,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-                <h4 class="modal-title" id="myLargeModalLabel">Customers
-                    <button class="btn btn-white pull-right" id="print_customer_list" style="margin-right: 24px;">Download</button>
-                </h4>
+                <h4 class="modal-title" id="myLargeModalLabel">Customers</h4>
             </div>
             <!-- <div class="modal-body">
                 <input type="text" id="holdCustomerOrderInput" placeholder="Search order by customer name" class="holdCustomerOrderInput form-control">
