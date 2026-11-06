@@ -4379,11 +4379,6 @@ function renderProfit(result) {
       ${t.missingCostProducts.map((n) => $("<i>").text(n).html()).join(", ")}.
       Add a cost price in <b>Products</b> to include ${t.missingCostProducts.length > 1 ? "them" : "it"}.</div>`;
   }
-  if (t.estimatedProducts.length) {
-    notices += `<div class="alert alert-info profit-notice"><i class="fa fa-info-circle"></i>
-      Some sales were made before cost prices were recorded. For those, the product's <b>current</b> cost price is used:
-      ${t.estimatedProducts.map((n) => $("<i>").text(n).html()).join(", ")}.</div>`;
-  }
   $("#profitNotices").html(notices);
 
   let rows = "";
