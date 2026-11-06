@@ -115,9 +115,21 @@ $(document).ready(function(){
     }
 
     $.fn.calculateChange = function () {
-        var change = $("#payablePrice").val() - $("#payment").val();
+        var payable = parseFloat($("#payablePrice").val()) || 0;   // after any advance used
+        var paid = parseFloat($("#payment").val()) || 0;
+        var change = payable - paid;                                 // negative = change to give back
+        var extra = Math.max(paid - payable, 0);
+
+        // a registered customer paying more than the bill can keep the extra
+        // as advance for the next bill instead of taking change (not on Credit)
+        var canKeep = !!$("#paymentModel").data("advanceCustomer") && extra > 0.004 && !$("#credit").hasClass("active");
+        $("#advanceKeepRow").toggle(canKeep);
+        if (!canKeep) $("#keepAsAdvance").prop("checked", false);
+        $("#advanceKeepAmount").text(($("#payment_curr").text() || "") + extra.toFixed(2));
+        var keep = canKeep && $("#keepAsAdvance").is(":checked");
+
         if(change <= 0){
-            $("#change").text(change.toFixed(2));
+            $("#change").text(keep ? "0.00" : change.toFixed(2));
         }else{
             $("#change").text('0')
         }

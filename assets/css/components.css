@@ -181,8 +181,180 @@ body.transactions-mode.totals-compact #totals #counter{
   font-size: 12px;
   color: #98a6ad;
 }
-#customerPaymentsSection{
+/* ---- Customer Transactions window: tabs ---- */
+#customerTransactionsModal .customer-tabs{
   margin-top: 16px;
+  border-bottom: 2px solid #e3e3e3;
+}
+#customerTransactionsModal .customer-tabs > li{
+  margin-bottom: -2px;
+}
+#customerTransactionsModal .customer-tabs > li > a{
+  padding: 9px 16px;
+  margin-right: 4px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: #98a6ad;
+  font-weight: 600;
+  background: transparent;
+}
+#customerTransactionsModal .customer-tabs > li > a:hover{
+  color: #4c5667;
+  background: transparent;
+  border-bottom-color: #cfd6dc;
+}
+#customerTransactionsModal .customer-tabs > li.active > a,
+#customerTransactionsModal .customer-tabs > li.active > a:hover,
+#customerTransactionsModal .customer-tabs > li.active > a:focus{
+  color: #3e9e8a;
+  border: none;
+  border-bottom: 2px solid #5fbeaa;
+  background: transparent;
+}
+#customerTransactionsModal .customer-tabs .badge{
+  margin-left: 4px;
+  background: #e8ecef;
+  color: #4c5667;
+  font-weight: 600;
+}
+#customerTransactionsModal .customer-tabs > li.active .badge{
+  background: #5fbeaa;
+  color: #fff;
+}
+/* the theme gives .tab-content padding + a shadow box; here the tables use the full width */
+#customerTransactionsModal .customer-tab-content{
+  padding: 14px 0 0 !important;
+  box-shadow: none !important;
+  border: none !important;
+  background: transparent !important;
+}
+#customerTransactionsModal .customer-subtable .nobr,
+#customerTransactionsModal .customer-subtable .payment-date{
+  white-space: nowrap;
+}
+/* Credit payments / Advance tables: fit the window, compact, wrapping */
+#customerTransactionsModal .customer-subtable{
+  width: 100%;
+  margin-bottom: 0;
+  table-layout: auto;
+}
+#customerTransactionsModal .customer-subtable > thead > tr > th{
+  font-size: 12.5px;
+  padding: 7px 8px;
+  background: #f6f8fa;
+  border-bottom-width: 1px;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+#customerTransactionsModal .customer-subtable > tbody > tr > td{
+  font-size: 13px;
+  padding: 6px 8px;
+  vertical-align: middle;
+}
+#customerTransactionsModal .customer-subtable .payment-split{
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: #98a6ad;
+}
+#customerTransactionsModal .customer-subtable .payment-split span{
+  display: block;
+  white-space: nowrap;
+}
+#customerTransactionsModal .customer-subtable .payment-ref{
+  max-width: 180px;
+  word-break: break-word;
+}
+#customerTransactionsModal .customer-subtable .btn-sm{
+  padding: 3px 9px;
+}
+#customerTransactionsModal .customer-subtable-empty{
+  padding: 18px 8px !important;
+  text-align: center;
+  color: #98a6ad;
+}
+#customerTransactionsModal .table-responsive{
+  border: none;
+  margin-bottom: 0;
+}
+#customerTransactionsModal .advance-tab-summary{
+  margin: 0 0 10px;
+}
+#customerTransactionsModal .advance-tab-summary b{
+  color: #3e9e8a;
+  font-size: 15px;
+}
+/* five summary cards fit on one row */
+#customerTransactionsModal .bannerDisplay .transactions-banner > div{
+  white-space: nowrap;
+}
+.advance-balance-chip{
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #eaf7f3;
+  color: #3e9e8a;
+  font-size: 12px;
+  font-weight: normal;
+}
+
+/* ---- Pay window: customer advance ---- */
+#paymentModel .advance-panel{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #bfe6dc;
+  border-radius: 5px;
+  background: #f1faf8;
+}
+#paymentModel .advance-panel .advance-use{
+  margin: 0;
+  font-weight: 600;
+  color: #3e9e8a;
+  cursor: pointer;
+}
+#paymentModel .advance-panel .advance-use .fa{
+  margin-right: 4px;
+}
+/* Credit selected: advance not used */
+#paymentModel .advance-panel.advance-panel-off{
+  border-color: #e3e3e3;
+  background: #f6f8fa;
+}
+#paymentModel .advance-panel.advance-panel-off .advance-use{
+  color: #98a6ad;
+}
+#paymentModel .advance-panel .advance-available{
+  color: #4c5667;
+}
+#paymentModel .advance-panel .advance-breakdown{
+  flex-basis: 100%;
+  font-size: 12px;
+  color: #4c5667;
+}
+#paymentModel .advance-panel .advance-breakdown:empty{
+  display: none;
+}
+#paymentModel .advance-keep{
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #f5d9a8;
+  border-radius: 5px;
+  background: #fff8ec;
+}
+#paymentModel .advance-keep label{
+  margin: 0;
+  font-weight: normal;
+  color: #4c5667;
+  cursor: pointer;
+}
+#paymentModel .advance-keep input{
+  margin-right: 6px;
 }
 #customerPaymentsSection .credit-payments-title{
   font-weight: 600;

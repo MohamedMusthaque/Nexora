@@ -540,6 +540,14 @@
                           </div>
                       </div>
                       <div class="col-md-8">
+                          <!-- customer advance: use it on this bill (pos.js: setupPaymentAdvance) -->
+                          <!-- applied automatically for a registered customer with an advance (not on Credit) -->
+                          <div id="advancePanel" class="advance-panel" style="display: none;">
+                              <input type="checkbox" id="useAdvance" style="display: none;">
+                              <span class="advance-use" id="advanceUseLabel"><i class="fa fa-check-circle"></i> Advance applied to this bill</span>
+                              <span class="advance-available">Advance available: <b id="advanceAvailable">0.00</b></span>
+                              <div class="advance-breakdown" id="advanceBreakdown"></div>
+                          </div>
                           <div class="input-group">
                               <span class="input-group-addon" id="basic-addon3">Price <span id="price_curr"></span>
                               <input id="payablePrice" readonly type="number"  class="form-control" aria-describedby="basic-addon3">
@@ -612,6 +620,14 @@
                           <div class="input-group" id="cardInfo">
                               <span class="input-group-addon" id="basic-addon3">Card Info </span>
                               <input type="text" class="form-control" id="paymentInfo" aria-describedby="basic-addon3">
+                          </div>
+                          <!-- customer paid more than the bill: keep the extra for the next bill -->
+                          <div id="advanceKeepRow" class="advance-keep" style="display: none;">
+                              <label>
+                                  <input type="checkbox" id="keepAsAdvance">
+                                  Keep the extra <b id="advanceKeepAmount">0.00</b> as advance for
+                                  <b id="advanceKeepCustomer"></b>'s next bill (no change given)
+                              </label>
                           </div>
                       </div>
                   </div>
@@ -1066,7 +1082,7 @@
                 <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
                 <h4 class="modal-title" id="customerTransactionsTitle">Customer Transactions</h4>
             </div>
-            <div class="modal-body" style="padding: 20px; padding-right: 40px;">
+            <div class="modal-body" style="padding: 20px;">
                 <div class="bannerDisplay">
                     <div class="btn-info transactions-banner">
                         <h5>TRANSACTIONS</h5>
@@ -1084,6 +1100,10 @@
                         <h5>CREDIT</h5>
                         <div id="customerTxnCredit">0.00</div>
                     </div>
+                    <div class="btn-purple transactions-banner" title="Paid in advance for the next bill">
+                        <h5>ADVANCE</h5>
+                        <div id="customerTxnAdvance">0.00</div>
+                    </div>
                 </div>
                 <!-- credit position + settlement (pos.js: renderCustomerCredit / settleCredit) -->
                 <div class="credit-summary" id="customerCreditSummary">
@@ -1092,60 +1112,105 @@
                         <i class="fa fa-money"></i> Settle Credit
                     </button>
                 </div>
-                <br>
-                <div class="filter-bar" style="margin-bottom: 10px;">
-                    <label for="customerTransactionsFilter" style="margin: 0;">Payment type</label>
-                    <select id="customerTransactionsFilter" class="form-control" style="width: auto;">
-                        <option value="all">All</option>
-                        <option value="Cash">Cash</option>
-                        <option value="Card">Card</option>
-                        <option value="Bank Transfer">Bank Transfer</option>
-                        <option value="Credit">Credit</option>
-                    </select>
-                    <label style="margin: 0 0 0 8px;">Date</label>
-                    <div class="date-range-filter" id="customerTransactionsDateRange">
-                        <div class="date-range-input" title="Filter by date">
-                            <i class="fa fa-calendar"></i>&nbsp;
-                            <span class="date-range-label">All dates</span>
-                            <i class="fa fa-caret-down"></i>
+                <!-- Transactions / Credit payments / Advance in tabs (pos.js: renderCustomer*) -->
+                <ul class="nav nav-tabs customer-tabs" role="tablist">
+                    <li role="presentation" class="active">
+                        <a href="#customerTabTransactions" aria-controls="customerTabTransactions" role="tab" data-toggle="tab">
+                            <i class="fa fa-list"></i> Transactions <span class="badge" id="customerTabTxnCount">0</span>
+                        </a>
+                    </li>
+                    <li role="presentation">
+                        <a href="#customerTabPayments" aria-controls="customerTabPayments" role="tab" data-toggle="tab">
+                            <i class="fa fa-money"></i> Credit payments <span class="badge" id="customerTabPaymentCount">0</span>
+                        </a>
+                    </li>
+                    <li role="presentation">
+                        <a href="#customerTabAdvance" aria-controls="customerTabAdvance" role="tab" data-toggle="tab">
+                            <i class="fa fa-plus-circle"></i> Advance <span class="badge" id="customerTabAdvanceCount">0</span>
+                        </a>
+                    </li>
+                </ul>
+                <div class="tab-content customer-tab-content">
+                    <div role="tabpanel" class="tab-pane active" id="customerTabTransactions">
+                        <div class="filter-bar" style="margin-bottom: 10px;">
+                            <label for="customerTransactionsFilter" style="margin: 0;">Payment type</label>
+                            <select id="customerTransactionsFilter" class="form-control" style="width: auto;">
+                                <option value="all">All</option>
+                                <option value="Cash">Cash</option>
+                                <option value="Card">Card</option>
+                                <option value="Bank Transfer">Bank Transfer</option>
+                                <option value="Credit">Credit</option>
+                            </select>
+                            <label style="margin: 0 0 0 8px;">Date</label>
+                            <div class="date-range-filter" id="customerTransactionsDateRange">
+                                <div class="date-range-input" title="Filter by date">
+                                    <i class="fa fa-calendar"></i>&nbsp;
+                                    <span class="date-range-label">All dates</span>
+                                    <i class="fa fa-caret-down"></i>
+                                </div>
+                                <button type="button" class="btn btn-default date-range-clear" title="Clear date filter" style="display: none;"><i class="fa fa-times"></i> Clear</button>
+                            </div>
                         </div>
-                        <button type="button" class="btn btn-default date-range-clear" title="Clear date filter" style="display: none;"><i class="fa fa-times"></i> Clear</button>
+                        <table class="table table-bordered" id="customerTransactionsTable" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th>Invoice</th>
+                                    <th>Date</th>
+                                    <th>Items</th>
+                                    <th>Total</th>
+                                    <th>Paid</th>
+                                    <th>Method</th>
+                                    <th>Cashier</th>
+                                    <th>View</th>
+                                </tr>
+                            </thead>
+                            <tbody id="customer_transactions_list"></tbody>
+                        </table>
                     </div>
-                </div>
-                <table class="table table-bordered" id="customerTransactionsTable">
-                    <thead>
-                        <tr>
-                            <th>Invoice</th>
-                            <th>Date</th>
-                            <th>Items</th>
-                            <th>Total</th>
-                            <th>Paid</th>
-                            <th>Method</th>
-                            <th>Cashier</th>
-                            <th>View</th>
-                        </tr>
-                    </thead>
-                    <tbody id="customer_transactions_list"></tbody>
-                </table>
 
-                <!-- money paid back against Credit sales -->
-                <div id="customerPaymentsSection" style="display: none;">
-                    <h5 class="credit-payments-title"><i class="fa fa-money"></i> Credit payments</h5>
-                    <table class="table table-bordered" id="customerPaymentsTable">
-                        <thead>
-                            <tr>
-                                <th>Receipt</th>
-                                <th>Date</th>
-                                <th class="text-right">Amount</th>
-                                <th>Method</th>
-                                <th>Reference / Note</th>
-                                <th class="text-right">Balance after</th>
-                                <th>Received by</th>
-                                <th>Receipt</th>
-                            </tr>
-                        </thead>
-                        <tbody id="customer_payments_list"></tbody>
-                    </table>
+                    <!-- money paid back against Credit sales -->
+                    <div role="tabpanel" class="tab-pane" id="customerTabPayments">
+                        <div class="table-responsive">
+                            <table class="table table-bordered customer-subtable" id="customerPaymentsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Receipt</th>
+                                        <th>Date</th>
+                                        <th class="text-right">Amount</th>
+                                        <th>Method</th>
+                                        <th>Reference / Note</th>
+                                        <th class="text-right">Balance after</th>
+                                        <th>Received by</th>
+                                        <th class="text-center">Print</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="customer_payments_list"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- money paid in advance for the next bill: added / used -->
+                    <div role="tabpanel" class="tab-pane" id="customerTabAdvance">
+                        <p class="advance-tab-summary">
+                            Advance balance: <b id="customerAdvanceBalance">0.00</b>
+                            <span class="text-muted">· money the customer paid in advance, used on their next bills</span>
+                        </p>
+                        <div class="table-responsive">
+                            <table class="table table-bordered customer-subtable" id="customerAdvanceTable">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th></th>
+                                        <th class="text-right">Amount</th>
+                                        <th>From</th>
+                                        <th>Reference</th>
+                                        <th>By</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="customer_advance_list"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">

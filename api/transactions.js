@@ -194,12 +194,20 @@ app.get("/credit-balances", function(req, res) {
       (payments || []).forEach(function(p) {
         entry(p.customer_id).paid += parseFloat(p.amount) || 0;
       });
-      Object.keys(out).forEach(function(k) {
-        out[k].credit = round2(out[k].credit);
-        out[k].paid = round2(out[k].paid);
-        out[k].balance = round2(Math.max(out[k].credit - out[k].paid, 0));
+      advancesDB.find({}, function(err, advances) {
+        if (err) return res.status(500).send(err);
+        (advances || []).forEach(function(e) {
+          let a = entry(e.customer_id);
+          a.advance = (a.advance || 0) + (e.type === "deposit" ? 1 : -1) * (parseFloat(e.amount) || 0);
+        });
+        Object.keys(out).forEach(function(k) {
+          out[k].credit = round2(out[k].credit);
+          out[k].paid = round2(out[k].paid);
+          out[k].balance = round2(Math.max(out[k].credit - out[k].paid, 0));
+          out[k].advance = round2(Math.max(out[k].advance || 0, 0));
+        });
+        res.send(out);
       });
-      res.send(out);
     });
   });
 });
@@ -212,7 +220,20 @@ app.get("/credit-payments/:customerId", function(req, res) {
       .sort({ date: -1 })
       .exec(function(err, payments) {
         if (err) return res.status(500).send(err);
-        res.send(Object.assign({ payments: payments || [] }, pos));
+        // the customer's advance (money kept for the next bill) comes along too
+        advancesDB.find({ customer_id: { $in: customerIdForms(req.params.customerId) } })
+          .sort({ date: -1 })
+          .exec(function(err, advances) {
+            if (err) return res.status(500).send(err);
+            let advance = (advances || []).reduce(function(s, e) {
+              return s + (e.type === "deposit" ? 1 : -1) * (parseFloat(e.amount) || 0);
+            }, 0);
+            res.send(Object.assign({
+              payments: payments || [],
+              advance: round2(Math.max(advance, 0)),
+              advance_entries: advances || []
+            }, pos));
+          });
       });
   });
 });
@@ -236,22 +257,26 @@ app.post("/credit-payments", function(req, res) {
   customerCreditPosition(b.customer_id, null, function(err, pos) {
     if (err) return res.status(500).send(err);
     if (pos.balance <= 0) return res.status(400).send("This customer has no outstanding credit.");
-    if (amount > pos.balance + 0.001) {
-      return res.status(400).send("The payment is more than the outstanding balance (" + pos.balance.toFixed(2) + ").");
-    }
+    // paying more than owed: the balance is cleared and the extra is kept as
+    // an advance for the customer's next bill
+    let applied = round2(Math.min(amount, pos.balance));
+    let extra = round2(amount - applied);
     let id = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+    let customerId = isNaN(parseInt(b.customer_id)) ? b.customer_id : parseInt(b.customer_id);
     let doc = {
       _id: id,
       // unique per payment (the id includes milliseconds + a random part)
       receipt_no: "CP-" + String(id).slice(-11),
-      customer_id: isNaN(parseInt(b.customer_id)) ? b.customer_id : parseInt(b.customer_id),
+      customer_id: customerId,
       customer_name: b.customer_name || "",
-      amount: amount,
+      amount: applied,           // what went against the credit
+      received: amount,          // what the customer handed over
+      advance_added: extra,      // kept for the next bill
       method: method,
       reference: String(b.reference || "").slice(0, 100),
       note: String(b.note || "").slice(0, 300),
       balance_before: pos.balance,
-      balance_after: round2(Math.max(pos.balance - amount, 0)),
+      balance_after: round2(Math.max(pos.balance - applied, 0)),
       user: b.user || "",
       user_id: b.user_id || "",
       till: b.till || "",
@@ -259,7 +284,23 @@ app.post("/credit-payments", function(req, res) {
     };
     creditPaymentsDB.insert(doc, function(err, saved) {
       if (err) return res.status(500).send(err);
-      res.send(saved);
+      if (!extra) return res.send(saved);
+      advancesDB.insert({
+        customer_id: customerId,
+        customer_name: doc.customer_name,
+        type: "deposit",
+        amount: extra,
+        source: "settlement",
+        receipt_no: doc.receipt_no,
+        reference: "Credit settlement " + doc.receipt_no,
+        user: doc.user,
+        date: new Date()
+      }, function(err) {
+        if (err) console.error("Failed to record customer advance:", err);
+        customerAdvanceBalance(customerId, null, function(err, advance) {
+          res.send(Object.assign({ advance_balance: advance || 0 }, saved));
+        });
+      });
     });
   });
 });
@@ -339,12 +380,105 @@ app.get("/product-history/:productId", function(req, res) {
 });
 
 
+// ---- Customer advance (money paid in advance for the next bill) ----
+// Ledger of deposits (extra paid at the till or when settling credit) and
+// uses (advance applied to a bill). Balance = deposits - uses.
+let advancesDB = new Datastore({
+  filename: process.env.APPDATA + "/POS/server/databases/customer_advances.db",
+  autoload: true
+});
+
+advancesDB.ensureIndex({ fieldName: "customer_id" });
+
+// callback(err, balance). excludeOrder: leave out the entries of an order
+// that is being saved again (so its own advance isn't counted twice)
+function customerAdvanceBalance(customerId, excludeOrder, callback) {
+  advancesDB.find({ customer_id: { $in: customerIdForms(customerId) } }, function(err, entries) {
+    if (err) return callback(err);
+    let balance = (entries || [])
+      .filter(function(e) { return !excludeOrder || String(e.order_id) !== String(excludeOrder) || e.source !== "sale"; })
+      .reduce(function(s, e) { return s + (e.type === "deposit" ? 1 : -1) * (parseFloat(e.amount) || 0); }, 0);
+    callback(null, round2(Math.max(balance, 0)));
+  });
+}
+
+function registeredCustomerId(customer) {
+  return customer && customer != 0 && customer.id != null && customer.id !== "" ? customer.id : null;
+}
+
+function advanceNumber(value) {
+  let n = parseFloat(value);
+  return isNaN(n) || n < 0 ? 0 : round2(n);
+}
+
+// Checks a sale's advance_used against the customer's advance; callback(errorMessage|null)
+function checkSaleAdvance(t, callback) {
+  let used = advanceNumber(t.advance_used);
+  let deposit = advanceNumber(t.advance_deposit);
+  if (!used && !deposit) return callback(null);
+  let customerId = registeredCustomerId(t.customer);
+  if (customerId === null) return callback("Advance can only be used or saved for a registered customer.");
+  if (t.payment_type === "Credit") return callback("Advance can't be used or saved on a Credit sale.");
+  if (!used) return callback(null);
+  customerAdvanceBalance(customerId, t._id, function(err, balance) {
+    if (err) return callback("Could not check the customer's advance.");
+    if (used > balance + 0.001) return callback("The customer only has " + balance.toFixed(2) + " in advance.");
+    callback(null);
+  });
+}
+
+// Writes a completed sale's advance use / deposit to the ledger (replacing any
+// earlier entries for the same order, so saving an order again is safe)
+function recordSaleAdvance(t, callback) {
+  callback = callback || function() {};
+  let customerId = registeredCustomerId(t.customer);
+  if (customerId === null || t.status != 1) return callback();
+  advancesDB.remove({ order_id: t._id, source: "sale" }, { multi: true }, function() {
+    let entries = [];
+    let base = {
+      customer_id: isNaN(parseInt(customerId)) ? customerId : parseInt(customerId),
+      customer_name: (t.customer && t.customer.name) || "",
+      source: "sale",
+      order_id: t._id,
+      reference: "Invoice " + (t.order || t._id),
+      user: t.user || "",
+      date: new Date()
+    };
+    let used = advanceNumber(t.advance_used), deposit = advanceNumber(t.advance_deposit);
+    if (used) entries.push(Object.assign({ type: "use", amount: used }, base));
+    if (deposit) entries.push(Object.assign({ type: "deposit", amount: deposit }, base));
+    if (!entries.length) return callback();
+    advancesDB.insert(entries, function(err) {
+      if (err) console.error("Failed to record customer advance:", err);
+      callback();
+    });
+  });
+}
+
+// A customer's advance balance + its history (newest first)
+app.get("/customer-advance/:customerId", function(req, res) {
+  customerAdvanceBalance(req.params.customerId, null, function(err, balance) {
+    if (err) return res.status(500).send(err);
+    advancesDB.find({ customer_id: { $in: customerIdForms(req.params.customerId) } })
+      .sort({ date: -1 })
+      .exec(function(err, entries) {
+        if (err) return res.status(500).send(err);
+        res.send({ balance: balance, entries: entries || [] });
+      });
+  });
+});
+
+
 app.post("/new", function(req, res) {
   let newTransaction = req.body;
-  transactionsDB.insert(newTransaction, function(err, transaction) {    
+  checkSaleAdvance(newTransaction, function(advanceError) {
+  if (advanceError) return res.status(400).send(advanceError);
+  transactionsDB.insert(newTransaction, function(err, transaction) {
     if (err) {
       return res.status(500).send(err);
     }
+
+    recordSaleAdvance(transaction);
 
     // Handle transaction creation successfully
     res.status(200).send("Transaction created successfully.");
@@ -358,22 +492,28 @@ app.post("/new", function(req, res) {
       }
     });
   });
+  });
 });
 
 
 
 app.put("/new", function(req, res) {
   let oderId = req.body._id;
-  transactionsDB.update( {
-      _id: oderId
-  }, req.body, {}, function (
-      err,
-      numReplaced,
-      order
-  ) {
-      if ( err ) res.status( 500 ).send( err );
-      else res.sendStatus( 200 );
-  } );
+  checkSaleAdvance(req.body, function(advanceError) {
+    if (advanceError) return res.status(400).send(advanceError);
+    transactionsDB.update( {
+        _id: oderId
+    }, req.body, {}, function (
+        err,
+        numReplaced,
+        order
+    ) {
+        if ( err ) return res.status( 500 ).send( err );
+        // a held order completed with an advance used / saved
+        recordSaleAdvance(req.body);
+        res.sendStatus( 200 );
+    } );
+  });
 });
 
 

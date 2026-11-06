@@ -1337,10 +1337,81 @@ if (!authedThisSession) {
           $("#cardInfo").hide();
         }
 
+        setupPaymentAdvance(customer);
         $("#paymentModel").modal("toggle");
       } else {
         Swal.fire("Oops!", "There is nothing to pay!", "warning");
       }
+    });
+
+    // ---- Customer advance in the Pay window ----
+    // A registered customer can (a) use their advance to pay part or all of
+    // this bill, and (b) keep any extra they pay as advance for the next bill.
+    let paymentAdvance = { customer: null, balance: 0, applied: 0, requestId: 0 };
+
+    function advanceMoney(n) {
+      return settings.symbol + (parseFloat(n) || 0).toFixed(2);
+    }
+
+    // called when the Pay window opens
+    function setupPaymentAdvance(customer) {
+      let registered = customer && customer != 0;
+      paymentAdvance = { customer: registered ? customer : null, balance: 0, applied: 0, requestId: paymentAdvance.requestId + 1 };
+      $("#paymentModel").data("advanceCustomer", registered ? customer.name : "");
+      $("#advanceKeepCustomer").text(registered ? customer.name : "");
+      $("#useAdvance").prop("checked", false);
+      $("#keepAsAdvance").prop("checked", false);
+      $("#advancePanel").hide();
+      $("#advanceKeepRow").hide();
+      applyPaymentAdvance();
+      if (!registered) return;
+
+      let requestId = paymentAdvance.requestId;
+      $.get(api + "customer-advance/" + customer.id).done(function (data) {
+        if (requestId !== paymentAdvance.requestId) return; // window reopened meanwhile
+        paymentAdvance.balance = parseFloat(data && data.balance) || 0;
+        $("#advanceAvailable").text(advanceMoney(paymentAdvance.balance));
+        updateAdvanceForPaymentType();
+      });
+    }
+
+    // A registered customer's advance is deducted from the bill automatically.
+    // Credit sales can't use or save advance (the customer pays later), so
+    // the panel then just says the advance isn't used.
+    function updateAdvanceForPaymentType() {
+      let hasAdvance = paymentAdvance.customer && paymentAdvance.balance > 0;
+      let onCredit = paymentType === 5;
+      $("#advancePanel").toggle(!!hasAdvance).toggleClass("advance-panel-off", !!(hasAdvance && onCredit));
+      $("#advanceUseLabel").html(
+        onCredit
+          ? '<i class="fa fa-info-circle"></i> Advance isn\'t used on Credit sales'
+          : '<i class="fa fa-check-circle"></i> Advance applied to this bill'
+      );
+      $("#useAdvance").prop("checked", !!(hasAdvance && !onCredit));
+      applyPaymentAdvance();
+    }
+
+    // sets "Price" to what's left to pay after the advance, and recalculates change
+    function applyPaymentAdvance() {
+      let billTotal = parseFloat(orderTotal) || 0;
+      let use = $("#useAdvance").is(":checked") && paymentType !== 5;
+      paymentAdvance.applied = use ? Math.round(Math.min(paymentAdvance.balance, billTotal) * 100) / 100 : 0;
+      let toPay = Math.round((billTotal - paymentAdvance.applied) * 100) / 100;
+      $("#payablePrice").val(toPay.toFixed(2));
+      $("#advanceBreakdown").html(
+        paymentAdvance.applied > 0
+          ? `Bill ${advanceMoney(billTotal)} &minus; advance ${advanceMoney(paymentAdvance.applied)} = <b>to pay ${advanceMoney(toPay)}</b>` +
+              (paymentAdvance.balance - paymentAdvance.applied > 0.004
+                ? ` &nbsp;·&nbsp; advance left after this bill: ${advanceMoney(paymentAdvance.balance - paymentAdvance.applied)}`
+                : "")
+          : ""
+      );
+      $(this).calculateChange();
+    }
+
+    $("#useAdvance").on("change", applyPaymentAdvance);
+    $("#keepAsAdvance").on("change", function () {
+      $(this).calculateChange();
     });
 
     $("#hold").on("click", function () {
@@ -1381,6 +1452,9 @@ if (!authedThisSession) {
         if (buttonValue == "Credit") {
           paymentType = 5;
         }
+        // advance options follow the payment type (none on Credit); after the
+        // other click handler has marked the new option active
+        setTimeout(updateAdvanceForPaymentType, 0);
       });
     });
 
@@ -1461,8 +1535,39 @@ if (!authedThisSession) {
           type = "Cash";
       }
 
+      // customer advance on this sale (only when it's paid now, not on Credit):
+      // advance used towards the bill, and any extra paid kept for the next bill
+      let advanceUsed = 0;
+      let advanceDeposit = 0;
+      if (status == 1 && type !== "Credit" && paymentAdvance.customer) {
+        advanceUsed = paymentAdvance.applied || 0;
+        if ($("#keepAsAdvance").is(":checked") && $("#advanceKeepRow").is(":visible")) {
+          let toPay = parseFloat($("#payablePrice").val()) || 0;
+          advanceDeposit = Math.max(Math.round(((parseFloat(paid) || 0) - toPay) * 100) / 100, 0);
+          if (advanceDeposit > 0) change = "0.00"; // no change given: it's kept
+        }
+      }
+      // the customer's advance after this bill (shown on the receipt, saved with the sale)
+      let advanceAfter =
+        status == 1 && type !== "Credit" && paymentAdvance.customer
+          ? Math.max(Math.round((paymentAdvance.balance - advanceUsed + advanceDeposit) * 100) / 100, 0)
+          : null;
+
       if (paid != "") {
-        payment = `<tr>
+        payment = `${
+                      advanceUsed > 0
+                        ? `<tr>
+                        <td>Advance used</td>
+                        <td>:</td>
+                        <td>-${settings.symbol + advanceUsed.toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                        <td><b>Amount to pay</b></td>
+                        <td>:</td>
+                        <td><b>${settings.symbol + Math.max((parseFloat(orderTotal) || 0) - advanceUsed, 0).toFixed(2)}</b></td>
+                    </tr>`
+                        : ""
+                    }<tr>
                         <td>Paid</td>
                         <td>:</td>
                         <td>${settings.symbol + paid}</td>
@@ -1473,12 +1578,28 @@ if (!authedThisSession) {
                         <td>${
                           settings.symbol + Math.abs(change).toFixed(2)
                         }</td>
-                    </tr>
+                    </tr>${
+                      advanceDeposit > 0
+                        ? `<tr>
+                        <td>Saved as advance</td>
+                        <td>:</td>
+                        <td>${settings.symbol + advanceDeposit.toFixed(2)}</td>
+                    </tr>`
+                        : ""
+                    }
                     <tr>
                         <td>Method</td>
                         <td>:</td>
                         <td>${type}</td>
-                    </tr>`;
+                    </tr>${
+                      (advanceUsed > 0 || advanceDeposit > 0) && advanceAfter !== null
+                        ? `<tr>
+                        <td>Advance balance</td>
+                        <td>:</td>
+                        <td>${settings.symbol + advanceAfter.toFixed(2)}</td>
+                    </tr>`
+                        : ""
+                    }`;
       }
 
       if (settings.charge_tax) {
@@ -1629,6 +1750,11 @@ if (!authedThisSession) {
         total: orderTotal,
         paid: paid,
         change: change,
+        // customer advance: used towards this bill / extra kept for the next bill
+        advance_used: advanceUsed ? advanceUsed.toFixed(2) : "",
+        advance_deposit: advanceDeposit ? advanceDeposit.toFixed(2) : "",
+        advance_balance_after:
+          (advanceUsed || advanceDeposit) && advanceAfter !== null ? advanceAfter.toFixed(2) : "",
         _id: orderNumber,
         till: platform?.till,
         mac: platform?.mac,
@@ -1657,12 +1783,17 @@ if (!authedThisSession) {
           $(this).getCustomerOrders();
           $(this).renderTable(cart);
         },
-        error: function (data) {
+        error: function (xhr) {
           $(".loading").hide();
-          $("#dueModal").modal("toggle");
-          swal(
+          $("#dueModal").modal("hide");
+          // show the server's reason when it refused the sale (e.g. not
+          // enough advance); otherwise the generic message
+          Swal.fire(
             "Something went wrong!",
-            "Please refresh this page and try again"
+            xhr && xhr.status === 400 && xhr.responseText
+              ? xhr.responseText
+              : "Please refresh this page and try again",
+            "error"
           );
         },
       });
@@ -1888,12 +2019,16 @@ if (!authedThisSession) {
     }
 
     // balance: outstanding credit (optional) -> shown as "Due Rs. X" under the limit
-    function creditLabel(customer, balance) {
+    // advance: money paid in advance (optional) -> "Advance Rs. X"
+    function creditLabel(customer, balance, advance) {
       let label = customer?.credit_type === "limited"
         ? "Limit " + settings.symbol + parseFloat(customer.credit_limit || 0).toFixed(2)
         : "Unlimited";
       if (balance > 0) {
         label += '<br><small class="text-danger"><b>Due ' + settings.symbol + balance.toFixed(2) + "</b></small>";
+      }
+      if (advance > 0) {
+        label += '<br><small class="text-success"><b>Advance ' + settings.symbol + advance.toFixed(2) + "</b></small>";
       }
       return label;
     }
@@ -2047,9 +2182,12 @@ if (!authedThisSession) {
     });
 
     $("#confirmPayment").on("click", function () {
-      if ($("#payment").val() == "") {
+      // nothing left to pay when the customer's advance covers the whole bill
+      let toPay = parseFloat($("#payablePrice").val()) || 0;
+      if ($("#payment").val() == "" && toPay > 0.004) {
         Swal.fire("Nope!", "Please enter the amount that was paid!", "warning");
       } else {
+        if ($("#payment").val() == "") $("#payment").val("0");
         $(this).submitDueOrder(1);
       }
     });
@@ -2720,13 +2858,15 @@ if (!authedThisSession) {
 
         customers.forEach((customer, index) => {
           counter++;
-          let due = (balances && balances[String(customer._id)] && balances[String(customer._id)].balance) || 0;
+          let pos = (balances && balances[String(customer._id)]) || {};
+          let due = pos.balance || 0;
+          let advance = pos.advance || 0;
           customer_list += `<tr>
             <td>${customer.name}</td>
             <td>${customer.phone}</td>
             <td>${customer.email}</td>
             <td>${customer.address}</td>
-            <td class="nobr" data-order="${due}">${creditLabel(customer, due)}</td>
+            <td class="nobr" data-order="${due}">${creditLabel(customer, due, advance)}</td>
             <td>${
               customer._id == 1
                 ? '<span class="btn-group"><button class="btn btn-dark"><i class="fa fa-edit"></i></button><button class="btn btn-dark"><i class="fa fa-trash"></i></button></span>'
@@ -2819,8 +2959,8 @@ if (!authedThisSession) {
             <td>${trans.order}${returnBadge}</td>
             <td class="nobr" data-order="${moment(trans.date).valueOf()}">${moment(trans.date).format("DD MMM YYYY, hh:mm A")}</td>
             <td>${itemCount}</td>
-            <td>${sym + amount.toFixed(2)}</td>
-            <td>${trans.paid === "" || trans.paid == null ? "" : sym + parseFloat(trans.paid).toFixed(2)}</td>
+            <td class="nobr">${sym + amount.toFixed(2)}</td>
+            <td class="nobr">${trans.paid === "" || trans.paid == null ? "" : sym + parseFloat(trans.paid).toFixed(2)}</td>
             <td>${typeLabel}</td>
             <td>${trans.user || ""}</td>
             <td><button onClick="$(this).viewCustomerTransaction(${index})" class="btn btn-info"><i class="fa fa-search-plus"></i></button></td>
@@ -2828,6 +2968,7 @@ if (!authedThisSession) {
       });
 
       $("#customerTxnCount").text(customerTransactions.length);
+      $("#customerTabTxnCount").text(customerTransactions.length);
       $("#customerTxnTotal").text(sym + total.toFixed(2));
       $("#customerTxnPaid").text(sym + paidTotal.toFixed(2));
       $("#customerTxnCredit").text(sym + creditTotal.toFixed(2));
@@ -2891,10 +3032,14 @@ if (!authedThisSession) {
       $("#customer_transactions_list").html(
         '<tr><td colspan="8">Loading...</td></tr>'
       );
-      creditState = { customer: customer, credit: 0, paid: 0, balance: 0, payments: [] };
+      creditState = { customer: customer, credit: 0, paid: 0, balance: 0, payments: [], advance: 0, advanceEntries: [] };
       creditSaleStatus = {};
       $("#settleCreditBtn").hide();
-      $("#customerPaymentsSection").hide();
+      // always open on the Transactions tab, with empty tabs until loaded
+      $('#customerTransactionsModal .customer-tabs a[href="#customerTabTransactions"]').tab("show");
+      $("#customerTabTxnCount, #customerTabPaymentCount, #customerTabAdvanceCount").text("0");
+      $("#customerTxnAdvance").text(creditMoney(0));
+      $("#customer_payments_list, #customer_advance_list").empty();
 
       $("#customerModal").modal("hide");
       $("#customerTransactionsModal").modal("show");
@@ -2905,7 +3050,7 @@ if (!authedThisSession) {
     // ---- Credit settlement (customer pays back what they owe on Credit) ----
     // balance = Credit sales - payments; payments settle the oldest Credit
     // sales first, which gives each sale its Settled / Partly settled / Unpaid label
-    let creditState = { customer: null, credit: 0, paid: 0, balance: 0, payments: [] };
+    let creditState = { customer: null, credit: 0, paid: 0, balance: 0, payments: [], advance: 0, advanceEntries: [] };
     let creditSaleStatus = {};
 
     function creditMoney(n) {
@@ -2928,11 +3073,14 @@ if (!authedThisSession) {
             paid: credit.paid || 0,
             balance: credit.balance || 0,
             payments: credit.payments || [],
+            advance: credit.advance || 0,
+            advanceEntries: credit.advance_entries || [],
           });
           computeCreditSaleStatus();
           renderCustomerTransactions();
           renderCustomerCredit();
           renderCustomerPayments();
+          renderCustomerAdvance();
         })
         .catch(() => {
           $("#customer_transactions_list").html(
@@ -2967,6 +3115,9 @@ if (!authedThisSession) {
         parts.push(`Credit: <b>Unlimited</b>`);
         parts.push(`Outstanding: <b class="${creditState.balance > 0 ? "text-danger" : ""}">${creditMoney(creditState.balance)}</b>`);
       }
+      if (creditState.advance > 0) {
+        parts.push(`Advance: <b class="text-success" title="Paid in advance for the next bill">${creditMoney(creditState.advance)}</b>`);
+      }
       if (creditState.credit > 0) {
         parts.push(`<span class="credit-breakdown">credit sales ${creditMoney(creditState.credit)} − paid back ${creditMoney(creditState.paid)}</span>`);
       }
@@ -2976,20 +3127,65 @@ if (!authedThisSession) {
 
     function renderCustomerPayments() {
       let payments = creditState.payments;
-      $("#customerPaymentsSection").toggle(payments.length > 0);
+      $("#customerTabPaymentCount").text(payments.length);
+      if (!payments.length) {
+        $("#customer_payments_list").html(
+          '<tr><td colspan="8" class="customer-subtable-empty">No credit payments yet.</td></tr>'
+        );
+        return;
+      }
       $("#customer_payments_list").html(
         payments
           .map((p, i) => {
             let ref = [p.reference, p.note].filter(Boolean).map((t) => $("<i>").text(t).html()).join(" · ");
+            let toAdvance = parseFloat(p.advance_added) || 0;
             return `<tr>
               <td class="nobr">${$("<i>").text(p.receipt_no || "").html()}</td>
-              <td class="nobr">${moment(p.date).format("DD MMM YYYY, hh:mm A")}</td>
-              <td class="text-right nobr"><b class="text-success">${creditMoney(parseFloat(p.amount) || 0)}</b></td>
+              <td class="payment-date">${moment(p.date).format("DD MMM YYYY")}<br><small class="text-muted">${moment(p.date).format("hh:mm A")}</small></td>
+              <td class="text-right">
+                <b class="text-success nobr">${creditMoney(parseFloat(p.received ?? p.amount) || 0)}</b>${
+                  toAdvance > 0
+                    ? `<div class="payment-split"><span>to credit ${creditMoney(parseFloat(p.amount) || 0)}</span><span>to advance ${creditMoney(toAdvance)}</span></div>`
+                    : ""
+                }
+              </td>
               <td>${$("<i>").text(p.method || "").html()}</td>
-              <td>${ref}</td>
+              <td class="payment-ref">${ref || '<span class="text-muted">—</span>'}</td>
               <td class="text-right nobr">${creditMoney(parseFloat(p.balance_after) || 0)}</td>
               <td>${$("<i>").text(p.user || "").html()}</td>
-              <td><button type="button" class="btn btn-default btn-sm" onclick="$(this).showCreditPaymentReceipt(${i})" title="View / print receipt"><i class="fa fa-print"></i></button></td>
+              <td class="text-center"><button type="button" class="btn btn-default btn-sm" onclick="$(this).showCreditPaymentReceipt(${i})" title="View / print receipt"><i class="fa fa-print"></i></button></td>
+            </tr>`;
+          })
+          .join("")
+      );
+    }
+
+    // advance (money paid in advance for the next bill): added / used history
+    function renderCustomerAdvance() {
+      let entries = creditState.advanceEntries;
+      $("#customerTabAdvanceCount").text(entries.length);
+      $("#customerTxnAdvance").text(creditMoney(creditState.advance));
+      $("#customerAdvanceBalance").text(creditMoney(creditState.advance));
+      if (!entries.length) {
+        $("#customer_advance_list").html(
+          '<tr><td colspan="6" class="customer-subtable-empty">No advance payments yet. When the customer pays extra at the till or while settling credit, it shows here.</td></tr>'
+        );
+        return;
+      }
+      $("#customer_advance_list").html(
+        entries
+          .map((e) => {
+            let deposit = e.type === "deposit";
+            let source =
+              e.source === "settlement" ? "Extra paid when settling credit" :
+              deposit ? "Extra paid at the till" : "Used on a bill";
+            return `<tr>
+              <td class="nobr">${moment(e.date).format("DD MMM YYYY, hh:mm A")}</td>
+              <td>${deposit ? '<span class="label label-success">Added</span>' : '<span class="label label-info">Used</span>'}</td>
+              <td class="text-right nobr"><b class="${deposit ? "text-success" : ""}">${deposit ? "+" : "−"}${creditMoney(parseFloat(e.amount) || 0)}</b></td>
+              <td>${source}</td>
+              <td>${$("<i>").text(e.reference || "").html()}</td>
+              <td>${$("<i>").text(e.user || "").html()}</td>
             </tr>`;
           })
           .join("")
@@ -3021,7 +3217,8 @@ if (!authedThisSession) {
         <hr>
         <table width="100%">
           ${row("Balance before", creditMoney(parseFloat(p.balance_before) || 0))}
-          ${row("<h3 style='margin:4px 0'>Amount paid</h3>", "<h3 style='margin:4px 0'>" + creditMoney(parseFloat(p.amount) || 0) + "</h3>")}
+          ${row("<h3 style='margin:4px 0'>Amount paid</h3>", "<h3 style='margin:4px 0'>" + creditMoney(parseFloat(p.received ?? p.amount) || 0) + "</h3>")}
+          ${parseFloat(p.advance_added) > 0 ? row("Applied to credit", creditMoney(parseFloat(p.amount) || 0)) + row("Saved as advance", creditMoney(parseFloat(p.advance_added)), true) : ""}
           ${row("Method", $("<i>").text(p.method || "").html())}
           ${p.reference ? row("Reference", $("<i>").text(p.reference).html()) : ""}
           ${row("Balance now", creditMoney(parseFloat(p.balance_after) || 0), true)}
@@ -3066,11 +3263,14 @@ if (!authedThisSession) {
 
     $("#settleAmount").on("input", function () {
       let amount = parseFloat($(this).val());
-      let $hint = $("#settleRemaining").removeClass("text-danger text-muted");
+      let $hint = $("#settleRemaining").removeClass("text-danger text-muted text-success");
       if (isNaN(amount) || amount <= 0) {
         $hint.addClass("text-muted").text("");
       } else if (amount > creditState.balance + 0.005) {
-        $hint.addClass("text-danger").text("That's more than the outstanding " + creditMoney(creditState.balance) + ".");
+        $hint.addClass("text-success").text(
+          creditMoney(creditState.balance) + " settles the balance; the extra " +
+            creditMoney(amount - creditState.balance) + " is kept as advance for the next bill."
+        );
       } else {
         let left = creditState.balance - amount;
         $hint.addClass("text-muted").text(
@@ -3084,10 +3284,6 @@ if (!authedThisSession) {
       let amount = parseFloat(text);
       if (!/^(\d+(\.\d{1,2})?|\d*\.\d{1,2})$/.test(text) || !(amount > 0)) {
         Swal.fire("Check the amount", "Enter the amount received, greater than 0 (e.g. 500 or 500.50).", "warning");
-        return;
-      }
-      if (amount > creditState.balance + 0.005) {
-        Swal.fire("Check the amount", "The payment can't be more than the outstanding " + creditMoney(creditState.balance) + ".", "warning");
         return;
       }
       let $btn = $(this).prop("disabled", true);
@@ -3115,10 +3311,14 @@ if (!authedThisSession) {
             icon: "success",
             title: "Payment recorded",
             html:
-              `${creditMoney(payment.amount)} received from <b>${$("<i>").text(c.name).html()}</b> (${payment.method}).<br>` +
+              `${creditMoney(payment.received ?? payment.amount)} received from <b>${$("<i>").text(c.name).html()}</b> (${payment.method}).<br>` +
               (payment.balance_after > 0
                 ? `Outstanding now: <b>${creditMoney(payment.balance_after)}</b>`
-                : "<b>The credit is fully settled.</b>"),
+                : "<b>The credit is fully settled.</b>") +
+              (payment.advance_added > 0
+                ? `<br>${creditMoney(payment.advance_added)} kept as advance for the next bill` +
+                  (payment.advance_balance ? ` (advance now ${creditMoney(payment.advance_balance)})` : "") + "."
+                : ""),
             showCancelButton: true,
             confirmButtonText: '<i class="fa fa-print"></i> Receipt',
             cancelButtonText: "Close",
@@ -3153,6 +3353,13 @@ if (!authedThisSession) {
     };
 
     $("#customerTransactionsFilter").on("change", renderCustomerTransactions);
+
+    // the transactions table was hidden while another tab was open: re-measure it
+    $('#customerTransactionsModal .customer-tabs a[href="#customerTabTransactions"]').on("shown.bs.tab", function () {
+      if ($.fn.DataTable.isDataTable("#customerTransactionsTable")) {
+        $("#customerTransactionsTable").DataTable().columns.adjust();
+      }
+    });
 
     let customerTxnDateFilter = initDateRangeFilter(
       "#customerTransactionsDateRange",
@@ -4729,7 +4936,23 @@ $.fn.viewTransaction = function (index, source) {
   // console.log("Method Type: ", type)
 
   if (trans?.paid != "") {
-    payment = `<tr>
+    let advUsed = parseFloat(trans?.advance_used) || 0;
+    let advKept = parseFloat(trans?.advance_deposit) || 0;
+    let advAfter = trans?.advance_balance_after;
+    payment = `${
+                  advUsed > 0
+                    ? `<tr>
+                    <td>Advance used</td>
+                    <td>:</td>
+                    <td>-${settings.symbol + advUsed.toFixed(2)}</td>
+                </tr>
+                <tr>
+                    <td><b>Amount to pay</b></td>
+                    <td>:</td>
+                    <td><b>${settings.symbol + Math.max((parseFloat(trans?.total) || 0) - advUsed, 0).toFixed(2)}</b></td>
+                </tr>`
+                    : ""
+                }<tr>
                     <td>Paid</td>
                     <td>:</td>
                     <td>${settings.symbol + trans?.paid}</td>
@@ -4741,12 +4964,28 @@ $.fn.viewTransaction = function (index, source) {
                       settings.symbol +
                       Math.abs(trans?.change).toFixed(2)
                     }</td>
-                </tr>
+                </tr>${
+                  advKept > 0
+                    ? `<tr>
+                    <td>Saved as advance</td>
+                    <td>:</td>
+                    <td>${settings.symbol + advKept.toFixed(2)}</td>
+                </tr>`
+                    : ""
+                }
                 <tr>
                     <td>Method</td>
                     <td>:</td>
                     <td>${trans?.payment_type}</td>
-                </tr>
+                </tr>${
+                  advAfter !== undefined && advAfter !== null && advAfter !== ""
+                    ? `<tr>
+                    <td>Advance balance</td>
+                    <td>:</td>
+                    <td>${settings.symbol + (parseFloat(advAfter) || 0).toFixed(2)}</td>
+                </tr>`
+                    : ""
+                }
                 ${
                   trans?.payment_info
                     ? `<tr>
