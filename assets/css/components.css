@@ -73,6 +73,70 @@
   font-size: 22px;
   font-weight: bold;
 }
+/* ---- Filter bar + date range filter (Select Order, Product History) ---- */
+.filter-bar{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.filter-bar .filter-bar-grow{
+  flex: 1 1 260px;
+  width: auto;
+}
+/* Select Order: search + date range always on one row */
+#selectOrderModal .filter-bar{
+  flex-wrap: nowrap;
+}
+#selectOrderModal .filter-bar .filter-bar-grow{
+  flex: 1 1 auto;
+  min-width: 0;
+}
+#selectOrderModal .filter-bar .date-range-filter{
+  flex: 0 0 auto;
+}
+#selectOrderModal .filter-bar #selectOrderSearch,
+#selectOrderModal .filter-bar .date-range-input,
+#selectOrderModal .filter-bar .date-range-clear{
+  height: 38px;
+}
+#selectOrderModal .filter-bar .date-range-input{
+  min-width: 210px;
+}
+.date-range-filter{
+  display: inline-flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.date-range-filter .date-range-input{
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 230px;
+  height: 34px;
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.date-range-filter .date-range-input .date-range-label{
+  flex: 1;
+}
+.date-range-filter.has-range .date-range-input{
+  border-color: #5fbeaa;
+  font-weight: 600;
+}
+.date-range-filter .date-range-clear{
+  height: 34px;
+  padding: 6px 10px;
+}
+/* the picker opens from inside popups */
+.daterangepicker{
+  z-index: 3000;
+}
+
 /* ---- Product history popup ---- */
 #productHistoryModal .modal-body{
   padding: 16px 20px !important;

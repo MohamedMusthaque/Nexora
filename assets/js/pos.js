@@ -74,6 +74,92 @@ let by_till = 0;
 let by_user = 0;
 let by_status = 1;
 
+// Reusable date range filter with a Clear option.
+// Markup (see index.html): .date-range-filter > .date-range-input (span label)
+// + .date-range-clear button. onChange() is called whenever the range is set
+// or cleared. Returns { matches(date), isActive(), reset() }.
+function initDateRangeFilter(container, onChange) {
+  let $box = $(container);
+  let $input = $box.find(".date-range-input");
+  let $label = $input.find(".date-range-label");
+  let $clear = $box.find(".date-range-clear");
+  let range = null; // { start, end } as moments, or null for all dates
+
+  function show() {
+    if (range) {
+      $label.text(
+        range.start.format("D MMM YYYY") + "  -  " + range.end.format("D MMM YYYY")
+      );
+    } else {
+      $label.text("All dates");
+    }
+    $clear.toggle(!!range);
+    $box.toggleClass("has-range", !!range);
+  }
+
+  function set(newRange, notify) {
+    range = newRange;
+    show();
+    if (notify !== false && typeof onChange === "function") onChange();
+  }
+
+  $input.daterangepicker({
+    autoUpdateInput: false,
+    showDropdowns: true,
+    alwaysShowCalendars: true,
+    opens: "right",
+    locale: { format: "D MMM YYYY", cancelLabel: "Clear", applyLabel: "Apply" },
+    ranges: {
+      Today: [moment(), moment()],
+      Yesterday: [moment().subtract(1, "days"), moment().subtract(1, "days")],
+      "Last 7 Days": [moment().subtract(6, "days"), moment()],
+      "Last 30 Days": [moment().subtract(29, "days"), moment()],
+      "This Month": [moment().startOf("month"), moment().endOf("month")],
+      "Last Month": [
+        moment().subtract(1, "month").startOf("month"),
+        moment().subtract(1, "month").endOf("month"),
+      ],
+    },
+  });
+
+  // use the events (not the callback): the callback doesn't fire when the
+  // same range is applied again after clearing
+  $input.on("apply.daterangepicker", function (ev, picker) {
+    set({
+      start: picker.startDate.clone().startOf("day"),
+      end: picker.endDate.clone().endOf("day"),
+    });
+  });
+  $input.on("cancel.daterangepicker", function () {
+    set(null);
+  });
+  $clear.on("click", function () {
+    set(null);
+  });
+
+  show();
+
+  return {
+    matches: function (date) {
+      if (!range) return true;
+      let d = moment(date);
+      return d.isValid() && !d.isBefore(range.start) && !d.isAfter(range.end);
+    },
+    isActive: function () {
+      return !!range;
+    },
+    // back to "All dates" without triggering onChange
+    reset: function () {
+      let picker = $input.data("daterangepicker");
+      if (picker) {
+        picker.setStartDate(moment());
+        picker.setEndDate(moment());
+      }
+      set(null, false);
+    },
+  };
+}
+
 $(function () {
   function cb(start, end) {
     $("#reportrange span").html(
@@ -2270,8 +2356,10 @@ if (!authedThisSession) {
       let sym = settings.symbol;
       let rows = "";
 
+      // totals follow the date range (not the activity type filter)
       let unitsSold = 0, salesValue = 0, returned = 0;
       productHistoryEvents.forEach((e) => {
+        if (!productHistoryDateFilter.matches(e.date)) return;
         if (e.type === "sale" || e.type === "credit_sale") {
           unitsSold += -e.qty_change;
           salesValue += parseFloat(e.amount) || 0;
@@ -2282,6 +2370,7 @@ if (!authedThisSession) {
       productHistoryEvents.forEach((e, index) => {
         let meta = PRODUCT_HISTORY_TYPES[e.type] || { label: e.type, css: "label-default", group: "changes" };
         if (filter !== "all" && meta.group !== filter) return;
+        if (!productHistoryDateFilter.matches(e.date)) return;
 
         let qty =
           e.qty_change == null
@@ -2392,6 +2481,7 @@ if (!authedThisSession) {
           `Stock tracking: <b>${product.stock == 1 ? "On" : "Off"}</b>`
       );
       $("#productHistoryFilter").val("all");
+      productHistoryDateFilter.reset();
       if ($.fn.DataTable.isDataTable("#productHistoryTable")) {
         $("#productHistoryTable").DataTable().destroy();
       }
@@ -2431,6 +2521,11 @@ if (!authedThisSession) {
     };
 
     $("#productHistoryFilter").on("change", renderProductHistory);
+
+    let productHistoryDateFilter = initDateRangeFilter(
+      "#productHistoryDateRange",
+      renderProductHistory
+    );
 
     $("#productHistoryBack").on("click", function () {
       $("#productHistoryModal").modal("hide");
@@ -3750,22 +3845,41 @@ $.fn.openSelectOrderModal = function (mode) {
     mode == "exchange" ? "Select Order to Exchange" : "Select Order to Return/Refund"
   );
   $("#selectOrderSearch").val("");
+  selectOrderDateFilter.reset();
   $("#selectOrderList").html("<tr><td colspan='5'>Loading...</td></tr>");
 
   $.get(api + "all", function (data) {
-    selectableOrders = (data || []).filter(function (order) {
-      return order.status == 1 && order.paid != "";
-    });
+    selectableOrders = (data || [])
+      .filter(function (order) {
+        return order.status == 1 && order.paid != "";
+      })
+      .sort(function (a, b) {
+        return new Date(b.date) - new Date(a.date);
+      });
 
-    $(this).renderSelectOrderList(selectableOrders);
+    applySelectOrderFilters();
   });
 
   $("#selectOrderModal").modal("show");
 };
 
 $.fn.renderSelectOrderList = function (orders) {
+  let filtering =
+    $("#selectOrderSearch").val() != "" || selectOrderDateFilter.isActive();
+  $("#selectOrderCount").text(
+    filtering
+      ? orders.length + " of " + selectableOrders.length + " orders"
+      : selectableOrders.length + " orders"
+  );
+
   if (orders.length == 0) {
-    $("#selectOrderList").html("<tr><td colspan='5'>No paid orders found.</td></tr>");
+    $("#selectOrderList").html(
+      "<tr><td colspan='5'>" +
+        (filtering && selectableOrders.length
+          ? "No orders match the selected search / date range."
+          : "No paid orders found.") +
+        "</td></tr>"
+    );
     return;
   }
 
@@ -3790,10 +3904,13 @@ $.fn.renderSelectOrderList = function (orders) {
   $("#selectOrderList").html(rows);
 };
 
-$("#selectOrderSearch").on("keyup", function () {
-  let query = $(this).val().toLowerCase();
+// search text + date range, applied together
+function applySelectOrderFilters() {
+  let query = ($("#selectOrderSearch").val() || "").toLowerCase();
 
   let filtered = selectableOrders.filter(function (order) {
+    if (!selectOrderDateFilter.matches(order.date)) return false;
+
     let customerName =
       order.customer == 0 ? "walk in customer" : (order.customer?.name || "").toLowerCase();
 
@@ -3804,8 +3921,24 @@ $("#selectOrderSearch").on("keyup", function () {
     );
   });
 
-  $(this).renderSelectOrderList(filtered);
+  $(document).renderSelectOrderList(filtered);
+}
+
+// pos.js is required before the daterangepicker plugin's <script> tag runs,
+// so set the picker up once the page (and its plugins) have loaded
+let selectOrderDateFilter = {
+  matches: () => true,
+  isActive: () => false,
+  reset: () => {},
+};
+$(function () {
+  selectOrderDateFilter = initDateRangeFilter(
+    "#selectOrderDateRange",
+    applySelectOrderFilters
+  );
 });
+
+$("#selectOrderSearch").on("input", applySelectOrderFilters);
 
 $.fn.selectOrderForReturn = function (orderId) {
   let order = selectableOrders.find(function (o) {
