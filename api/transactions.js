@@ -23,6 +23,44 @@ let returnsDB = new Datastore({
 
 returnsDB.ensureIndex({ fieldName: '_id', unique: true });
 
+// Credit settlements: money a customer pays back against their Credit sales.
+// Outstanding balance = total Credit sales - total payments.
+let creditPaymentsDB = new Datastore({
+  filename: process.env.APPDATA + "/POS/server/databases/credit_payments.db",
+  autoload: true
+});
+
+creditPaymentsDB.ensureIndex({ fieldName: "customer_id" });
+
+function customerIdForms(raw) {
+  let n = parseInt(raw);
+  return isNaN(n) ? [raw] : [n, String(n)];
+}
+
+function round2(n) {
+  return Math.round(n * 100) / 100;
+}
+
+// callback(err, { credit, paid, balance }) for one customer.
+// excludeOrder: an order being re-saved, so it isn't counted twice.
+function customerCreditPosition(customerId, excludeOrder, callback) {
+  let ids = customerIdForms(customerId);
+  transactionsDB.find(
+    { $and: [{ "customer.id": { $in: ids } }, { payment_type: "Credit" }] },
+    function(err, sales) {
+      if (err) return callback(err);
+      creditPaymentsDB.find({ customer_id: { $in: ids } }, function(err, payments) {
+        if (err) return callback(err);
+        let credit = (sales || [])
+          .filter(function(t) { return !excludeOrder || String(t._id) !== String(excludeOrder); })
+          .reduce(function(s, t) { return s + (parseFloat(t.total) || 0); }, 0);
+        let paid = (payments || []).reduce(function(s, p) { return s + (parseFloat(p.amount) || 0); }, 0);
+        callback(null, { credit: round2(credit), paid: round2(paid), balance: round2(Math.max(credit - paid, 0)) });
+      });
+    }
+  );
+}
+
 app.get("/", function(req, res) {
   res.send("Transactions API");
 });
@@ -128,23 +166,101 @@ app.get("/by-customer/:customerId", function(req, res) {
 
 // Total of a customer's Credit sales, used to enforce their credit limit.
 // ?exclude=<orderId> leaves out an order that is being re-saved.
+// Credit in use for the credit-limit check at the till: Credit sales minus
+// what the customer has already paid back.
 app.get("/customer-credit/:customerId", function(req, res) {
-  let rawId = req.params.customerId;
-  let numericId = parseInt(rawId);
-  let ids = isNaN(numericId) ? [rawId] : [numericId, String(numericId)];
-  let exclude = req.query.exclude;
-
-  transactionsDB.find(
-    { $and: [{ "customer.id": { $in: ids } }, { payment_type: "Credit" }] },
-    function(err, docs) {
-      if (err) return res.status(500).send(err);
-      let used = (docs || [])
-        .filter(function(t) { return !exclude || String(t._id) !== String(exclude); })
-        .reduce(function(sum, t) { return sum + (parseFloat(t.total) || 0); }, 0);
-      res.send({ used: Math.round(used * 100) / 100 });
-    }
-  );
+  customerCreditPosition(req.params.customerId, req.query.exclude, function(err, pos) {
+    if (err) return res.status(500).send(err);
+    res.send({ used: pos.balance, credit: pos.credit, paid: pos.paid });
+  });
 });
+
+// Outstanding balance for every customer: { "<customerId>": { credit, paid, balance } }
+app.get("/credit-balances", function(req, res) {
+  transactionsDB.find({ payment_type: "Credit" }, function(err, sales) {
+    if (err) return res.status(500).send(err);
+    creditPaymentsDB.find({}, function(err, payments) {
+      if (err) return res.status(500).send(err);
+      let out = {};
+      let entry = function(id) {
+        return (out[String(id)] = out[String(id)] || { credit: 0, paid: 0, balance: 0 });
+      };
+      (sales || []).forEach(function(t) {
+        if (t.customer && t.customer.id != null) entry(t.customer.id).credit += parseFloat(t.total) || 0;
+      });
+      (payments || []).forEach(function(p) {
+        entry(p.customer_id).paid += parseFloat(p.amount) || 0;
+      });
+      Object.keys(out).forEach(function(k) {
+        out[k].credit = round2(out[k].credit);
+        out[k].paid = round2(out[k].paid);
+        out[k].balance = round2(Math.max(out[k].credit - out[k].paid, 0));
+      });
+      res.send(out);
+    });
+  });
+});
+
+// One customer's balance + their payments (newest first)
+app.get("/credit-payments/:customerId", function(req, res) {
+  customerCreditPosition(req.params.customerId, null, function(err, pos) {
+    if (err) return res.status(500).send(err);
+    creditPaymentsDB.find({ customer_id: { $in: customerIdForms(req.params.customerId) } })
+      .sort({ date: -1 })
+      .exec(function(err, payments) {
+        if (err) return res.status(500).send(err);
+        res.send(Object.assign({ payments: payments || [] }, pos));
+      });
+  });
+});
+
+// Record a credit settlement. Body: { customer_id, customer_name, amount,
+// method, reference, note, user, user_id, till }. The amount must be a
+// positive number and can't be more than the outstanding balance.
+app.post("/credit-payments", function(req, res) {
+  let b = req.body || {};
+  let amountText = String(b.amount ?? "").trim();
+  if (!/^(\d+(\.\d{1,2})?|\d*\.\d{1,2})$/.test(amountText) || parseFloat(amountText) <= 0) {
+    return res.status(400).send("Enter a payment amount greater than 0 (e.g. 500 or 500.50).");
+  }
+  if (b.customer_id === undefined || b.customer_id === null || b.customer_id === "" || b.customer_id == 0) {
+    return res.status(400).send("A registered customer is required.");
+  }
+  let methods = ["Cash", "Card", "Bank Transfer", "Mpesa"];
+  let method = methods.indexOf(b.method) !== -1 ? b.method : "Cash";
+  let amount = round2(parseFloat(amountText));
+
+  customerCreditPosition(b.customer_id, null, function(err, pos) {
+    if (err) return res.status(500).send(err);
+    if (pos.balance <= 0) return res.status(400).send("This customer has no outstanding credit.");
+    if (amount > pos.balance + 0.001) {
+      return res.status(400).send("The payment is more than the outstanding balance (" + pos.balance.toFixed(2) + ").");
+    }
+    let id = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+    let doc = {
+      _id: id,
+      // unique per payment (the id includes milliseconds + a random part)
+      receipt_no: "CP-" + String(id).slice(-11),
+      customer_id: isNaN(parseInt(b.customer_id)) ? b.customer_id : parseInt(b.customer_id),
+      customer_name: b.customer_name || "",
+      amount: amount,
+      method: method,
+      reference: String(b.reference || "").slice(0, 100),
+      note: String(b.note || "").slice(0, 300),
+      balance_before: pos.balance,
+      balance_after: round2(Math.max(pos.balance - amount, 0)),
+      user: b.user || "",
+      user_id: b.user_id || "",
+      till: b.till || "",
+      date: new Date()
+    };
+    creditPaymentsDB.insert(doc, function(err, saved) {
+      if (err) return res.status(500).send(err);
+      res.send(saved);
+    });
+  });
+});
+
 
 
 // Everything that happened to one product, newest first:

@@ -75,6 +75,80 @@ let by_user = 0;
 let by_status = 1;
 
 // ======================================================================
+// Password fields: show / hide (eye) button
+// Every <input type="password"> gets a toggle, including ones added later
+// (the login form is built in authenticate()). Fields go back to hidden when
+// their window closes and after logging in.
+// ======================================================================
+function enhancePasswordInputs(root) {
+  $(root || document)
+    .find('input[type="password"]')
+    .addBack('input[type="password"]')
+    .each(function () {
+      if (this.dataset.pwToggle) return;
+      this.dataset.pwToggle = "1";
+      let $wrap = $('<div class="password-field"></div>');
+      $(this).after($wrap);
+      $wrap.append(this);
+      $wrap.append(
+        '<button type="button" class="password-toggle" title="Show password" aria-label="Show password" aria-pressed="false">' +
+          '<i class="fa fa-eye"></i></button>'
+      );
+    });
+}
+
+function setPasswordVisible(button, visible) {
+  let input = $(button).siblings("input")[0];
+  if (!input) return;
+  input.type = visible ? "text" : "password";
+  $(button)
+    .attr({
+      title: visible ? "Hide password" : "Show password",
+      "aria-label": visible ? "Hide password" : "Show password",
+      "aria-pressed": visible ? "true" : "false",
+    })
+    .find("i")
+    .toggleClass("fa-eye", !visible)
+    .toggleClass("fa-eye-slash", visible);
+}
+
+function hideAllPasswords(root) {
+  $(root || document).find(".password-toggle").each(function () {
+    setPasswordVisible(this, false);
+  });
+}
+
+$(document).on("mousedown", ".password-toggle", function (e) {
+  e.preventDefault(); // keep the cursor in the password box
+});
+$(document).on("click", ".password-toggle", function (e) {
+  e.preventDefault();
+  let input = $(this).siblings("input")[0];
+  setPasswordVisible(this, input && input.type === "password");
+  if (input) input.focus();
+});
+// back to hidden when a window closes or a form is submitted
+$(document).on("hidden.bs.modal", ".modal", function () {
+  hideAllPasswords(this);
+});
+$(document).on("submit", "form", function () {
+  hideAllPasswords(this);
+});
+
+$(function () {
+  enhancePasswordInputs(document);
+  if (window.MutationObserver) {
+    new MutationObserver((mutations) => {
+      mutations.forEach((m) =>
+        m.addedNodes.forEach((node) => {
+          if (node.nodeType === 1) enhancePasswordInputs(node);
+        })
+      );
+    }).observe(document.body, { childList: true, subtree: true });
+  }
+});
+
+// ======================================================================
 // Report exports: styled Excel (.xlsx) and PDF files for every list table
 // (and the Products / Customers "Download" buttons).
 // ======================================================================
@@ -1818,10 +1892,15 @@ if (!authedThisSession) {
       return { credit_type: "limited", credit_limit: limit };
     }
 
-    function creditLabel(customer) {
-      return customer?.credit_type === "limited"
+    // balance: outstanding credit (optional) -> shown as "Due Rs. X" under the limit
+    function creditLabel(customer, balance) {
+      let label = customer?.credit_type === "limited"
         ? "Limit " + settings.symbol + parseFloat(customer.credit_limit || 0).toFixed(2)
         : "Unlimited";
+      if (balance > 0) {
+        label += '<br><small class="text-danger"><b>Due ' + settings.symbol + balance.toFixed(2) + "</b></small>";
+      }
+      return label;
     }
 
     // Adds/replaces the customer in the POS customer dropdown and selects it
@@ -2637,17 +2716,22 @@ if (!authedThisSession) {
       $("#customer_list").empty();
       $("#customerList").DataTable().destroy();
 
-      $.get(api + "customers/all", function (customers) {
+      // customers + their outstanding credit (the list still loads if balances fail)
+      Promise.all([
+        $.get(api + "customers/all"),
+        $.get(api + "credit-balances").catch(() => ({})),
+      ]).then(([customers, balances]) => {
         allCustomers = [...customers];
 
         customers.forEach((customer, index) => {
           counter++;
+          let due = (balances && balances[String(customer._id)] && balances[String(customer._id)].balance) || 0;
           customer_list += `<tr>
             <td>${customer.name}</td>
             <td>${customer.phone}</td>
             <td>${customer.email}</td>
             <td>${customer.address}</td>
-            <td class="nobr">${creditLabel(customer)}</td>
+            <td class="nobr" data-order="${due}">${creditLabel(customer, due)}</td>
             <td>${
               customer._id == 1
                 ? '<span class="btn-group"><button class="btn btn-dark"><i class="fa fa-edit"></i></button><button class="btn btn-dark"><i class="fa fa-trash"></i></button></span>'
@@ -2715,9 +2799,15 @@ if (!authedThisSession) {
         if (trans.payment_type === "Credit") creditTotal += amount;
         else paidTotal += amount;
 
+        let settle = creditSaleStatus[String(trans._id)];
         let typeLabel =
           trans.payment_type === "Credit"
-            ? '<span class="label label-warning">Credit</span>'
+            ? '<span class="label label-warning">Credit</span>' +
+              (settle === "settled"
+                ? ' <span class="label label-success" title="Paid back in full">Settled</span>'
+                : settle === "partial"
+                ? ' <span class="label label-info" title="Partly paid back">Partly settled</span>'
+                : ' <span class="label label-danger" title="Not paid back yet">Unpaid</span>')
             : '<span class="label label-success">' + trans.payment_type + "</span>";
         let returnBadge =
           trans.return_status == "full"
@@ -2806,39 +2896,263 @@ if (!authedThisSession) {
       $("#customer_transactions_list").html(
         '<tr><td colspan="8">Loading...</td></tr>'
       );
+      creditState = { customer: customer, credit: 0, paid: 0, balance: 0, payments: [] };
+      creditSaleStatus = {};
+      $("#settleCreditBtn").hide();
+      $("#customerPaymentsSection").hide();
 
       $("#customerModal").modal("hide");
       $("#customerTransactionsModal").modal("show");
 
-      $.get(api + "by-customer/" + customer._id)
-        .done(function (transactions) {
-          customerTransactionsAll = transactions || [];
-          renderCustomerTransactions();
+      loadCustomerCreditData();
+    };
 
-          // credit used = all Credit sales (same rule as the sale-time check)
-          let used = customerTransactionsAll
-            .filter((t) => t.payment_type === "Credit")
-            .reduce((sum, t) => sum + (parseFloat(t.total) || 0), 0);
-          let sym = settings.symbol;
-          if (customer.credit_type === "limited") {
-            let limit = parseFloat(customer.credit_limit) || 0;
-            $("#customerTxnCreditInfo").html(
-              `Credit limit: <b>${sym}${limit.toFixed(2)}</b> &nbsp;·&nbsp; ` +
-                `Used: <b>${sym}${used.toFixed(2)}</b> &nbsp;·&nbsp; ` +
-                `Available: <b>${sym}${Math.max(limit - used, 0).toFixed(2)}</b>`
-            );
-          } else {
-            $("#customerTxnCreditInfo").html(
-              `Credit: <b>Unlimited</b> &nbsp;·&nbsp; Used: <b>${sym}${used.toFixed(2)}</b>`
-            );
-          }
+    // ---- Credit settlement (customer pays back what they owe on Credit) ----
+    // balance = Credit sales - payments; payments settle the oldest Credit
+    // sales first, which gives each sale its Settled / Partly settled / Unpaid label
+    let creditState = { customer: null, credit: 0, paid: 0, balance: 0, payments: [] };
+    let creditSaleStatus = {};
+
+    function creditMoney(n) {
+      return (n < 0 ? "-" : "") + settings.symbol + Math.abs(n).toFixed(2);
+    }
+
+    // sales + balance + payments for the open customer, then redraw everything
+    function loadCustomerCreditData() {
+      let customer = creditState.customer;
+      if (!customer) return;
+      Promise.all([
+        $.get(api + "by-customer/" + customer._id),
+        $.get(api + "credit-payments/" + customer._id),
+      ])
+        .then(([transactions, credit]) => {
+          if (creditState.customer !== customer) return; // another customer was opened
+          customerTransactionsAll = transactions || [];
+          Object.assign(creditState, {
+            credit: credit.credit || 0,
+            paid: credit.paid || 0,
+            balance: credit.balance || 0,
+            payments: credit.payments || [],
+          });
+          computeCreditSaleStatus();
+          renderCustomerTransactions();
+          renderCustomerCredit();
+          renderCustomerPayments();
         })
-        .fail(function () {
+        .catch(() => {
           $("#customer_transactions_list").html(
             '<tr><td colspan="8">Could not load transactions.</td></tr>'
           );
         });
+    }
+
+    function computeCreditSaleStatus() {
+      creditSaleStatus = {};
+      let left = creditState.paid;
+      customerTransactionsAll
+        .filter((t) => t.payment_type === "Credit")
+        .sort((a, b) => new Date(a.date) - new Date(b.date))
+        .forEach((t) => {
+          let total = parseFloat(t.total) || 0;
+          let status = left >= total - 0.005 ? "settled" : left > 0.005 ? "partial" : "unpaid";
+          left = Math.max(left - total, 0);
+          creditSaleStatus[String(t._id)] = status;
+        });
+    }
+
+    function renderCustomerCredit() {
+      let c = creditState.customer;
+      let parts = [];
+      if (c.credit_type === "limited") {
+        let limit = parseFloat(c.credit_limit) || 0;
+        parts.push(`Credit limit: <b>${creditMoney(limit)}</b>`);
+        parts.push(`Outstanding: <b class="${creditState.balance > 0 ? "text-danger" : ""}">${creditMoney(creditState.balance)}</b>`);
+        parts.push(`Available: <b>${creditMoney(Math.max(limit - creditState.balance, 0))}</b>`);
+      } else {
+        parts.push(`Credit: <b>Unlimited</b>`);
+        parts.push(`Outstanding: <b class="${creditState.balance > 0 ? "text-danger" : ""}">${creditMoney(creditState.balance)}</b>`);
+      }
+      if (creditState.credit > 0) {
+        parts.push(`<span class="credit-breakdown">credit sales ${creditMoney(creditState.credit)} − paid back ${creditMoney(creditState.paid)}</span>`);
+      }
+      $("#customerTxnCreditInfo").html(parts.join(" &nbsp;·&nbsp; "));
+      $("#settleCreditBtn").toggle(creditState.balance > 0);
+    }
+
+    function renderCustomerPayments() {
+      let payments = creditState.payments;
+      $("#customerPaymentsSection").toggle(payments.length > 0);
+      $("#customer_payments_list").html(
+        payments
+          .map((p, i) => {
+            let ref = [p.reference, p.note].filter(Boolean).map((t) => $("<i>").text(t).html()).join(" · ");
+            return `<tr>
+              <td class="nobr">${$("<i>").text(p.receipt_no || "").html()}</td>
+              <td class="nobr">${moment(p.date).format("DD MMM YYYY, hh:mm A")}</td>
+              <td class="text-right nobr"><b class="text-success">${creditMoney(parseFloat(p.amount) || 0)}</b></td>
+              <td>${$("<i>").text(p.method || "").html()}</td>
+              <td>${ref}</td>
+              <td class="text-right nobr">${creditMoney(parseFloat(p.balance_after) || 0)}</td>
+              <td>${$("<i>").text(p.user || "").html()}</td>
+              <td><button type="button" class="btn btn-default btn-sm" onclick="$(this).showCreditPaymentReceipt(${i})" title="View / print receipt"><i class="fa fa-print"></i></button></td>
+            </tr>`;
+          })
+          .join("")
+      );
+    }
+
+    // receipt in the same receipt window (and print button) as sales receipts
+    $.fn.showCreditPaymentReceipt = function (index) {
+      let p = creditState.payments[index];
+      if (!p) return;
+      let row = (label, value, strong) =>
+        `<tr><td>${label}</td><td>:</td><td style="text-align:right">${strong ? "<b>" + value + "</b>" : value}</td></tr>`;
+      receipt = `<div style="font-size: 10px;">
+        <p style="text-align: center;">
+          ${settings.img ? '<img style="max-width: 100px;" src="' + img_path + settings.img + '" /><br>' : ""}
+          <span style="font-size: 22px;">${settings.store || ""}</span> <br>
+          ${settings.address_one || ""} <br>
+          ${settings.address_two || ""} <br>
+          ${settings.contact ? "Tel: " + settings.contact + "<br>" : ""}
+        </p>
+        <hr>
+        <p style="text-align: center; font-size: 13px;"><b>CREDIT PAYMENT RECEIPT</b></p>
+        <p>
+          Receipt No : ${p.receipt_no || ""} <br>
+          Customer : ${$("<i>").text(p.customer_name || "").html()} <br>
+          Received by : ${$("<i>").text(p.user || "").html()} <br>
+          Date : ${moment(p.date).format("DD MMM YYYY HH:mm:ss")}
+        </p>
+        <hr>
+        <table width="100%">
+          ${row("Balance before", creditMoney(parseFloat(p.balance_before) || 0))}
+          ${row("<h3 style='margin:4px 0'>Amount paid</h3>", "<h3 style='margin:4px 0'>" + creditMoney(parseFloat(p.amount) || 0) + "</h3>")}
+          ${row("Method", $("<i>").text(p.method || "").html())}
+          ${p.reference ? row("Reference", $("<i>").text(p.reference).html()) : ""}
+          ${row("Balance now", creditMoney(parseFloat(p.balance_after) || 0), true)}
+        </table>
+        ${p.note ? "<p>Note: " + $("<i>").text(p.note).html() + "</p>" : ""}
+        <hr>
+        <p style="text-align: center;">${settings.footer || "Thank you!"}</p>
+      </div>`;
+      $("#viewTransaction").html(receipt);
+      $("#orderModal").modal("show");
     };
+
+    // --- Settle Credit window ---
+    $("#settleCreditBtn").on("click", function () {
+      if (!creditState.customer || creditState.balance <= 0) return;
+      $("#settleCreditTitle").text("Settle Credit - " + creditState.customer.name);
+      $("#settleOutstanding").text(creditMoney(creditState.balance));
+      $("#settleAmount, #settleReference, #settleNote").val("");
+      $("#settleRemaining").text("");
+      $("#settleAmount").closest(".form-group").removeClass("has-error");
+      $("#settleAmount").siblings(".price-input-error").text("");
+      // same payment methods as the Pay window (hide the ones switched off in Settings)
+      $("#settleMethod option[value='Card']").toggle(settings.card_disabled != "on");
+      $("#settleMethod option[value='Mpesa']").toggle(settings.mpesa_disabled != "on");
+      $("#settleMethod option[value='Bank Transfer']").toggle(settings.bank_disabled != "on");
+      $("#settleMethod").val("Cash");
+      $("#settleCreditModal").modal("show");
+    });
+
+    $("#settleCreditModal").on("shown.bs.modal", function () {
+      // this window's backdrop goes between it and the customer window behind
+      $(".modal-backdrop").last().css("z-index", 1055);
+      $("#settleAmount").trigger("focus");
+    });
+    // keep the history window scrollable after this one closes (Bootstrap 3)
+    $("#settleCreditModal").on("hidden.bs.modal", function () {
+      if ($("#customerTransactionsModal").hasClass("in")) $("body").addClass("modal-open");
+    });
+
+    $("#settleFullAmount").on("click", function () {
+      $("#settleAmount").val(creditState.balance.toFixed(2)).trigger("input");
+    });
+
+    $("#settleAmount").on("input", function () {
+      let amount = parseFloat($(this).val());
+      let $hint = $("#settleRemaining").removeClass("text-danger text-muted");
+      if (isNaN(amount) || amount <= 0) {
+        $hint.addClass("text-muted").text("");
+      } else if (amount > creditState.balance + 0.005) {
+        $hint.addClass("text-danger").text("That's more than the outstanding " + creditMoney(creditState.balance) + ".");
+      } else {
+        let left = creditState.balance - amount;
+        $hint.addClass("text-muted").text(
+          left < 0.005 ? "This settles the full balance." : "Remaining after this payment: " + creditMoney(left)
+        );
+      }
+    });
+
+    $("#settleConfirm").on("click", function () {
+      let text = $("#settleAmount").val().trim();
+      let amount = parseFloat(text);
+      if (!/^(\d+(\.\d{1,2})?|\d*\.\d{1,2})$/.test(text) || !(amount > 0)) {
+        Swal.fire("Check the amount", "Enter the amount received, greater than 0 (e.g. 500 or 500.50).", "warning");
+        return;
+      }
+      if (amount > creditState.balance + 0.005) {
+        Swal.fire("Check the amount", "The payment can't be more than the outstanding " + creditMoney(creditState.balance) + ".", "warning");
+        return;
+      }
+      let $btn = $(this).prop("disabled", true);
+      let c = creditState.customer;
+      $.ajax({
+        url: api + "credit-payments",
+        type: "POST",
+        contentType: "application/json; charset=utf-8",
+        data: JSON.stringify({
+          customer_id: c._id,
+          customer_name: c.name,
+          amount: text,
+          method: $("#settleMethod").val(),
+          reference: $("#settleReference").val().trim(),
+          note: $("#settleNote").val().trim(),
+          user: user?.fullname || "",
+          user_id: user?._id || "",
+          till: platform?.till || "",
+        }),
+      })
+        .done(function (payment) {
+          $("#settleCreditModal").modal("hide");
+          loadCustomerCreditData();
+          Swal.fire({
+            icon: "success",
+            title: "Payment recorded",
+            html:
+              `${creditMoney(payment.amount)} received from <b>${$("<i>").text(c.name).html()}</b> (${payment.method}).<br>` +
+              (payment.balance_after > 0
+                ? `Outstanding now: <b>${creditMoney(payment.balance_after)}</b>`
+                : "<b>The credit is fully settled.</b>"),
+            showCancelButton: true,
+            confirmButtonText: '<i class="fa fa-print"></i> Receipt',
+            cancelButtonText: "Close",
+          }).then((r) => {
+            if (!r.value) return;
+            // the list reloads in the background; show this payment's receipt
+            let show = () => {
+              let i = creditState.payments.findIndex((p) => String(p._id) === String(payment._id));
+              if (i === -1) {
+                creditState.payments.unshift(payment);
+                i = 0;
+              }
+              $(document).showCreditPaymentReceipt(i);
+            };
+            show();
+          });
+        })
+        .fail(function (xhr) {
+          Swal.fire(
+            "Could not record the payment",
+            xhr && xhr.status === 400 && xhr.responseText ? xhr.responseText : "Please try again.",
+            "error"
+          );
+        })
+        .always(function () {
+          $btn.prop("disabled", false);
+        });
+    });
 
     $.fn.viewCustomerTransaction = function (index) {
       $(this).viewTransaction(index, customerTransactions);

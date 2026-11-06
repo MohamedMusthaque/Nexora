@@ -136,6 +136,105 @@ body.transactions-mode.totals-compact #totals #counter{
   line-height: 1.1;
 }
 
+/* ---- Password fields: show / hide (eye) button ---- */
+.password-field{
+  position: relative;
+}
+.password-field > input{
+  padding-right: 40px;
+}
+.password-field .password-toggle{
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 38px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #98a6ad;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.password-field .password-toggle:hover,
+.password-field .password-toggle:focus{
+  color: #5fbeaa;
+  outline: none;
+}
+.password-field .password-toggle .fa{
+  font-size: 15px;
+}
+
+/* ---- Customer transactions: credit position + settlement ---- */
+#customerCreditSummary{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+#customerCreditSummary #customerTxnCreditInfo{
+  margin: 0;
+}
+#customerCreditSummary .credit-breakdown{
+  font-size: 12px;
+  color: #98a6ad;
+}
+#customerPaymentsSection{
+  margin-top: 16px;
+}
+#customerPaymentsSection .credit-payments-title{
+  font-weight: 600;
+  color: #4c5667;
+  margin: 0 0 8px;
+}
+#customerPaymentsTable > thead > tr > th,
+#customerPaymentsTable > tbody > tr > td{
+  font-size: 13px;
+  padding: 6px 8px;
+  vertical-align: middle;
+}
+#settleCreditModal .modal-dialog{
+  margin-top: 80px;
+}
+#settleCreditModal .settle-balance{
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border: 1px solid #f3c9c9;
+  border-radius: 5px;
+  background: #fdf3f3;
+  color: #4c5667;
+}
+#settleCreditModal .settle-balance b{
+  font-size: 22px;
+  color: #d84340;
+}
+#settleCreditModal .settle-amount-row{
+  display: flex;
+  gap: 8px;
+}
+#settleCreditModal .settle-amount-row .form-control{
+  font-size: 18px;
+  height: 40px;
+}
+#settleCreditModal .settle-amount-row .btn{
+  height: 40px;
+  white-space: nowrap;
+}
+#settleCreditModal #settleRemaining{
+  display: block;
+  margin-top: 4px;
+}
+/* stacks above the customer transactions window (its backdrop is raised in
+   pos.js so it dims that window too, without affecting other windows) */
+#settleCreditModal{
+  z-index: 1060;
+}
+
 /* ---- Transactions page: Profit section ---- */
 #profitSection .profit-header{
   display: flex;
