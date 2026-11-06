@@ -1,9 +1,18 @@
 @import "~bootstrap/scss/bootstrap";
 /* start of custome styles*/
+/* Transactions page: the invoice table column, beside the Products panel */
 .leftMargin {
   margin-left: -110px !important;
-  /* width: 65% !important; */
+  width: 65% !important;
   overflow-x: auto !important;
+}
+/* below Bootstrap's md breakpoint the Products panel and the invoice table
+   stack, so use the full width and don't pull the table off-screen */
+@media (max-width: 991px) {
+  .leftMargin {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
 }
 
 /* Style the scrollbar */
@@ -73,6 +82,60 @@
   font-size: 22px;
   font-weight: bold;
 }
+/* ---- Transactions page: navigation buttons + SALES / TRANSACTIONS /
+   ITEMS SOLD / PRODUCTS stay in place while the page scrolls ----
+   body.transactions-mode is set while the Transactions view is open
+   (pos.js). The summary boxes shrink (body.totals-compact) once scrolled. */
+body.transactions-mode{
+  /* overflow-x: hidden on body would make it a scroll container and stop
+     position: sticky from working; clip hides overflow the same way without that */
+  overflow-x: clip;
+}
+body.transactions-mode .main-toolbar-row{
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: #ebeff2;
+}
+body.transactions-mode #totals{
+  position: sticky;
+  top: var(--toolbar-height, 64px);
+  z-index: 999;
+  background: #ebeff2;
+  margin-top: 0;
+  padding-top: 10px;
+  transition: box-shadow 0.2s;
+}
+body.transactions-mode #totals > div{
+  transition: height 0.2s, margin 0.2s;
+}
+body.transactions-mode #totals h5,
+body.transactions-mode #totals #counter{
+  transition: margin 0.2s, font-size 0.2s;
+}
+/* compact strip once the page is scrolled */
+body.transactions-mode.totals-compact #totals{
+  padding-top: 6px;
+  padding-bottom: 6px;
+  box-shadow: 0 6px 8px -6px rgba(0, 0, 0, 0.18);
+}
+body.transactions-mode.totals-compact #totals > div{
+  height: 58px;
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+body.transactions-mode.totals-compact #totals h5{
+  margin: 0 0 2px;
+  font-size: 11px;
+}
+body.transactions-mode.totals-compact #totals #counter{
+  margin: 0 !important;
+  font-size: 20px !important;
+  line-height: 1.1;
+}
+
 /* ---- Filter bar + date range filter (Select Order, Product History) ---- */
 .filter-bar{
   display: flex;

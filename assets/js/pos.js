@@ -1631,6 +1631,38 @@ if (!authedThisSession) {
       }
     });
 
+    // Transactions page: keep the navigation buttons and the SALES /
+    // TRANSACTIONS / ITEMS SOLD / PRODUCTS boxes in place while scrolling
+    // (CSS: body.transactions-mode / body.totals-compact in components.css).
+    function updateTransactionsStickyOffset() {
+      let toolbar = document.querySelector(".main-toolbar-row");
+      if (toolbar) {
+        document.documentElement.style.setProperty(
+          "--toolbar-height",
+          toolbar.offsetHeight + "px"
+        );
+      }
+    }
+
+    function updateTotalsCompact() {
+      if (!$("body").hasClass("transactions-mode")) return;
+      // two thresholds so the boxes don't flicker: shrinking them shortens the
+      // page, which moves the scroll position back up a little
+      let y = window.scrollY || document.documentElement.scrollTop;
+      if (y > 120) $("body").addClass("totals-compact");
+      else if (y < 10) $("body").removeClass("totals-compact");
+    }
+
+    $(window).on("scroll", updateTotalsCompact);
+    $(window).on("resize", updateTransactionsStickyOffset);
+    // the toolbar can also change height on its own (loading spinner, buttons
+    // shown/hidden), so follow its size directly
+    if (window.ResizeObserver && document.querySelector(".main-toolbar-row")) {
+      new ResizeObserver(updateTransactionsStickyOffset).observe(
+        document.querySelector(".main-toolbar-row")
+      );
+    }
+
     $("#transactions").click(function () {
       loadTransactions();
       loadUserList();
@@ -1639,6 +1671,10 @@ if (!authedThisSession) {
       $("#pointofsale").show();
       $("#transactions_view").show();
       $(this).hide();
+
+      $("body").addClass("transactions-mode").removeClass("totals-compact");
+      window.scrollTo(0, 0);
+      updateTransactionsStickyOffset();
     });
 
     $("#pointofsale").click(function () {
@@ -1646,6 +1682,9 @@ if (!authedThisSession) {
       $("#transactions").show();
       $("#transactions_view").hide();
       $(this).hide();
+
+      $("body").removeClass("transactions-mode totals-compact");
+      window.scrollTo(0, 0);
     });
 
     $("#viewRefOrders").click(function () {
