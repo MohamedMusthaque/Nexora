@@ -136,6 +136,178 @@ body.transactions-mode.totals-compact #totals #counter{
   line-height: 1.1;
 }
 
+/* ---- Popups: an open popup always scrolls (even if body.modal-open was
+   dropped while switching between popups), so tall content is never cut off ---- */
+.modal.in{
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.modal .modal-dialog{
+  margin-bottom: 30px;
+}
+
+/* ---- List popups that always fit the screen (.modal-fit) ----
+   Products, Categories, Open Orders, Customers, Users, Select Order.
+   The popup is never taller than the window: header, filters, toolbar
+   (Excel / PDF, Show N, search) and pagination stay in place and only the
+   list scrolls, with its column headings pinned. */
+.modal-fit .modal-dialog{
+  margin-top: 24px;
+  margin-bottom: 24px;
+}
+.modal-fit .modal-content{
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+}
+.modal-fit .modal-content > .modal-header,
+.modal-fit .modal-content > .modal-footer{
+  flex: 0 0 auto;
+}
+.modal-fit .modal-content > .modal-body{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px 20px !important;
+}
+.modal-fit .modal-body > *{
+  flex: 0 0 auto;
+}
+/* the part that grows and scrolls: a DataTable, or the Open Orders cards */
+.modal-fit .modal-body > .dataTables_wrapper{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.modal-fit .dataTables_wrapper > .ph-toolbar,
+.modal-fit .dataTables_wrapper > .ph-footer{
+  flex: 0 0 auto;
+}
+.modal-fit .ph-table-scroll,
+.modal-fit .modal-body > .modal-fit-scroll{
+  flex: 1 1 auto;
+  min-height: 140px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-bottom: 1px solid #e3e3e3;
+}
+.modal-fit .modal-body > .ph-table-scroll{
+  flex: 1 1 auto;   /* Products (hand-made list) */
+}
+/* a table wider than the popup (narrow screens) scrolls sideways inside the list area */
+.modal-fit .ph-table-scroll{
+  overflow-x: auto;
+}
+
+/* ---- .modal-fit popups: adapt to the screen size ---- */
+/* wide screens: use more of the width (Bootstrap fixes modal-lg at 900px) */
+@media (min-width: 1200px){
+  .modal-fit .modal-dialog.modal-lg{
+    width: min(1100px, 88vw);
+  }
+  .modal-fit .modal-dialog.modal-md{
+    width: min(760px, 70vw);
+  }
+}
+/* medium screens: most of the width */
+@media (min-width: 768px) and (max-width: 1199px){
+  .modal-fit .modal-dialog.modal-lg{
+    width: 92vw;
+  }
+  .modal-fit .modal-dialog.modal-md{
+    width: min(700px, 86vw);
+  }
+}
+/* small screens: almost full screen, compact */
+@media (max-width: 767px){
+  .modal-fit .modal-dialog{
+    width: auto;
+    margin: 8px !important;
+  }
+  .modal-fit .modal-content{
+    max-height: calc(100vh - 16px);
+  }
+  .modal-fit .modal-content > .modal-body{
+    padding: 10px 12px !important;
+  }
+  .modal-fit .modal-header{
+    padding: 10px 12px;
+  }
+  /* toolbar: buttons + Show N on one line, search full width below */
+  .modal-fit .ph-toolbar-right,
+  .modal-fit .ph-toolbar .dataTables_filter,
+  .modal-fit .ph-toolbar .dataTables_filter label,
+  .modal-fit .ph-toolbar .dataTables_filter input{
+    width: 100% !important;
+  }
+  .modal-fit .ph-toolbar-left{
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  /* pagination: centred under the "Showing ..." line */
+  .modal-fit .ph-footer{
+    justify-content: center;
+    text-align: center;
+  }
+  .modal-fit .ph-footer .pagination > li > a{
+    padding: 5px 10px;
+  }
+  .modal-fit .ph-table-scroll > table > thead > tr > th,
+  .modal-fit .ph-table-scroll > table > tbody > tr > td{
+    font-size: 12.5px;
+    padding: 6px 7px;
+  }
+  .modal-fit .filter-bar .date-range-input{
+    min-width: 0;
+  }
+}
+/* short screens: less margin so the list keeps as much room as possible */
+@media (max-height: 640px){
+  .modal-fit .modal-dialog{
+    margin-top: 8px !important;
+    margin-bottom: 8px !important;
+  }
+  .modal-fit .modal-content{
+    max-height: calc(100vh - 16px);
+  }
+  .modal-fit .modal-header{
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+}
+.modal-fit .modal-body > .modal-fit-scroll{
+  margin-left: 0;
+  margin-right: 0;
+  padding-top: 4px;
+}
+/* column headings stay visible while the list scrolls */
+.modal-fit .ph-table-scroll > table{
+  margin-top: 0 !important;   /* dataTables.bootstrap adds 6px above the table */
+  margin-bottom: 0 !important;
+}
+.modal-fit .ph-table-scroll > table > thead > tr > th{
+  /* !important: jquery.dataTables.min.css (loaded later) sets position: relative on sortable headings */
+  position: sticky !important;
+  top: 0;
+  z-index: 2;
+  background: #f6f8fa;
+  box-shadow: inset 0 -1px 0 #dfe3e8;
+}
+/* thin, unobtrusive scrollbar in the list area */
+.modal-fit .ph-table-scroll::-webkit-scrollbar,
+.modal-fit .modal-fit-scroll::-webkit-scrollbar{
+  width: 8px;
+}
+.modal-fit .ph-table-scroll::-webkit-scrollbar-thumb,
+.modal-fit .modal-fit-scroll::-webkit-scrollbar-thumb{
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 8px;
+}
+
 /* ---- Password fields: show / hide (eye) button ---- */
 .password-field{
   position: relative;
@@ -496,6 +668,7 @@ body.transactions-mode.totals-compact #totals #counter{
 }
 #selectOrderModal .dataTables_filter input{
   width: 280px !important;
+  max-width: 100%;   /* shrinks on narrow screens */
 }
 /* Select Order: date filter the same height as the toolbar controls row */
 #selectOrderModal .filter-bar .date-range-input,

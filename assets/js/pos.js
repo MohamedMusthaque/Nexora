@@ -75,6 +75,19 @@ let by_user = 0;
 let by_status = 1;
 
 // ======================================================================
+// Popups (Bootstrap 3 modals): keep them scrollable
+// A popup only scrolls while <body> has the "modal-open" class. When one
+// popup closes as another opens (Customers -> Transactions, Products ->
+// History, Pay -> receipt, Settle Credit over Transactions, ...) Bootstrap
+// removes that class when the first finishes fading out, so the open popup
+// can't scroll and anything below the screen edge is cut off. Put it back
+// whenever a popup is still open.
+// ======================================================================
+$(document).on("hidden.bs.modal", ".modal", function () {
+  if ($(".modal.in").length) $("body").addClass("modal-open");
+});
+
+// ======================================================================
 // Password fields: show / hide (eye) button
 // Every <input type="password"> gets a toggle, including ones added later
 // (the login form is built in authenticate()). Fields go back to hidden when
@@ -535,7 +548,7 @@ function tableExportButtons(title, options) {
 //   Showing 1 to 10 of N <noun> ........... Previous 1 2 3 Next
 const TABLE_TOOLBAR_DOM =
   "<'ph-toolbar'<'ph-toolbar-left'Bl><'ph-toolbar-right'f>>" +
-  "rt" +
+  "r<'ph-table-scroll't>" + // table in its own scroll area (fits popups, see .modal-fit)
   "<'ph-footer'<'ph-footer-left'i><'ph-footer-right'p>>";
 
 // DataTables options for a list table with the shared layout.
@@ -1833,7 +1846,9 @@ if (!authedThisSession) {
         renderLocation.append(
           $("<div>", {
             class:
-              orderType == 1 ? "col-md-3 order" : "col-md-3 customer-order",
+              orderType == 1
+                ? "col-xs-12 col-sm-6 col-md-4 col-lg-3 order"
+                : "col-xs-12 col-sm-6 col-md-4 col-lg-3 customer-order", // 1 / 2 / 3 / 4 cards per row by screen width
           }).append(
             $("<a>").append(
               $("<div>", { class: "card-box order-box" }).append(
@@ -3312,10 +3327,6 @@ if (!authedThisSession) {
       $(".modal-backdrop").last().css("z-index", 1055);
       $("#settleAmount").trigger("focus");
     });
-    // keep the history window scrollable after this one closes (Bootstrap 3)
-    $("#settleCreditModal").on("hidden.bs.modal", function () {
-      if ($("#customerTransactionsModal").hasClass("in")) $("body").addClass("modal-open");
-    });
 
     $("#settleFullAmount").on("click", function () {
       $("#settleAmount").val(creditState.balance.toFixed(2)).trigger("input");
@@ -3426,13 +3437,6 @@ if (!authedThisSession) {
       renderCustomerTransactions
     );
 
-    // The receipt modal opens on top of the history modal; Bootstrap 3 drops
-    // body.modal-open when it closes, which would stop the history scrolling.
-    $("#orderModal").on("hidden.bs.modal", function () {
-      if ($("#customerTransactionsModal, #productHistoryModal").hasClass("in")) {
-        $("body").addClass("modal-open");
-      }
-    });
 
     $("#customerTransactionsBack").on("click", function () {
       $("#customerTransactionsModal").modal("hide");
@@ -5311,7 +5315,7 @@ $.fn.renderSelectOrderList = function (orders) {
     search: { search: selectOrderSearchText },
     dom:
       "<'ph-toolbar'<'ph-toolbar-left'Bl><'ph-toolbar-right'f>>" +
-      "rt" +
+      "r<'ph-table-scroll't>" + // table in its own scroll area (see .modal-fit)
       "<'ph-footer'<'ph-footer-left'i><'ph-footer-right'p>>",
     columnDefs: [{ targets: [4], orderable: false, searchable: false }],
     buttons: tableExportButtons(exportTitle, {
