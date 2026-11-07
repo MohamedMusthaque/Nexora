@@ -35,6 +35,11 @@
       "!dist-final/**/*",
       "!dist-pub",
       "!dist-pub/**/*",
+      "!UsersmusthAppDataRoaming{,/**/*}",
+      "!server{,/**/*}",
+      "!screenshots{,/**/*}",
+      "!.kilo{,/**/*}",
+      "!.mcp.json",
       "assets/**/*",
       "node_modules/**/*",
       "public/**/*"

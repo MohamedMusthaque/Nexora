@@ -1,3 +1,23 @@
+# Dependencies
 /node_modules
 assets/plugins/jquery-ui/node_modules/
+
+# Build output (dist, dist-1.0.1, dist-final, dist-pub, ...)
 dist/
+dist-*/
+/release-builds/
+
+# Local app data - databases must never be committed
+/server/
+/UsersmusthAppDataRoaming/
+*.db
+
+# Local editor / AI tool settings
+.kilo/
+.mcp.json
+
+# Logs and OS files
+*.log
+npm-debug.log*
+Thumbs.db
+.DS_Store
