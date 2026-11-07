@@ -2562,3 +2562,8 @@ ul.ColVis_collection li {
 #expenses_view #expenseList .nobr{
   white-space: nowrap;
 }
+
+/* one space between Point of Sale and the Users button group */
+.top-toolbar #usersToolbarGroup{
+  margin-left: 4px;
+}
