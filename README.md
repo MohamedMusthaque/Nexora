@@ -111,9 +111,14 @@ Whether operating on a standalone checkout computer or configured across multipl
   - Product history of sales, stock adjustments and edits.
   - Built-in barcode generation (`JsBarcode`) and printable label exports.
 
+- **💸 Expenses**:
+  - Expenses page in the main navigation, with its own expense types (e.g. Rent, Electricity, Salaries).
+  - Each expense records the date, amount, expense type, payment method (Cash, Card or Bank Transfer) and an optional description.
+  - Filter by date, type and payment method, with totals per payment method and Excel / PDF export.
+
 - **👥 User Roles & Permissions**:
   - Multi-staff user accounts.
-  - Granular permissions: control access to Products, Categories, Transactions, Profit, Users, and Settings.
+  - Granular permissions: control access to Products, Categories, Transactions, Profit, Expenses, Users, and Settings.
   - Bootstrap Administrator protection to prevent accidental lockouts.
 
 - **🧾 Receipt & Document Printing**:
@@ -252,6 +257,7 @@ Nexora/
 ├── api/                    # Express REST API endpoints (backend)
 │   ├── categories.js       # Category management API
 │   ├── customers.js        # Customer registry API
+│   ├── expenses.js         # Expenses & expense types API
 │   ├── inventory.js        # Product catalog & stock API
 │   ├── settings.js         # App store info & receipt preferences API
 │   ├── transactions.js     # Sales, orders & reporting API
@@ -276,7 +282,7 @@ Nexora/
 
 By default, NEXORA stores databases and media uploads locally under:
 - **Default Path**: `<UserHome>/Nexora/POS/` (or `%APPDATA%/POS` on Windows)
-  - `server/databases/*.db`: Lightweight NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`, `returns.db`, `credit_payments.db`, `customer_advances.db`, `product_history.db`).
+  - `server/databases/*.db`: Lightweight NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`, `returns.db`, `credit_payments.db`, `customer_advances.db`, `product_history.db`, `expenses.db`, `expense_types.db`).
   - `uploads/`: Uploaded product pictures and company receipt logos.
 - **Application Logs**: Saved under `<userData>/nexora.log`.
 
@@ -293,6 +299,7 @@ You can access the built-in backup tools directly from the app interface:
 | :--- | :--- |
 | Sales & transactions (invoices, returns, credit payments, customer advances) | **User accounts** (usernames, passwords and permissions) |
 | Customers | |
+| Expenses and expense types | |
 | Products, categories, stock and product history | |
 | Store settings (store name, receipt details, tax, logo) | |
 | Uploaded images | |

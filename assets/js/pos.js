@@ -803,6 +803,7 @@ if (!authedThisSession) {
   $.get(api + "users/user/" + user._id, function (data) {
     user = data;
     applyProfitPermission();
+    applyExpensesPermission();
     $("#loggedin-user").text(user.fullname);
     $("#cashier").attr("title", user.fullname);
   });
@@ -872,6 +873,7 @@ if (!authedThisSession) {
       $(".p_five").hide();
     }
     applyProfitPermission();
+    applyExpensesPermission();
 
     // function to load products
     function loadProducts() {
@@ -2407,28 +2409,39 @@ if (!authedThisSession) {
       );
     }
 
+    // switches between the Point of Sale, Transactions and Expenses pages.
+    // The open page's button is hidden with .nav-current (not .hide()), so
+    // buttons hidden by a permission stay hidden.
+    function showPage(page) {
+      $("#pos_view").toggle(page === "pos");
+      $("#transactions_view").toggle(page === "transactions");
+      $("#expenses_view").toggle(page === "expenses");
+      $("#pointofsale").toggle(page !== "pos");
+      $("#transactions").toggleClass("nav-current", page === "transactions");
+      $("#expensesNav").toggleClass("nav-current", page === "expenses");
+
+      $("body")
+        .toggleClass("transactions-mode", page === "transactions")
+        .toggleClass("expenses-mode", page === "expenses")
+        .removeClass("totals-compact");
+      window.scrollTo(0, 0);
+      if (page !== "pos") updateTransactionsStickyOffset();
+    }
+
     $("#transactions").click(function () {
       loadTransactions();
       loadUserList();
-
-      $("#pos_view").hide();
-      $("#pointofsale").show();
-      $("#transactions_view").show();
-      $(this).hide();
-
-      $("body").addClass("transactions-mode").removeClass("totals-compact");
-      window.scrollTo(0, 0);
-      updateTransactionsStickyOffset();
+      showPage("transactions");
     });
 
     $("#pointofsale").click(function () {
-      $("#pos_view").show();
-      $("#transactions").show();
-      $("#transactions_view").hide();
-      $(this).hide();
+      showPage("pos");
+    });
 
-      $("body").removeClass("transactions-mode totals-compact");
-      window.scrollTo(0, 0);
+    $("#expensesNav").click(function () {
+      if (!canManageExpenses()) return;
+      showPage("expenses");
+      loadExpensesPage();
     });
 
     $("#viewRefOrders").click(function () {
@@ -2808,6 +2821,7 @@ if (!authedThisSession) {
       }
 
       $("#perm_profit").prop("checked", allUsers[index].perm_profit == 1);
+      $("#perm_expenses").prop("checked", allUsers[index].perm_expenses == 1);
 
       $("#userModal").modal("show");
     };
@@ -4505,6 +4519,7 @@ if (!authedThisSession) {
     const RESET_CLEARS = [
       ["Sales & transactions", "invoices, returns, credit payments and customer advances"],
       ["Customers", "customer list and credit details"],
+      ["Expenses", "expenses and expense types"],
       ["Products & categories", "products, stock, categories and product history"],
       ["Store settings", "store name, receipt details, tax and logo"],
       ["Uploaded images", "product pictures and the store logo"],
@@ -4674,6 +4689,7 @@ if (!authedThisSession) {
       $("#perm_users").prop("checked", user.perm_users == 1);
       $("#perm_settings").prop("checked", user.perm_settings == 1);
       $("#perm_profit").prop("checked", user.perm_profit == 1);
+      $("#perm_expenses").prop("checked", user.perm_expenses == 1);
     });
 
     $("#add-user").click(function () {
@@ -5026,6 +5042,462 @@ function loadProfit(transactions, requestId) {
     .done((returns) => done(returns || []))
     .fail(() => done([]));
 }
+
+// ---- Expenses page ----
+// Expense types (Rent, Electricity, ...) are created on the Expense Types
+// tab; every expense belongs to one type and has a date, amount, payment
+// method (Cash / Card / Bank Transfer) and an optional description.
+// Needs the "Manage Expenses" permission (the Administrator always has it;
+// users saved before this permission existed don't, until it is granted).
+let allExpenses = [];
+let allExpenseTypes = [];
+let expensesDateFilter = null;
+
+function canManageExpenses() {
+  return !!(user && (user._id === 1 || user.perm_expenses == 1));
+}
+
+function applyExpensesPermission() {
+  let allowed = canManageExpenses();
+  $("#expensesNav").toggle(allowed);
+  // permission taken away while the page is open: back to the till
+  if (!allowed && $("#expenses_view").is(":visible")) {
+    $("#pointofsale").trigger("click");
+  }
+}
+
+function expenseMoney(n) {
+  let sym = settings?.symbol || "";
+  return (n < 0 ? "-" : "") + sym + Math.abs(Number(n) || 0).toFixed(2);
+}
+
+function expenseTypeName(id) {
+  let type = allExpenseTypes.find((t) => t._id == id);
+  return type ? type.name : "Unknown type";
+}
+
+function expenseDateText(date) {
+  let d = moment(date, "YYYY-MM-DD", true);
+  return d.isValid() ? d.format("DD MMM YYYY") : String(date || "");
+}
+
+// the server's message for a refused request, or the fallback text
+function expenseErrorText(xhr, fallback) {
+  return xhr && xhr.status >= 400 && xhr.status < 500 && xhr.responseText
+    ? xhr.responseText
+    : fallback;
+}
+
+// loads the types first (the expense list shows their names), then the expenses
+function loadExpensesPage() {
+  loadExpenseTypes(loadExpenses);
+}
+
+function loadExpenseTypes(done) {
+  $.get(api + "expenses/types")
+    .done(function (types) {
+      allExpenseTypes = types || [];
+      renderExpenseTypes();
+      fillExpenseTypeSelects();
+    })
+    .fail(function () {
+      Swal.fire("Oops!", "Could not load the expense types.", "warning");
+    })
+    .always(function () {
+      if (typeof done === "function") done();
+    });
+}
+
+function loadExpenses() {
+  $.get(api + "expenses/all")
+    .done(function (expenses) {
+      allExpenses = expenses || [];
+      renderExpenses();
+    })
+    .fail(function () {
+      allExpenses = [];
+      renderExpenses();
+      Swal.fire("Oops!", "Could not load the expenses.", "warning");
+    });
+}
+
+// expense type drop-downs: the filter (keeps its choice) and the expense form
+function fillExpenseTypeSelects() {
+  let options = allExpenseTypes
+    .map((t) => `<option value="${t._id}">${txnHtml(t.name)}</option>`)
+    .join("");
+
+  let $filter = $("#expenseTypeFilter");
+  let chosen = $filter.val();
+  $filter.html(`<option value="">All</option>` + options);
+  if (chosen && allExpenseTypes.some((t) => String(t._id) === chosen)) $filter.val(chosen);
+
+  let $form = $("#expenseType");
+  let formChoice = $form.val();
+  $form.html(
+    `<option value="">${allExpenseTypes.length ? "Select an expense type" : "No expense types yet - add one"}</option>` +
+      options
+  );
+  if (formChoice && allExpenseTypes.some((t) => String(t._id) === formChoice)) $form.val(formChoice);
+}
+
+function filteredExpenses() {
+  let type = $("#expenseTypeFilter").val();
+  let method = $("#expenseMethodFilter").val();
+  return allExpenses.filter(
+    (e) =>
+      (!expensesDateFilter || expensesDateFilter.matches(e.date)) &&
+      (!type || String(e.type_id) === type) &&
+      (!method || e.payment_method === method)
+  );
+}
+
+// what the Excel / PDF export says the list contains
+function expensesExportSubtitle() {
+  let parts = [$("#expensesDateRange .date-range-label").text() || "All dates"];
+  if ($("#expenseTypeFilter").val()) parts.push($("#expenseTypeFilter option:selected").text());
+  if ($("#expenseMethodFilter").val()) parts.push($("#expenseMethodFilter").val());
+  return parts.join("  ·  ");
+}
+
+function renderExpenses() {
+  let list = filteredExpenses();
+
+  let totals = { all: 0, Cash: 0, Card: 0, "Bank Transfer": 0 };
+  list.forEach((e) => {
+    let amount = Number(e.amount) || 0;
+    totals.all += amount;
+    if (e.payment_method in totals) totals[e.payment_method] += amount;
+  });
+  $("#expensesTotal").text(expenseMoney(totals.all));
+  $("#expensesTotalNote").text(list.length + (list.length === 1 ? " expense" : " expenses"));
+  $("#expensesCash").text(expenseMoney(totals.Cash));
+  $("#expensesCard").text(expenseMoney(totals.Card));
+  $("#expensesBank").text(expenseMoney(totals["Bank Transfer"]));
+  $("#expensesTabCount").text(list.length);
+
+  let rows = list
+    .map(
+      (e) => `<tr>
+        <td class="nobr" data-order="${txnHtml(e.date)}">${expenseDateText(e.date)}</td>
+        <td>${txnHtml(expenseTypeName(e.type_id))}</td>
+        <td class="nobr">${txnHtml(e.payment_method)}</td>
+        <td class="expense-description" data-export="${txnHtml(e.description || "")}">${
+          e.description ? txnHtml(e.description) : '<span class="text-muted">-</span>'
+        }</td>
+        <td class="text-right nobr" data-order="${Number(e.amount) || 0}">${expenseMoney(e.amount)}</td>
+        <td>${txnHtml(e.created_by || "")}</td>
+        <td class="nobr"><span class="btn-group">
+          <button onClick="$(this).editExpense(${e._id})" class="btn btn-warning" title="Edit"><i class="fa fa-edit"></i></button>
+          <button onClick="$(this).deleteExpense(${e._id})" class="btn btn-danger" title="Delete"><i class="fa fa-trash"></i></button>
+        </span></td>
+      </tr>`
+    )
+    .join("");
+
+  if ($.fn.DataTable.isDataTable("#expenseList")) {
+    $("#expenseList").DataTable().destroy();
+  }
+  $("#expense_list").html(rows);
+  $("#expenseList").DataTable(
+    Object.assign(
+      standardTableOptions({
+        noun: "expenses",
+        searchPlaceholder: "Search expenses...",
+        exportTitle: "Expenses",
+        exportColumns: [0, 1, 2, 3, 4, 5],
+        sumColumns: [4], // Amount
+        exportSubtitle: expensesExportSubtitle,
+        actionColumns: [6],
+        emptyTable: allExpenses.length ? "No expenses match the filters" : "No expenses yet - click Add Expense",
+      }),
+      { order: [[0, "desc"]] }
+    )
+  );
+}
+
+function renderExpenseTypes() {
+  $("#expenseTypesTabCount").text(allExpenseTypes.length);
+
+  let rows = allExpenseTypes
+    .map(
+      (t) => `<tr>
+        <td>${txnHtml(t.name)}</td>
+        <td data-order="${t.expense_count || 0}">${t.expense_count || 0}</td>
+        <td class="nobr"><span class="btn-group">
+          <button onClick="$(this).editExpenseType(${t._id})" class="btn btn-warning" title="Rename"><i class="fa fa-edit"></i></button>
+          <button onClick="$(this).deleteExpenseType(${t._id})" class="btn btn-danger" title="Delete"><i class="fa fa-trash"></i></button>
+        </span></td>
+      </tr>`
+    )
+    .join("");
+
+  if ($.fn.DataTable.isDataTable("#expenseTypeList")) {
+    $("#expenseTypeList").DataTable().destroy();
+  }
+  $("#expense_type_list").html(rows);
+  $("#expenseTypeList").DataTable(
+    standardTableOptions({
+      noun: "expense types",
+      searchPlaceholder: "Search expense types...",
+      exportTitle: "Expense Types",
+      exportColumns: [0, 1],
+      actionColumns: [2],
+      emptyTable: "No expense types yet - click Add Expense Type",
+    })
+  );
+}
+
+// ---- add / edit an expense ----
+function openExpenseForm(expense) {
+  $("#saveExpense").get(0).reset();
+  hideExpenseNewTypeRow();
+  fillExpenseTypeSelects();
+
+  $("#expense_id").val(expense ? expense._id : "");
+  $("#expenseModalTitle").text(expense ? "Edit Expense" : "Add Expense");
+  $(".expense-currency").text(settings?.symbol ? "(" + settings.symbol + ")" : "");
+
+  $("#expenseDate").val(expense ? expense.date : moment().format("YYYY-MM-DD"));
+  $("#expenseAmount").val(expense ? (Number(expense.amount) || 0).toFixed(2) : "");
+  $("#expenseType").val(
+    expense
+      ? String(expense.type_id)
+      : allExpenseTypes.length === 1
+      ? String(allExpenseTypes[0]._id)
+      : ""
+  );
+  $("#expensePaymentMethod").val(expense ? expense.payment_method : "Cash");
+  $("#expenseDescription").val(expense ? expense.description || "" : "");
+
+  $("#expenseModal").modal("show");
+  // nothing to choose from yet: start by creating the first type
+  if (!allExpenseTypes.length) showExpenseNewTypeRow();
+}
+
+function showExpenseNewTypeRow() {
+  $(".expense-newtype-row").show();
+  $("#expenseNewTypeName").val("");
+  setTimeout(() => $("#expenseNewTypeName").trigger("focus"), 300);
+}
+
+function hideExpenseNewTypeRow() {
+  $(".expense-newtype-row").hide();
+  $("#expenseNewTypeName").val("");
+}
+
+// ---- add / rename an expense type ----
+function openExpenseTypeForm(type) {
+  $("#saveExpenseType").get(0).reset();
+  $("#expense_type_id").val(type ? type._id : "");
+  $("#expenseTypeName").val(type ? type.name : "");
+  $("#expenseTypeModalTitle").text(type ? "Rename Expense Type" : "Add Expense Type");
+  $("#expenseTypeModal").modal("show");
+}
+
+function saveExpenseType(id, name) {
+  return $.ajax({
+    url: api + "expenses/types" + (id ? "/" + id : ""),
+    type: id ? "PUT" : "POST",
+    contentType: "application/json",
+    data: JSON.stringify({ name: name }),
+  });
+}
+
+$(function () {
+  expensesDateFilter = initDateRangeFilter("#expensesDateRange", renderExpenses);
+  $("#expenseTypeFilter, #expenseMethodFilter").on("change", renderExpenses);
+
+  $("#addExpenseBtn").on("click", function () {
+    openExpenseForm(null);
+  });
+  $("#addExpenseTypeBtn").on("click", function () {
+    openExpenseTypeForm(null);
+  });
+
+  $("#expenseModal").on("shown.bs.modal", function () {
+    if (!$(".expense-newtype-row").is(":visible")) $("#expenseAmount").trigger("focus");
+  });
+  $("#expenseTypeModal").on("shown.bs.modal", function () {
+    $("#expenseTypeName").trigger("focus");
+  });
+
+  // the types table is measured while its tab is hidden
+  $('#expenses_view .expenses-tabs a[href="#expensesTabTypes"]').on("shown.bs.tab", function () {
+    if ($.fn.DataTable.isDataTable("#expenseTypeList")) {
+      $("#expenseTypeList").DataTable().columns.adjust();
+    }
+  });
+
+  $("#saveExpense").on("submit", function (e) {
+    e.preventDefault();
+    let id = $("#expense_id").val();
+    let amount = parseFloat($("#expenseAmount").val());
+
+    if (!$("#expenseDate").val()) {
+      Swal.fire("Oops!", "Please enter the date of the expense.", "warning");
+      return;
+    }
+    if (!(amount > 0)) {
+      Swal.fire("Oops!", "Please enter an amount greater than zero.", "warning");
+      return;
+    }
+    if (!$("#expenseType").val()) {
+      Swal.fire("Oops!", "Please choose an expense type, or add one with New Type.", "warning");
+      return;
+    }
+
+    let payload = {
+      date: $("#expenseDate").val(),
+      amount: amount,
+      type_id: parseInt($("#expenseType").val()),
+      payment_method: $("#expensePaymentMethod").val(),
+      description: $.trim($("#expenseDescription").val()),
+    };
+    if (id) payload.updated_by = user?.fullname || "";
+    else payload.created_by = user?.fullname || "";
+
+    let $submit = $("#submitExpense").prop("disabled", true);
+    $.ajax({
+      url: api + "expenses/" + (id || ""),
+      type: id ? "PUT" : "POST",
+      contentType: "application/json",
+      data: JSON.stringify(payload),
+    })
+      .done(function () {
+        $("#expenseModal").modal("hide");
+        loadExpensesPage(); // type usage counts change too
+        Swal.fire({
+          title: id ? "Expense Updated" : "Expense Saved",
+          icon: "success",
+          timer: 1400,
+          showConfirmButton: false,
+        });
+      })
+      .fail(function (xhr) {
+        Swal.fire("Oops!", expenseErrorText(xhr, "Could not save the expense."), "warning");
+      })
+      .always(function () {
+        $submit.prop("disabled", false);
+      });
+  });
+
+  // quick add of an expense type from inside the expense form
+  $("#expenseNewTypeBtn").on("click", showExpenseNewTypeRow);
+  $("#expenseNewTypeCancel").on("click", hideExpenseNewTypeRow);
+  $("#expenseNewTypeName").on("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault(); // don't submit the expense form
+      $("#expenseNewTypeSave").trigger("click");
+    }
+  });
+  $("#expenseNewTypeSave").on("click", function () {
+    let name = $.trim($("#expenseNewTypeName").val());
+    if (!name) {
+      $("#expenseNewTypeName").trigger("focus");
+      return;
+    }
+    let $btn = $(this).prop("disabled", true);
+    saveExpenseType(null, name)
+      .done(function (type) {
+        hideExpenseNewTypeRow();
+        loadExpenseTypes(function () {
+          if (type && type._id) $("#expenseType").val(String(type._id));
+        });
+      })
+      .fail(function (xhr) {
+        Swal.fire("Oops!", expenseErrorText(xhr, "Could not save the expense type."), "warning");
+      })
+      .always(function () {
+        $btn.prop("disabled", false);
+      });
+  });
+
+  $("#saveExpenseType").on("submit", function (e) {
+    e.preventDefault();
+    let id = $("#expense_type_id").val();
+    let name = $.trim($("#expenseTypeName").val());
+    if (!name) {
+      Swal.fire("Oops!", "Please enter a name for the expense type.", "warning");
+      return;
+    }
+    saveExpenseType(id, name)
+      .done(function () {
+        $("#expenseTypeModal").modal("hide");
+        // a renamed type shows its new name in the expense list too
+        loadExpenseTypes(renderExpenses);
+      })
+      .fail(function (xhr) {
+        Swal.fire("Oops!", expenseErrorText(xhr, "Could not save the expense type."), "warning");
+      });
+  });
+});
+
+$.fn.editExpense = function (id) {
+  let expense = allExpenses.find((e) => e._id === id);
+  if (expense) openExpenseForm(expense);
+};
+
+$.fn.deleteExpense = function (id) {
+  let expense = allExpenses.find((e) => e._id === id);
+  if (!expense) return;
+  Swal.fire({
+    title: "Delete this expense?",
+    html:
+      `<b>${txnHtml(expenseTypeName(expense.type_id))}</b> - ${expenseMoney(expense.amount)}` +
+      `<br><small>${expenseDateText(expense.date)} · ${txnHtml(expense.payment_method)}</small>`,
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonColor: "#d33",
+    confirmButtonText: "Yes, delete it",
+  }).then(function (result) {
+    if (!result.value) return;
+    $.ajax({ url: api + "expenses/" + id, type: "DELETE" })
+      .done(function () {
+        loadExpensesPage();
+        Swal.fire({ title: "Expense Deleted", icon: "success", timer: 1400, showConfirmButton: false });
+      })
+      .fail(function (xhr) {
+        Swal.fire("Oops!", expenseErrorText(xhr, "Could not delete the expense."), "warning");
+      });
+  });
+};
+
+$.fn.editExpenseType = function (id) {
+  let type = allExpenseTypes.find((t) => t._id === id);
+  if (type) openExpenseTypeForm(type);
+};
+
+$.fn.deleteExpenseType = function (id) {
+  let type = allExpenseTypes.find((t) => t._id === id);
+  if (!type) return;
+  if (type.expense_count > 0) {
+    Swal.fire(
+      "Can't delete this type",
+      `"${type.name}" is used by ${type.expense_count} ${type.expense_count === 1 ? "expense" : "expenses"}. ` +
+        "Change or delete those expenses first.",
+      "info"
+    );
+    return;
+  }
+  Swal.fire({
+    title: "Delete this expense type?",
+    html: `<b>${txnHtml(type.name)}</b>`,
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonColor: "#d33",
+    confirmButtonText: "Yes, delete it",
+  }).then(function (result) {
+    if (!result.value) return;
+    $.ajax({ url: api + "expenses/types/" + id, type: "DELETE" })
+      .done(function () {
+        loadExpenseTypes();
+      })
+      .fail(function (xhr) {
+        Swal.fire("Oops!", expenseErrorText(xhr, "Could not delete the expense type."), "warning");
+      });
+  });
+};
 
 function loadTransactions() {
   let users = [];

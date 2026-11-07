@@ -107,6 +107,11 @@
                             <span class="btn-label"><i class=" 	glyphicon glyphicon-credit-card"></i> </span>  Transactions 
                             </button>
 
+                            <!-- shown only with the "Manage Expenses" permission (pos.js: applyExpensesPermission) -->
+                            <button id="expensesNav" type="button" class="btn btn-default waves-effect waves-light" style="display: none;">
+                                <span class="btn-label"><i class="fa fa-money"></i> </span>  Expenses
+                            </button>
+
                             <button id="pointofsale" type="button" class="btn btn-default waves-effect waves-light">
                                 <span class="btn-label"><i class=" 	glyphicon glyphicon-shopping-cart"></i> </span>  Point of Sale
                             </button>
@@ -333,6 +338,118 @@
                         </thead>
                         <tbody id="profit_list"></tbody>
                     </table>
+                </div>
+            </div>
+        </div>
+   </div>
+
+
+   <!-- Expenses page (pos.js: "Expenses page"): expenses + the expense types they belong to -->
+   <div id="expenses_view">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card-box">
+                    <div class="expenses-header">
+                        <h3 style="margin: 0;">Expenses</h3>
+                        <button type="button" class="btn btn-warning waves-effect waves-light" id="addExpenseBtn">
+                            <i class="fa fa-plus"></i> Add Expense
+                        </button>
+                    </div>
+
+                    <ul class="nav nav-tabs customer-tabs expenses-tabs" role="tablist">
+                        <li role="presentation" class="active">
+                            <a href="#expensesTabList" aria-controls="expensesTabList" role="tab" data-toggle="tab">
+                                <i class="fa fa-list"></i> Expenses <span class="badge" id="expensesTabCount">0</span>
+                            </a>
+                        </li>
+                        <li role="presentation">
+                            <a href="#expensesTabTypes" aria-controls="expensesTabTypes" role="tab" data-toggle="tab">
+                                <i class="fa fa-tags"></i> Expense Types <span class="badge" id="expenseTypesTabCount">0</span>
+                            </a>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content customer-tab-content">
+                        <div role="tabpanel" class="tab-pane active" id="expensesTabList">
+                            <div class="filter-bar expenses-filters">
+                                <label>Date</label>
+                                <div class="date-range-filter" id="expensesDateRange">
+                                    <div class="date-range-input" title="Filter expenses by date">
+                                        <i class="fa fa-calendar"></i>&nbsp;
+                                        <span class="date-range-label">All dates</span>
+                                        <i class="fa fa-caret-down"></i>
+                                    </div>
+                                    <button type="button" class="btn btn-default date-range-clear" title="Clear date filter (show all dates)" style="display: none;"><i class="fa fa-times"></i> Clear</button>
+                                </div>
+                                <label for="expenseTypeFilter">Expense Type</label>
+                                <select id="expenseTypeFilter" class="form-control">
+                                    <option value="">All</option>
+                                </select>
+                                <label for="expenseMethodFilter">Payment Method</label>
+                                <select id="expenseMethodFilter" class="form-control">
+                                    <option value="">All</option>
+                                    <option value="Cash">Cash</option>
+                                    <option value="Card">Card</option>
+                                    <option value="Bank Transfer">Bank Transfer</option>
+                                </select>
+                            </div>
+
+                            <!-- totals for the expenses matching the filters -->
+                            <div class="expense-tiles">
+                                <div class="expense-tile expense-tile-main">
+                                    <h5>TOTAL EXPENSES</h5>
+                                    <div class="expense-value" id="expensesTotal">0.00</div>
+                                    <small id="expensesTotalNote">0 expenses</small>
+                                </div>
+                                <div class="expense-tile">
+                                    <h5>CASH</h5>
+                                    <div class="expense-value" id="expensesCash">0.00</div>
+                                </div>
+                                <div class="expense-tile">
+                                    <h5>CARD</h5>
+                                    <div class="expense-value" id="expensesCard">0.00</div>
+                                </div>
+                                <div class="expense-tile">
+                                    <h5>BANK TRANSFER</h5>
+                                    <div class="expense-value" id="expensesBank">0.00</div>
+                                </div>
+                            </div>
+
+                            <table class="table table-bordered" id="expenseList" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Expense Type</th>
+                                        <th>Payment Method</th>
+                                        <th>Description</th>
+                                        <th class="txn-num">Amount</th>
+                                        <th>Added By</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="expense_list"></tbody>
+                            </table>
+                        </div>
+
+                        <div role="tabpanel" class="tab-pane" id="expensesTabTypes">
+                            <div class="filter-bar" style="margin-bottom: 10px;">
+                                <button type="button" class="btn btn-warning waves-effect waves-light" id="addExpenseTypeBtn">
+                                    <i class="fa fa-plus"></i> Add Expense Type
+                                </button>
+                                <span class="text-muted">Every expense belongs to an expense type, e.g. Rent, Electricity or Salaries.</span>
+                            </div>
+                            <table class="table table-bordered" id="expenseTypeList" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Expenses</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="expense_type_list"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -793,6 +910,87 @@
 
 
 
+     <!-- Add / edit an expense (pos.js: openExpenseForm) -->
+     <div id="expenseModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="expenseModalTitle" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog modal-md">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                        <h4 class="modal-title" id="expenseModalTitle">Add Expense</h4>
+                    </div>
+                    <div class="modal-body">
+                        <form id="saveExpense" autocomplete="off">
+                            <input type="hidden" id="expense_id" name="id">
+                            <div class="row">
+                                <div class="col-sm-6 form-group">
+                                    <label for="expenseDate">Date</label>
+                                    <input type="date" id="expenseDate" name="date" class="form-control" required>
+                                </div>
+                                <div class="col-sm-6 form-group">
+                                    <label for="expenseAmount">Amount <span class="text-muted expense-currency"></span></label>
+                                    <input type="number" id="expenseAmount" name="amount" class="form-control" min="0.01" step="0.01" placeholder="0.00" required>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="expenseType">Expense Type</label>
+                                <div class="input-group">
+                                    <select id="expenseType" name="type_id" class="form-control" required></select>
+                                    <span class="input-group-btn">
+                                        <button type="button" class="btn btn-default" id="expenseNewTypeBtn" title="Add a new expense type"><i class="fa fa-plus"></i> New Type</button>
+                                    </span>
+                                </div>
+                                <!-- quick add of a type without leaving this form -->
+                                <div class="input-group expense-newtype-row" style="display: none; margin-top: 8px;">
+                                    <input type="text" id="expenseNewTypeName" class="form-control" maxlength="60" placeholder="New expense type, e.g. Rent">
+                                    <span class="input-group-btn">
+                                        <button type="button" class="btn btn-primary" id="expenseNewTypeSave">Add</button>
+                                        <button type="button" class="btn btn-default" id="expenseNewTypeCancel">Cancel</button>
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="expensePaymentMethod">Payment Method</label>
+                                <select id="expensePaymentMethod" name="payment_method" class="form-control" required>
+                                    <option value="Cash">Cash</option>
+                                    <option value="Card">Card</option>
+                                    <option value="Bank Transfer">Bank Transfer</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="expenseDescription">Description <small class="text-muted">(optional)</small></label>
+                                <textarea id="expenseDescription" name="description" class="form-control" rows="3" maxlength="500" placeholder="e.g. Electricity bill for October"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-block waves-effect waves-light" id="submitExpense">Save Expense</button>
+                        </form>
+                    </div>
+               </div>
+          </div>
+     </div>
+
+     <!-- Add / rename an expense type (pos.js: openExpenseTypeForm) -->
+     <div id="expenseTypeModal" class="modal fade bs-example-modal-sm" tabindex="-1" role="dialog" aria-labelledby="expenseTypeModalTitle" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog modal-md">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                        <h4 class="modal-title" id="expenseTypeModalTitle">Add Expense Type</h4>
+                    </div>
+                    <div class="modal-body">
+                        <form id="saveExpenseType" autocomplete="off">
+                            <input type="hidden" id="expense_type_id" name="id">
+                            <div class="form-group">
+                                <label for="expenseTypeName">Name</label>
+                                <input type="text" id="expenseTypeName" name="name" class="form-control" maxlength="60" placeholder="e.g. Rent, Electricity, Salaries" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-block waves-effect waves-light">Save Expense Type</button>
+                        </form>
+                    </div>
+               </div>
+          </div>
+     </div>
+
+
+
      <div id="Products" class="modal fade modal-fit bs-example-modal-sm" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" style="display: none;">
             <div class="modal-dialog modal-lg">
                 <div class="modal-content">
@@ -966,6 +1164,9 @@
                            </div>
                           <div class="form-group">
                             <span><input type="checkbox" name="perm_profit" id="perm_profit"> View Profit </span>
+                           </div>
+                          <div class="form-group">
+                            <span><input type="checkbox" name="perm_expenses" id="perm_expenses"> Manage Expenses </span>
                            </div>
                                 <div class="form-group">
                                     <span><input type="checkbox" name="perm_users" id="perm_users"> Manage Users and Permissions </span>
@@ -1587,7 +1788,7 @@
                         <div class="form-group reset-db-group">
                             <label>Reset Database</label> <br>
                             <button type="button" class="btn btn-danger" id="reset_database"><i class="fa fa-trash"></i> Reset Database...</button>
-                            <span class="help-block">Clears all sales, customers, products, store settings and images, keeping only the user accounts, then restarts the app. A backup is made automatically first.</span>
+                            <span class="help-block">Clears all sales, customers, products, expenses, store settings and images, keeping only the user accounts, then restarts the app. A backup is made automatically first.</span>
                         </div>
                     </div>
 

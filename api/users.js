@@ -112,6 +112,7 @@ app.post( "/post" , function ( req, res ) {
             "perm_users": req.body.perm_users == "on" ? 1 : 0,
             "perm_settings": req.body.perm_settings == "on" ? 1 : 0,
             "perm_profit": req.body.perm_profit == "on" ? 1 : 0,
+            "perm_expenses": req.body.perm_expenses == "on" ? 1 : 0,
             "status": ""
           }
 
@@ -136,7 +137,8 @@ app.post( "/post" , function ( req, res ) {
                             perm_transactions: isBootstrapAdmin || req.body.perm_transactions == "on" ? 1 : 0,
                             perm_users: isBootstrapAdmin || req.body.perm_users == "on" ? 1 : 0,
                             perm_settings: isBootstrapAdmin || req.body.perm_settings == "on" ? 1 : 0,
-                            perm_profit: isBootstrapAdmin || req.body.perm_profit == "on" ? 1 : 0
+                            perm_profit: isBootstrapAdmin || req.body.perm_profit == "on" ? 1 : 0,
+                            perm_expenses: isBootstrapAdmin || req.body.perm_expenses == "on" ? 1 : 0
                         }
                     }, {}, function (
             err,
@@ -194,6 +196,7 @@ app.post( "/setup", function ( req, res ) {
             "perm_users": 1,
             "perm_settings": 1,
             "perm_profit": 1,
+            "perm_expenses": 1,
             "status": ""
         };
         // the unique _id index stops a second, simultaneous setup
@@ -211,7 +214,7 @@ app.get( "/check", function ( req, res ) {
 }, function ( err, docs ) {
         // No administrator yet: nothing to do here - a new installation creates
         // it on the first-run setup screen (POST /setup), never as admin/admin.
-        if(docs && (docs.perm_products != 1 || docs.perm_categories != 1 || docs.perm_transactions != 1 || docs.perm_users != 1 || docs.perm_settings != 1 || docs.perm_profit != 1)) {
+        if(docs && (docs.perm_products != 1 || docs.perm_categories != 1 || docs.perm_transactions != 1 || docs.perm_users != 1 || docs.perm_settings != 1 || docs.perm_profit != 1 || docs.perm_expenses != 1)) {
             // The bootstrap Administrator account (_id 1) must always have full access.
             // Its permissions can end up stripped if its profile is ever saved without
             // the permission checkboxes being populated (e.g. editing your own profile).
@@ -224,7 +227,8 @@ app.get( "/check", function ( req, res ) {
                     perm_transactions: 1,
                     perm_users: 1,
                     perm_settings: 1,
-                    perm_profit: 1
+                    perm_profit: 1,
+                    perm_expenses: 1
                 }
             }, {}, function ( err, numReplaced ) {
             } );

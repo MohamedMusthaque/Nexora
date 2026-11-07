@@ -89,12 +89,14 @@
    ITEMS SOLD / PRODUCTS stay in place while the page scrolls ----
    body.transactions-mode is set while the Transactions view is open
    (pos.js). The summary boxes shrink (body.totals-compact) once scrolled. */
-body.transactions-mode{
+body.transactions-mode,
+body.expenses-mode{
   /* overflow-x: hidden on body would make it a scroll container and stop
      position: sticky from working; clip hides overflow the same way without that */
   overflow-x: clip;
 }
-body.transactions-mode .main-toolbar-row{
+body.transactions-mode .main-toolbar-row,
+body.expenses-mode .main-toolbar-row{
   position: sticky;
   top: 0;
   z-index: 1000;
@@ -356,18 +358,21 @@ body.transactions-mode.totals-compact #totals #counter{
   font-size: 12px;
   color: #98a6ad;
 }
-/* ---- Customer Transactions window + Products window: tabs ---- */
+/* ---- Customer Transactions window + Products window + Expenses page: tabs ---- */
 #customerTransactionsModal .customer-tabs,
-#Products .customer-tabs{
+#Products .customer-tabs,
+#expenses_view .customer-tabs{
   margin-top: 16px;
   border-bottom: 2px solid #e3e3e3;
 }
 #customerTransactionsModal .customer-tabs > li,
-#Products .customer-tabs > li{
+#Products .customer-tabs > li,
+#expenses_view .customer-tabs > li{
   margin-bottom: -2px;
 }
 #customerTransactionsModal .customer-tabs > li > a,
-#Products .customer-tabs > li > a{
+#Products .customer-tabs > li > a,
+#expenses_view .customer-tabs > li > a{
   padding: 9px 16px;
   margin-right: 4px;
   border: none;
@@ -378,37 +383,44 @@ body.transactions-mode.totals-compact #totals #counter{
   background: transparent;
 }
 #customerTransactionsModal .customer-tabs > li > a:hover,
-#Products .customer-tabs > li > a:hover{
+#Products .customer-tabs > li > a:hover,
+#expenses_view .customer-tabs > li > a:hover{
   color: #4c5667;
   background: transparent;
   border-bottom-color: #cfd6dc;
 }
 #customerTransactionsModal .customer-tabs > li.active > a,
 #Products .customer-tabs > li.active > a,
+#expenses_view .customer-tabs > li.active > a,
 #customerTransactionsModal .customer-tabs > li.active > a:hover,
 #Products .customer-tabs > li.active > a:hover,
+#expenses_view .customer-tabs > li.active > a:hover,
 #customerTransactionsModal .customer-tabs > li.active > a:focus,
-#Products .customer-tabs > li.active > a:focus{
+#Products .customer-tabs > li.active > a:focus,
+#expenses_view .customer-tabs > li.active > a:focus{
   color: #3e9e8a;
   border: none;
   border-bottom: 2px solid #5fbeaa;
   background: transparent;
 }
 #customerTransactionsModal .customer-tabs .badge,
-#Products .customer-tabs .badge{
+#Products .customer-tabs .badge,
+#expenses_view .customer-tabs .badge{
   margin-left: 4px;
   background: #e8ecef;
   color: #4c5667;
   font-weight: 600;
 }
 #customerTransactionsModal .customer-tabs > li.active .badge,
-#Products .customer-tabs > li.active .badge{
+#Products .customer-tabs > li.active .badge,
+#expenses_view .customer-tabs > li.active .badge{
   background: #5fbeaa;
   color: #fff;
 }
 /* the theme gives .tab-content padding + a shadow box; here the tables use the full width */
 #customerTransactionsModal .customer-tab-content,
-#Products .customer-tab-content{
+#Products .customer-tab-content,
+#expenses_view .customer-tab-content{
   padding: 14px 0 0 !important;
   box-shadow: none !important;
   border: none !important;
@@ -2471,4 +2483,82 @@ ul.ColVis_collection li {
 /* Products window: the tabs sit at the top of the window body */
 #Products .products-tabs{
   margin-top: 0;
+}
+
+/* the navigation button of the page that is open is hidden (pos.js: showPage) */
+.top-toolbar .nav-current{
+  display: none !important;
+}
+
+/* ---- Expenses page ---- */
+#expenses_view .expenses-header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+#expenses_view .expenses-tabs{
+  margin-top: 12px;
+}
+#expenses_view .expenses-filters{
+  margin-bottom: 14px;
+}
+#expenses_view .expenses-filters label{
+  margin: 0 0 0 8px;
+}
+#expenses_view .expenses-filters label:first-child{
+  margin-left: 0;
+}
+#expenses_view .expenses-filters select.form-control{
+  width: auto;
+  min-width: 140px;
+}
+#expenses_view .expense-tiles{
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+@media (max-width: 767px){
+  #expenses_view .expense-tiles{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+#expenses_view .expense-tile{
+  border: 1px solid #e3e3e3;
+  border-radius: 5px;
+  padding: 10px 14px;
+  background: #fafbfc;
+}
+#expenses_view .expense-tile h5{
+  margin: 0 0 4px;
+  font-size: 12px;
+  letter-spacing: 0.4px;
+  color: #98a6ad;
+}
+#expenses_view .expense-tile .expense-value{
+  font-size: 22px;
+  font-weight: bold;
+  color: #4c5667;
+  line-height: 1.2;
+}
+#expenses_view .expense-tile small{
+  font-size: 11px;
+  color: #98a6ad;
+}
+#expenses_view .expense-tile-main{
+  border-color: #f0b25a;
+  background: #fff8ee;
+}
+#expenses_view .expense-tile-main .expense-value{
+  color: #c97f12;
+}
+#expenses_view #expenseList .expense-description{
+  white-space: pre-line;
+  word-break: break-word;
+  max-width: 360px;
+}
+#expenses_view #expenseList .nobr{
+  white-space: nowrap;
 }
