@@ -41,19 +41,31 @@ function round2(n) {
   return Math.round(n * 100) / 100;
 }
 
+// Sales that put money on a customer's credit:
+//  - Credit sales (the whole bill, or credit_amount if set)
+//  - split payments: paid partly by Cash / Card / Bank Transfer with the
+//    rest on credit (payment_type is the method, credit_amount the rest)
+const CREDIT_SALES_QUERY = { $or: [{ payment_type: "Credit" }, { credit_amount: { $gt: 0 } }] };
+
+function creditPortion(t) {
+  let part = parseFloat(t.credit_amount);
+  if (t.payment_type === "Credit") return part > 0 ? part : parseFloat(t.total) || 0;
+  return part > 0 ? part : 0;
+}
+
 // callback(err, { credit, paid, balance }) for one customer.
 // excludeOrder: an order being re-saved, so it isn't counted twice.
 function customerCreditPosition(customerId, excludeOrder, callback) {
   let ids = customerIdForms(customerId);
   transactionsDB.find(
-    { $and: [{ "customer.id": { $in: ids } }, { payment_type: "Credit" }] },
+    { $and: [{ "customer.id": { $in: ids } }, CREDIT_SALES_QUERY] },
     function(err, sales) {
       if (err) return callback(err);
       creditPaymentsDB.find({ customer_id: { $in: ids } }, function(err, payments) {
         if (err) return callback(err);
         let credit = (sales || [])
           .filter(function(t) { return !excludeOrder || String(t._id) !== String(excludeOrder); })
-          .reduce(function(s, t) { return s + (parseFloat(t.total) || 0); }, 0);
+          .reduce(function(s, t) { return s + creditPortion(t); }, 0);
         let paid = (payments || []).reduce(function(s, p) { return s + (parseFloat(p.amount) || 0); }, 0);
         callback(null, { credit: round2(credit), paid: round2(paid), balance: round2(Math.max(credit - paid, 0)) });
       });
@@ -121,7 +133,7 @@ app.get("/by-date", function(req, res) {
   // removed from the system still show up in reports)
   // All (2) = Paid + Unpaid. Held orders (status 0, not Credit) are excluded from all.
   let paidQuery = { $and: [{ status: 1 }, { payment_type: { $in: ["Cash", "Card", "Bank Transfer", "Mpesa"] } }] };
-  let unpaidQuery = { payment_type: "Credit" };
+  let unpaidQuery = CREDIT_SALES_QUERY; // Credit sales + split payments with a part on credit
 
   if (status === 0) {
     query.$and.push(unpaidQuery);
@@ -180,7 +192,7 @@ app.get("/customer-credit/:customerId", function(req, res) {
 
 // Outstanding balance for every customer: { "<customerId>": { credit, paid, balance } }
 app.get("/credit-balances", function(req, res) {
-  transactionsDB.find({ payment_type: "Credit" }, function(err, sales) {
+  transactionsDB.find(CREDIT_SALES_QUERY, function(err, sales) {
     if (err) return res.status(500).send(err);
     creditPaymentsDB.find({}, function(err, payments) {
       if (err) return res.status(500).send(err);
@@ -189,7 +201,7 @@ app.get("/credit-balances", function(req, res) {
         return (out[String(id)] = out[String(id)] || { credit: 0, paid: 0, balance: 0 });
       };
       (sales || []).forEach(function(t) {
-        if (t.customer && t.customer.id != null) entry(t.customer.id).credit += parseFloat(t.total) || 0;
+        if (t.customer && t.customer.id != null) entry(t.customer.id).credit += creditPortion(t);
       });
       (payments || []).forEach(function(p) {
         entry(p.customer_id).paid += parseFloat(p.amount) || 0;
@@ -411,8 +423,23 @@ function advanceNumber(value) {
   return isNaN(n) || n < 0 ? 0 : round2(n);
 }
 
+// Split payment: the part put on credit must be a positive number, not more
+// than the bill, and only for a registered customer
+function checkSaleCredit(t) {
+  if (t.credit_amount === undefined || t.credit_amount === null || t.credit_amount === "" || t.credit_amount === 0) return null;
+  let part = parseFloat(t.credit_amount);
+  if (isNaN(part) || part < 0) return "The amount put on credit must be a positive number.";
+  if (part === 0) return null;
+  if (registeredCustomerId(t.customer) === null) return "Only a registered customer can put part of a bill on credit.";
+  if (part > (parseFloat(t.total) || 0) + 0.001) return "The amount put on credit can't be more than the bill.";
+  t.credit_amount = round2(part);
+  return null;
+}
+
 // Checks a sale's advance_used against the customer's advance; callback(errorMessage|null)
 function checkSaleAdvance(t, callback) {
+  let creditError = checkSaleCredit(t);
+  if (creditError) return callback(creditError);
   let used = advanceNumber(t.advance_used);
   let deposit = advanceNumber(t.advance_deposit);
   if (!used && !deposit) return callback(null);

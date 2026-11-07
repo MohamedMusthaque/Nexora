@@ -405,7 +405,7 @@
   
                   <div class="button-list pull-right">
 
-                    <button onclick="$(this).submitDueOrder(3);" type="button" class="btn btn-info waves-effect waves-light">
+                    <button onclick="$(this).printBill();" type="button" class="btn btn-info waves-effect waves-light">
                         <i class="fa fa-print"></i> 
                     </button>
 
@@ -520,7 +520,7 @@
       </div><!-- /.modal-dialog -->
   </div><!-- /.modal -->
   <!--  Modal content for the above example -->
-  <div id="paymentModel" class="modal fade bs-example-modal-lg" tabindex="-1" role="dialog" aria-labelledby="myLargeModalLabel" aria-hidden="true" style="display: none;">
+  <div id="paymentModel" class="modal fade modal-fit pay-modal" tabindex="-1" role="dialog" aria-labelledby="myLargeModalLabel" aria-hidden="true" style="display: none;">
       <div class="modal-dialog modal-lg">
           <div class="modal-content">
               <div class="modal-header">
@@ -528,18 +528,17 @@
                   <h4 class="modal-title" id="myLargeModalLabel">Payment</h4>
               </div>
               <div class="modal-body">
-                  <div class="row">
-                      <div class="col-md-4">
+                  <div class="pay-layout">
+                      <!-- payment method -->
+                      <div class="pay-methods">
                           <div class="list-group">
-                              <a href="javascript:void(0)" id="cash"  class="list-group-item active">
-                                  Cash
-                              </a>
+                              <a href="javascript:void(0)" id="cash"  class="list-group-item active">Cash</a>
                               <a href="javascript:void(0)" id="card"  class="list-group-item">Card</a>
                               <a href="javascript:void(0)" id="bank"  class="list-group-item">Bank Transfer</a>
                               <a href="javascript:void(0)" id="credit" class="list-group-item">Credit</a>
                           </div>
                       </div>
-                      <div class="col-md-8">
+                      <div class="pay-main">
                           <!-- customer advance: use it on this bill (pos.js: setupPaymentAdvance) -->
                           <!-- applied automatically for a registered customer with an advance (not on Credit) -->
                           <div id="advancePanel" class="advance-panel" style="display: none;">
@@ -548,78 +547,34 @@
                               <span class="advance-available">Advance available: <b id="advanceAvailable">0.00</b></span>
                               <div class="advance-breakdown" id="advanceBreakdown"></div>
                           </div>
-                          <div class="input-group">
-                              <span class="input-group-addon" id="basic-addon3">Price <span id="price_curr"></span>
-                              <input id="payablePrice" readonly type="number"  class="form-control" aria-describedby="basic-addon3">
+                          <div class="pay-amounts">
+                              <label class="pay-amount pay-amount-due">
+                                  <span class="pay-amount-label">To pay <span id="price_curr"></span></span>
+                                  <input id="payablePrice" readonly type="number" class="form-control" tabindex="-1">
+                              </label>
+                              <label class="pay-amount pay-amount-paid">
+                                  <span class="pay-amount-label">Payment <span id="payment_curr"></span></span>
+                                  <input type="text" placeholder="0.00" class="form-control" id="payment" autocomplete="off">
+                              </label>
                           </div>
-                          <br>
-                          <div class="input-group">
-                              <span class="input-group-addon" id="basic-addon3">Payment  <span id="payment_curr"></span> </span>
-                              <input type="text" placeholder="0.0" class="form-control" id="payment" aria-describedby="basic-addon3">
+                          <div class="pay-keypad">
+                              <button type="button" onclick="$(this).go(1,false);" class="btn btn-success">1</button>
+                              <button type="button" onclick="$(this).go(2,false);" class="btn btn-success">2</button>
+                              <button type="button" onclick="$(this).go(3,false);" class="btn btn-success">3</button>
+                              <button type="button" onclick="$('#payment').val('');$(this).calculateChange();" class="btn btn-danger pay-key-tall">AC</button>
+                              <button type="button" onclick="$(this).go(4,false);" class="btn btn-success">4</button>
+                              <button type="button" onclick="$(this).go(5,false);" class="btn btn-success">5</button>
+                              <button type="button" onclick="$(this).go(6,false);" class="btn btn-success">6</button>
+                              <button type="button" onclick="$(this).go(7,false);" class="btn btn-success">7</button>
+                              <button type="button" onclick="$(this).go(8,false);" class="btn btn-success">8</button>
+                              <button type="button" onclick="$(this).go(9,false);" class="btn btn-success">9</button>
+                              <button type="button" onclick="$('#payment').val($('#payment').val().substr(0,$('#payment').val().length -1));$(this).calculateChange();" class="btn btn-warning pay-key-tall" title="Delete last digit">⌫</button>
+                              <button type="button" onclick="$(this).go(0,false);" class="btn btn-success pay-key-wide">0</button>
+                              <button type="button" onclick="$(this).digits()" class="btn btn-success">.</button>
                           </div>
-                          <hr>
-                          <div class="row">
-                              <div class="col-md-9">
-                                  <div class="row">
-                                      <div class="col-md-3">
-                                          <button onclick="$(this).go(1,false);" class="btn btn-success btn-lg btn-block">1</button>
-                                      </div>
-                                      <div class="col-md-3">
-                                          <button onclick="$(this).go(2,false);" class="btn btn-success btn-lg btn-block">2</button>
-                                      </div>
-                                      <div class="col-md-3">
-                                          <button onclick="$(this).go(3,false);" class="btn btn-success btn-lg btn-block">3</button>
-                                      </div>
-                                      <div class="col-md-3"></div>
-                                  </div>
-                                  <br>
-                                  <div class="row">
-                                      <div class="col-md-3">
-                                          <button onclick="$(this).go(4,false);" class="btn btn-success btn-lg btn-block">4</button>
-                                      </div>
-                                      <div class="col-md-3">
-                                          <button onclick="$(this).go(5,false);" class="btn btn-success btn-lg btn-block">5</button>
-                                      </div>
-                                      <div class="col-md-3">
-                                          <button onclick="$(this).go(6,false);" class="btn btn-success btn-lg btn-block">6</button>
-                                      </div>
-                                      <div class="col-md-3"></div>
-                                  </div>
-                                  <br>
-                                  <div class="row">
-                                      <div class="col-md-3">
-                                          <button onclick="$(this).go(7,false);" class="btn btn-success btn-lg btn-block">7</button>
-                                      </div>
-                                      <div class="col-md-3">
-                                          <button onclick="$(this).go(8,false);" class="btn btn-success btn-lg btn-block">8</button>
-                                      </div>
-                                      <div class="col-md-3">
-                                          <button onclick="$(this).go(9,false);" class="btn btn-success btn-lg btn-block">9</button>
-                                      </div>
-                                      <div class="col-md-3"></div>
-                                  </div>
-                                  <br>
-                                  <div class="row">
-                                      <div class="col-md-3">
-                                          <button onclick="$('#payment').val($('#payment').val().substr(0,$('#payment').val().length -1));$(this).calculateChange();" class="btn btn-success btn-lg btn-block">⌫</button>
-                                      </div>
-                                      <div class="col-md-3">
-                                          <button onclick="$(this).go(0,false);" class="btn btn-success btn-lg btn-block">0</button>
-                                      </div>
-                                      <div class="col-md-3">
-                                          <button onclick="$(this).digits()" class="btn btn-success btn-lg btn-block">.</button>
-                                      </div>
-                                      <div class="col-md-3"></div>
-                                  </div>
-                              </div>
-                              <div class="col-md-3">
-                                  <button onclick="$('#payment').val('');$(this).calculateChange();" class="btn btn-danger btn-block btn-lg">AC</button>
-                              </div>
-                          </div>
-                          <br>
                           <div class="input-group" id="cardInfo">
-                              <span class="input-group-addon" id="basic-addon3">Card Info </span>
-                              <input type="text" class="form-control" id="paymentInfo" aria-describedby="basic-addon3">
+                              <span class="input-group-addon">Card Info</span>
+                              <input type="text" class="form-control" id="paymentInfo">
                           </div>
                           <!-- customer paid more than the bill: keep the extra for the next bill -->
                           <div id="advanceKeepRow" class="advance-keep" style="display: none;">
@@ -629,20 +584,20 @@
                                   <b id="advanceKeepCustomer"></b>'s next bill (no change given)
                               </label>
                           </div>
+                          <!-- split payment: part paid now, the rest on the customer's credit -->
+                          <div id="creditRemainderRow" class="credit-remainder" style="display: none;">
+                              <label>
+                                  <input type="checkbox" id="creditRemainder">
+                                  Put the remaining <b id="creditRemainderAmount">0.00</b> on
+                                  <b id="creditRemainderCustomer"></b>'s credit (part payment)
+                              </label>
+                          </div>
                       </div>
                   </div>
               </div>
-              <div class="modal-footer">
-                  <div class="row">
-                      <div class="col-md-6">
-                        <div class="btn btn-primary btn-block btn-lg waves-effect waves-light">Change <span id="change_curr"></span><span id="change"></span> </div>
-                      </div>
-                      <div class="col-md-6">
-                        <button type="button" id="confirmPayment" class="btn btn-default btn-block btn-lg waves-effect waves-light">Confirm Payment</button>
-                    </div>
-                  </div>
-                  
-                  
+              <div class="modal-footer pay-footer">
+                  <div class="pay-change">Change <span id="change_curr"></span><span id="change"></span></div>
+                  <button type="button" id="confirmPayment" class="btn btn-success pay-confirm waves-effect waves-light"><i class="fa fa-check"></i> Confirm Payment</button>
               </div>
           </div><!-- /.modal-content -->
       </div><!-- /.modal-dialog -->

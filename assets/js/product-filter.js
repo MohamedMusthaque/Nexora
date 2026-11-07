@@ -128,12 +128,21 @@ $(document).ready(function(){
         $("#advanceKeepAmount").text(($("#payment_curr").text() || "") + extra.toFixed(2));
         var keep = canKeep && $("#keepAsAdvance").is(":checked");
 
+        // split payment: a registered customer paying part now (Cash / Card /
+        // Bank Transfer) can put the rest on their credit
+        var short = Math.max(payable - paid, 0);
+        var canSplit = !!$("#paymentModel").data("advanceCustomer") && paid > 0.004 && short > 0.004 && !$("#credit").hasClass("active");
+        $("#creditRemainderRow").toggle(canSplit);
+        if (!canSplit) $("#creditRemainder").prop("checked", false);
+        $("#creditRemainderAmount").text(($("#payment_curr").text() || "") + short.toFixed(2));
+        var split = canSplit && $("#creditRemainder").is(":checked");
+
         if(change <= 0){
             $("#change").text(keep ? "0.00" : change.toFixed(2));
         }else{
             $("#change").text('0')
         }
-        if(change <= 0){
+        if(change <= 0 || split){
             $("#confirmPayment").show();
         }else{
             $("#confirmPayment").hide();

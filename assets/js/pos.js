@@ -1382,19 +1382,46 @@ if (!authedThisSession) {
       $("#advanceKeepCustomer").text(registered ? customer.name : "");
       $("#useAdvance").prop("checked", false);
       $("#keepAsAdvance").prop("checked", false);
+      // split payment (part now, rest on credit) starts unticked
+      $("#creditRemainder").prop("checked", false);
+      $("#creditRemainderRow").hide();
+      $("#creditRemainderCustomer").text(registered ? customer.name : "");
       $("#advancePanel").hide();
       $("#advanceKeepRow").hide();
       applyPaymentAdvance();
-      if (!registered) return;
+      if (!registered) return $.Deferred().resolve().promise();
 
       let requestId = paymentAdvance.requestId;
-      $.get(api + "customer-advance/" + customer.id).done(function (data) {
+      return $.get(api + "customer-advance/" + customer.id).done(function (data) {
         if (requestId !== paymentAdvance.requestId) return; // window reopened meanwhile
         paymentAdvance.balance = parseFloat(data && data.balance) || 0;
         $("#advanceAvailable").text(advanceMoney(paymentAdvance.balance));
         updateAdvanceForPaymentType();
       });
     }
+
+    // Print the bill before paying (POS screen Print button): looks up a
+    // registered customer's advance and shows it deducted.
+    $.fn.printBill = function () {
+      if (!cart.length) {
+        Swal.fire("Oops!", "There is nothing to print!", "warning");
+        return;
+      }
+      let self = this;
+      // the method isn't chosen yet: print as unpaid, with the advance deducted
+      let customer = JSON.parse($("#customer").val());
+      $("#payment").val("");
+      setupPaymentAdvance(customer).always(function () {
+        let savedType = paymentType;
+        paymentType = 1;
+        updateAdvanceForPaymentType();
+        try {
+          $(self).submitDueOrder(3);
+        } finally {
+          paymentType = savedType;
+        }
+      });
+    };
 
     // A registered customer's advance is deducted from the bill automatically.
     // Credit sales can't use or save advance (the customer pays later), so
@@ -1431,9 +1458,18 @@ if (!authedThisSession) {
     }
 
     $("#useAdvance").on("change", applyPaymentAdvance);
-    $("#keepAsAdvance").on("change", function () {
+    $("#keepAsAdvance, #creditRemainder").on("change", function () {
       $(this).calculateChange();
     });
+
+    // split payment: what's left on credit after the advance and the amount paid now
+    function splitCreditAmount() {
+      if (paymentType === 5) return 0;
+      if (!$("#creditRemainder").is(":checked") || !$("#creditRemainderRow").is(":visible")) return 0;
+      let toPay = parseFloat($("#payablePrice").val()) || 0;
+      let paidNow = parseFloat($("#payment").val()) || 0;
+      return Math.max(Math.round((toPay - paidNow) * 100) / 100, 0);
+    }
 
     $("#hold").on("click", function () {
       if (cart.length != 0) {
@@ -1483,11 +1519,13 @@ if (!authedThisSession) {
     $.fn.submitDueOrder = function (status, creditChecked) {
       // Credit sales must fit within the customer's credit limit (if any).
       // Printing (status 3) doesn't save anything, so it isn't checked.
-      if (paymentType === 5 && status != 3 && !creditChecked) {
+      let splitPart = status == 1 ? splitCreditAmount() : 0;
+      if ((paymentType === 5 || splitPart > 0) && status != 3 && !creditChecked) {
         let creditCustomer = JSON.parse($("#customer").val());
         if (creditCustomer != 0) {
           let self = this;
-          checkCreditLimit(creditCustomer, orderTotal, holdOrder || null).then(
+          // a split payment only puts the remaining part on credit
+          checkCreditLimit(creditCustomer, splitPart > 0 ? splitPart : orderTotal, holdOrder || null).then(
             (ok) => {
               if (ok) $(self).submitDueOrder(status, true);
             }
@@ -1560,7 +1598,9 @@ if (!authedThisSession) {
       // advance used towards the bill, and any extra paid kept for the next bill
       let advanceUsed = 0;
       let advanceDeposit = 0;
-      if (status == 1 && type !== "Credit" && paymentAdvance.customer) {
+      // status 1 = paying now, status 3 = printing the bill before paying (same figures)
+      let showsPayment = status == 1 || status == 3;
+      if (showsPayment && type !== "Credit" && paymentAdvance.customer) {
         advanceUsed = paymentAdvance.applied || 0;
         if ($("#keepAsAdvance").is(":checked") && $("#advanceKeepRow").is(":visible")) {
           let toPay = parseFloat($("#payablePrice").val()) || 0;
@@ -1568,12 +1608,51 @@ if (!authedThisSession) {
           if (advanceDeposit > 0) change = "0.00"; // no change given: it's kept
         }
       }
+      // split payment: the rest of the bill goes on the customer's credit
+      let creditPart = showsPayment && type !== "Credit" && paymentAdvance.customer ? splitCreditAmount() : 0;
+      if (creditPart > 0) change = "0.00";
+      let methodLabel = creditPart > 0 ? type + " + Credit" : type;
+
       // the customer's advance after this bill (shown on the receipt, saved with the sale)
       let advanceAfter =
-        status == 1 && type !== "Credit" && paymentAdvance.customer
+        showsPayment && type !== "Credit" && paymentAdvance.customer
           ? Math.max(Math.round((paymentAdvance.balance - advanceUsed + advanceDeposit) * 100) / 100, 0)
           : null;
 
+      // a bill printed before paying in full: what's still owed (not on credit)
+      let balanceDue = 0;
+      if (status == 3 && paid != "") {
+        let toPayNow = Math.max((parseFloat(orderTotal) || 0) - advanceUsed, 0);
+        balanceDue = Math.round((toPayNow - (parseFloat(paid) || 0) - creditPart) * 100) / 100;
+        if (balanceDue < 0.005) balanceDue = 0;
+      }
+
+      if (paid == "" && advanceUsed > 0) {
+        // printed bill before any payment: the advance is already deducted
+        payment = `<tr>
+                        <td>Advance used</td>
+                        <td>:</td>
+                        <td>-${settings.symbol + advanceUsed.toFixed(2)}</td>
+                    </tr>
+                    <tr>
+                        <td><b>Amount to pay</b></td>
+                        <td>:</td>
+                        <td><b>${settings.symbol + Math.max((parseFloat(orderTotal) || 0) - advanceUsed, 0).toFixed(2)}</b></td>
+                    </tr>`;
+      }
+      if (status == 3 && paid == "" && type === "Credit" && customer != 0) {
+        // printed bill for a credit sale (registered customers only)
+        payment = `<tr>
+                        <td><b>On credit</b></td>
+                        <td>:</td>
+                        <td><b>${settings.symbol + (parseFloat(orderTotal) || 0).toFixed(2)}</b></td>
+                    </tr>
+                    <tr>
+                        <td>Method</td>
+                        <td>:</td>
+                        <td>Credit</td>
+                    </tr>`;
+      }
       if (paid != "") {
         payment = `${
                       advanceUsed > 0
@@ -1588,17 +1667,32 @@ if (!authedThisSession) {
                         <td><b>${settings.symbol + Math.max((parseFloat(orderTotal) || 0) - advanceUsed, 0).toFixed(2)}</b></td>
                     </tr>`
                         : ""
-                    }<tr>
-                        <td>Paid</td>
+                    }                    <tr>
+                        <td>Paid${creditPart > 0 ? " (" + type + ")" : ""}</td>
                         <td>:</td>
                         <td>${settings.symbol + paid}</td>
-                    </tr>
-                    <tr>
+                    </tr>${
+                      creditPart > 0
+                        ? `<tr>
+                        <td><b>On credit</b></td>
+                        <td>:</td>
+                        <td><b>${settings.symbol + creditPart.toFixed(2)}</b></td>
+                    </tr>`
+                        : ""
+                    }
+                    <tr>${
+                      balanceDue > 0
+                        ? `
+                        <td><b>Balance due</b></td>
+                        <td>:</td>
+                        <td><b>${settings.symbol + balanceDue.toFixed(2)}</b></td>`
+                        : `
                         <td>Change</td>
                         <td>:</td>
                         <td>${
                           settings.symbol + Math.abs(change).toFixed(2)
-                        }</td>
+                        }</td>`
+                    }
                     </tr>${
                       advanceDeposit > 0
                         ? `<tr>
@@ -1611,7 +1705,7 @@ if (!authedThisSession) {
                     <tr>
                         <td>Method</td>
                         <td>:</td>
-                        <td>${type}</td>
+                        <td>${methodLabel}</td>
                     </tr>${
                       (advanceUsed > 0 || advanceDeposit > 0) && advanceAfter !== null
                         ? `<tr>
@@ -1737,6 +1831,13 @@ if (!authedThisSession) {
 
       if (status == 3) {
         if (cart.length > 0) {
+          // printed before the payment is confirmed: say so on the bill
+          receipt = receipt.replace(
+            "</tbody>",
+            `<tr><td>Status</td><td>:</td><td><b>${
+              paid == "" ? "Not paid yet" : "Payment not confirmed"
+            }</b></td></tr></tbody>`
+          );
           printJS({
             printable: receipt,
             type: "raw-html",
@@ -1774,6 +1875,8 @@ if (!authedThisSession) {
         // customer advance: used towards this bill / extra kept for the next bill
         advance_used: advanceUsed ? advanceUsed.toFixed(2) : "",
         advance_deposit: advanceDeposit ? advanceDeposit.toFixed(2) : "",
+        // split payment: part of the bill put on the customer's credit
+        credit_amount: creditPart > 0 ? creditPart : 0,
         advance_balance_after:
           (advanceUsed || advanceDeposit) && advanceAfter !== null ? advanceAfter.toFixed(2) : "",
         _id: orderNumber,
@@ -2941,7 +3044,8 @@ if (!authedThisSession) {
       // payment type + date range; the totals below follow both filters
       customerTransactions = customerTransactionsAll.filter(
         (t) =>
-          (filter === "all" || t.payment_type === filter) &&
+          (filter === "all" || t.payment_type === filter ||
+            (filter === "Credit" && parseFloat(t.credit_amount) > 0)) && // split payments have a credit part
           customerTxnDateFilter.matches(t.date)
       );
 
@@ -2954,12 +3058,24 @@ if (!authedThisSession) {
       customerTransactions.forEach((trans, index) => {
         let amount = parseFloat(trans.total) || 0;
         total += amount;
-        if (trans.payment_type === "Credit") creditTotal += amount;
-        else paidTotal += amount;
+        // credit part: the whole Credit sale, or the credit part of a split payment
+        let creditPartOf = saleCreditPart(trans);
+        creditTotal += creditPartOf;
+        paidTotal += amount - creditPartOf;
 
         let settle = creditSaleStatus[String(trans._id)];
+        let settleLabel =
+          settle === "settled"
+            ? ' <span class="label label-success" title="Paid back in full">Settled</span>'
+            : settle === "partial"
+            ? ' <span class="label label-info" title="Partly paid back">Partly settled</span>'
+            : ' <span class="label label-danger" title="Not paid back yet">Unpaid</span>';
         let typeLabel =
-          trans.payment_type === "Credit"
+          trans.payment_type !== "Credit" && creditPartOf > 0
+            ? '<span class="label label-success">' + trans.payment_type + "</span>" +
+              ' <span class="label label-warning" title="Part of this bill was put on credit">+ Credit ' +
+              sym + creditPartOf.toFixed(2) + "</span>" + settleLabel
+            : trans.payment_type === "Credit"
             ? '<span class="label label-warning">Credit</span>' +
               (settle === "settled"
                 ? ' <span class="label label-success" title="Paid back in full">Settled</span>'
@@ -3117,14 +3233,22 @@ if (!authedThisSession) {
         });
     }
 
+    // how much of a sale went on credit: the whole Credit sale, or the credit
+    // part of a split payment (same rule as the server)
+    function saleCreditPart(t) {
+      let part = parseFloat(t.credit_amount);
+      if (t.payment_type === "Credit") return part > 0 ? part : parseFloat(t.total) || 0;
+      return part > 0 ? part : 0;
+    }
+
     function computeCreditSaleStatus() {
       creditSaleStatus = {};
       let left = creditState.paid;
       customerTransactionsAll
-        .filter((t) => t.payment_type === "Credit")
+        .filter((t) => saleCreditPart(t) > 0)
         .sort((a, b) => new Date(a.date) - new Date(b.date))
         .forEach((t) => {
-          let total = parseFloat(t.total) || 0;
+          let total = saleCreditPart(t);
           let status = left >= total - 0.005 ? "settled" : left > 0.005 ? "partial" : "unpaid";
           left = Math.max(left - total, 0);
           creditSaleStatus[String(t._id)] = status;
@@ -4786,7 +4910,11 @@ function loadTransactions() {
                                       Math.abs(trans?.change).toFixed(2)
                                     : ""
                                 }</td>
-                                <td>${trans?.payment_type}</td>
+                                <td>${trans?.payment_type}${
+                                  trans?.payment_type !== "Credit" && parseFloat(trans?.credit_amount) > 0
+                                    ? " + Credit"
+                                    : ""
+                                }</td>
                                 <td>${trans?.till}</td>
                                 <td>${trans?.user}</td>
                                 <td>${
@@ -5003,6 +5131,7 @@ $.fn.viewTransaction = function (index, source) {
     let advUsed = parseFloat(trans?.advance_used) || 0;
     let advKept = parseFloat(trans?.advance_deposit) || 0;
     let advAfter = trans?.advance_balance_after;
+    let onCredit = trans?.payment_type !== "Credit" ? parseFloat(trans?.credit_amount) || 0 : 0;
     payment = `${
                   advUsed > 0
                     ? `<tr>
@@ -5016,11 +5145,19 @@ $.fn.viewTransaction = function (index, source) {
                     <td><b>${settings.symbol + Math.max((parseFloat(trans?.total) || 0) - advUsed, 0).toFixed(2)}</b></td>
                 </tr>`
                     : ""
-                }<tr>
-                    <td>Paid</td>
+                }                <tr>
+                    <td>Paid${onCredit > 0 ? " (" + trans?.payment_type + ")" : ""}</td>
                     <td>:</td>
                     <td>${settings.symbol + trans?.paid}</td>
-                </tr>
+                </tr>${
+                  onCredit > 0
+                    ? `<tr>
+                    <td><b>On credit</b></td>
+                    <td>:</td>
+                    <td><b>${settings.symbol + onCredit.toFixed(2)}</b></td>
+                </tr>`
+                    : ""
+                }
                 <tr>
                     <td>Change</td>
                     <td>:</td>
@@ -5040,7 +5177,7 @@ $.fn.viewTransaction = function (index, source) {
                 <tr>
                     <td>Method</td>
                     <td>:</td>
-                    <td>${trans?.payment_type}</td>
+                    <td>${trans?.payment_type}${onCredit > 0 ? " + Credit" : ""}</td>
                 </tr>${
                   advAfter !== undefined && advAfter !== null && advAfter !== ""
                     ? `<tr>
