@@ -6,6 +6,7 @@
 
   **A modern, offline-first Desktop Point of Sale (POS) system built with Electron and Node.js**
 
+  [![Version](https://img.shields.io/badge/Version-1.0.1-success.svg)](#-whats-new-in-101)
   [![Node.js Version](https://img.shields.io/badge/Node.js-%3E%3D16.14.0-brightgreen.svg)](https://nodejs.org/)
   [![Electron Version](https://img.shields.io/badge/Electron-43.4-blue.svg)](https://www.electronjs.org/)
   [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#building--packaging)
@@ -24,6 +25,7 @@
 ## 📋 Table of Contents
 
 - [Overview](#-overview)
+- [What's New in 1.0.1](#-whats-new-in-101)
 - [Key Features](#-key-features)
 - [Default Login Credentials](#-default-login-credentials)
 - [Prerequisites](#-prerequisites)
@@ -46,6 +48,38 @@ Whether operating on a standalone checkout computer or configured across multipl
 
 ---
 
+## 🆕 What's New in 1.0.1
+
+**Customers & credit**
+- Customer credit accounts with an **unlimited** or **limited** credit option per customer; the limit is checked at the till.
+- **Credit settlement** with printed payment receipts; any overpayment is kept as advance.
+- **Customer advance**: extra paid at the till or at settlement is saved for the next bill, deducted automatically, and shown on the bill.
+- **Customer Transactions** window with tabs for Transactions, Credit payments and Advance, each with date filter, search and Excel / PDF export.
+
+**Payments**
+- New **Bank Transfer** and **Credit** payment methods (Credit is for registered customers only).
+- **Partial payment**: a registered customer can pay part by Cash / Card / Bank Transfer and put the rest on credit; the bill shows the split.
+- Redesigned, compact **Payment** window that fits every screen size.
+- The bill printed before payment shows any advance deducted.
+
+**Products & profit**
+- **Cost price** and **selling price** per product (positive numbers only).
+- **Profit** section on the Transactions page with its own date filter.
+- **Product History**: sales, stock adjustments and edits for each product.
+
+**Transactions & reports**
+- Transactions page lists **all** sales (paid and credit) by default, newest first.
+- Filters for **Cashier**, **Status**, **Payment Method** (Cash, Card, Bank Transfer, Credit, Partial Payment) and **date range**.
+- Invoice table shows the **customer** and the **remaining** amount on credit, and fits the screen without sideways scrolling.
+- Styled **Excel (`.xlsx`)** and **PDF** exports on every list, with date filters defaulting to *All dates*.
+
+**Other**
+- Pop-up windows always fit the screen and scroll; consistent table toolbars and pagination.
+- Show / hide buttons on password fields.
+- M-Pesa and the Till filter have been removed.
+
+---
+
 ## ✨ Key Features
 
 - **🛒 Point of Sale & Billing**:
@@ -53,16 +87,24 @@ Whether operating on a standalone checkout computer or configured across multipl
   - Category-based product catalog grid for quick touch/mouse selection.
   - Multi-order tabs (open / held orders) for handling simultaneous customer queues.
   - Customer assignment, customizable tax calculation, discounts, and real-time total updates.
+  - Returns / refunds and exchanges against earlier invoices.
 
 - **💳 Multiple Payment Methods**:
-  - **Cash**: Automated change calculation.
-  - **Card**: Integrated digital card processing (Stripe compatible).
-  - **M-Pesa**: Direct mobile money payment support.
+  - **Cash**: Automated change calculation, with the option to keep extra as customer advance.
+  - **Card** and **Bank Transfer**: Record the payment with a reference.
+  - **Credit**: Put the bill on a registered customer's account (within their credit limit).
+  - **Partial payment**: Pay part now and the rest on credit (registered customers).
+
+- **👤 Customers, Credit & Advance**:
+  - Customer register with unlimited or limited credit.
+  - Full transaction history per customer, credit balance and settlement.
+  - Advance balance that is used automatically on the next bill.
 
 - **📦 Inventory & Stock Management**:
   - Comprehensive stock tracking with real-time stock deductions upon sale.
   - Low-stock visual alerts to prevent out-of-stock scenarios.
-  - Product image uploads and category organization.
+  - Cost and selling prices, product image uploads and category organization.
+  - Product history of sales, stock adjustments and edits.
   - Built-in barcode generation (`JsBarcode`) and printable label exports.
 
 - **👥 User Roles & Permissions**:
@@ -76,9 +118,9 @@ Whether operating on a standalone checkout computer or configured across multipl
   - PDF export for customer invoices and barcode labels.
 
 - **📊 Sales Analytics & Reporting**:
-  - Filter transactions by till, cashier, date range, or payment status.
-  - Interactive sales performance graphs and charts.
-  - One-click export of sales records to Excel (`.xlsx`).
+  - Filter transactions by cashier, payment status, payment method, or date range.
+  - Sales, transactions, items sold and products totals, plus a profit report.
+  - One-click export of lists and reports to Excel (`.xlsx`) and PDF.
 
 - **🌐 Multi-Till Network Support**:
   - Run the central database server on a main host PC (`PORT 8001`).
@@ -198,7 +240,7 @@ Nexora/
 
 By default, NEXORA stores databases and media uploads locally under:
 - **Default Path**: `<UserHome>/Nexora/POS/` (or `%APPDATA%/POS` on Windows)
-  - `server/databases/*.db`: Lightweight NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`).
+  - `server/databases/*.db`: Lightweight NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`, `returns.db`, `credit_payments.db`, `customer_advances.db`, `product_history.db`).
   - `uploads/`: Uploaded product pictures and company receipt logos.
 - **Application Logs**: Saved under `<userData>/nexora.log`.
 
