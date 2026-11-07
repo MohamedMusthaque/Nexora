@@ -70,7 +70,6 @@ let user = {};
 // the default). Kept in sync with the date filter set up below.
 let start_date = "";
 let end_date = "";
-let by_till = 0;
 let by_user = 0;
 let by_status = 2; // Transactions page shows all sales (paid + credit) by default
 let by_method = ""; // Payment Method filter: "" (all), Cash, Card, Bank Transfer, Credit, Partial
@@ -78,7 +77,7 @@ let by_method = ""; // Payment Method filter: "" (all), Cash, Card, Bank Transfe
 // query string shared by the Transactions list and the Profit section
 function transactionFilterQuery(start, end) {
   return (
-    `by-date?start=${start}&end=${end}&user=${by_user}&status=${by_status}&till=${by_till}` +
+    `by-date?start=${start}&end=${end}&user=${by_user}&status=${by_status}` +
     `&method=${encodeURIComponent(by_method)}`
   );
 }
@@ -4885,7 +4884,6 @@ function loadProfit(transactions, requestId) {
 }
 
 function loadTransactions() {
-  let tills = [];
   let users = [];
   let sales = 0;
   let transact = 0;
@@ -4916,10 +4914,6 @@ function loadTransactions() {
         trans?.items?.forEach((item) => {
           sold_items.push(item);
         });
-
-        if (!tills?.includes(trans?.till)) {
-          tills.push(trans?.till);
-        }
 
         if (!users.includes(trans?.user_id)) {
           users.push(trans?.user_id);
@@ -4987,9 +4981,7 @@ function loadTransactions() {
                                     ? (trans?.payment_type || "") + " + Credit (Partial)"
                                     : trans?.payment_type || ""
                                 )}">${methodCell}</td>
-                                <td data-export="${txnHtml((trans?.user || "") + " (Till " + (trans?.till ?? "") + ")")}">${txnHtml(
-                                  trans?.user || ""
-                                )}<small class="txn-sub">Till ${txnHtml(trans?.till ?? "")}</small></td>
+                                <td>${txnHtml(trans?.user || "")}</td>
                                 <td><button onClick="$(this).viewTransaction(${index})" class="btn btn-info btn-sm txn-view" title="View invoice"><i class="fa fa-search-plus"></i></button></td></tr>
                     `;
 
@@ -5027,9 +5019,8 @@ function loadTransactions() {
 
           loadSoldProducts();
 
-          if (by_user == 0 && by_till == 0) {
+          if (by_user == 0) {
             userFilter(users);
-            tillFilter(tills);
           }
 
           $("#transaction_list").html(transaction_list);
@@ -5047,7 +5038,6 @@ function loadTransactions() {
                     $("#transactionsDateRange .date-range-label").text() || "All dates",
                     "Status: " + $("#status option:selected").text(),
                     by_method ? "Method: " + $("#paymentMethodFilter option:selected").text() : "",
-                    $("#tills").val() && $("#tills").val() != 0 ? "Till: " + $("#tills option:selected").text() : "",
                     $("#users").val() && $("#users").val() != 0 ? "Cashier: " + $("#users option:selected").text() : "",
                   ].filter(Boolean).join("   ·   "),
                 exportColumns: [0, 1, 2, 3, 4, 5, 6, 7, 8],
@@ -5145,14 +5135,6 @@ function userFilter(users) {
     });
 
     $("#users").append(`<option value="${user}">${u[0]?.fullname}</option>`);
-  });
-}
-
-function tillFilter(tills) {
-  $("#tills").empty();
-  $("#tills").append(`<option value="0">All</option>`);
-  tills.forEach((till) => {
-    $("#tills").append(`<option value="${till}">${till}</option>`);
   });
 }
 
@@ -5739,11 +5721,6 @@ $("#status").change(function () {
 
 $("#paymentMethodFilter").change(function () {
   by_method = $(this).val() || "";
-  loadTransactions();
-});
-
-$("#tills").change(function () {
-  by_till = parseInt($(this).find("option:selected").val()) || 0;
   loadTransactions();
 });
 
