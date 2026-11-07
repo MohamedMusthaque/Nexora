@@ -72,7 +72,44 @@ let start_date = "";
 let end_date = "";
 let by_till = 0;
 let by_user = 0;
-let by_status = 1;
+let by_status = 2; // Transactions page shows all sales (paid + credit) by default
+let by_method = ""; // Payment Method filter: "" (all), Cash, Card, Bank Transfer, Credit, Partial
+
+// query string shared by the Transactions list and the Profit section
+function transactionFilterQuery(start, end) {
+  return (
+    `by-date?start=${start}&end=${end}&user=${by_user}&status=${by_status}&till=${by_till}` +
+    `&method=${encodeURIComponent(by_method)}`
+  );
+}
+
+// ---- Transactions list helpers ----
+function txnHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+// registered customer's name, or "" for a walk-in customer
+function transactionCustomerName(customer) {
+  if (!customer || customer == 0) return "";
+  if (typeof customer === "string") {
+    try {
+      customer = JSON.parse(customer);
+    } catch (e) {
+      return customer;
+    }
+  }
+  return (customer && customer.name) || "";
+}
+
+// how much of a sale was left on the customer's credit: the whole bill for
+// a Credit sale, the unpaid part of a partial payment (same rule as the server)
+function txnCreditPart(t) {
+  let part = parseFloat(t && t.credit_amount);
+  if (t && t.payment_type === "Credit") return part > 0 ? part : parseFloat(t.total) || 0;
+  return part > 0 ? part : 0;
+}
 
 // ======================================================================
 // Popups (Bootstrap 3 modals): keep them scrollable
@@ -574,9 +611,11 @@ function standardTableOptions(o) {
           subtitle: o.exportSubtitle,
         })
       : [],
-    columnDefs: o.actionColumns
+    // hiddenColumns: not shown on screen, still in the Excel / PDF exports
+    columnDefs: (o.actionColumns
       ? [{ targets: o.actionColumns, orderable: false, searchable: false }]
-      : [],
+      : []
+    ).concat(o.hiddenColumns ? [{ targets: o.hiddenColumns, visible: false }] : []),
     language: {
       search: "_INPUT_",
       searchPlaceholder: o.searchPlaceholder || "Search...",
@@ -4741,7 +4780,8 @@ function renderProfit(result) {
   $("#profitPeriod").text(
     ($("#profitDateRange .date-range-label").text() || "All dates") +
       " · " +
-      ($("#status option:selected").text() || "Paid")
+      ($("#status option:selected").text() || "All") +
+      (by_method ? " · " + $("#paymentMethodFilter option:selected").text() : "")
   );
   $("#profitNetSales").text(money(t.netSales));
   $("#profitCost").text(money(t.cost));
@@ -4815,7 +4855,7 @@ function refreshProfit() {
   let range = profitDateFilter ? profitDateFilter.getRange() : null;
   let start = range ? range.start.toDate().toJSON() : "";
   let end = range ? range.end.toDate().toJSON() : "";
-  $.get(api + `by-date?start=${start}&end=${end}&user=${by_user}&status=${by_status}&till=${by_till}`)
+  $.get(api + transactionFilterQuery(start, end))
     .done((transactions) => {
       if (requestId !== profitRequestId) return; // a newer filter change won
       loadProfit(transactions || [], requestId);
@@ -4856,7 +4896,7 @@ function loadTransactions() {
 
   let counter = 0;
   let transaction_list = "";
-  let query = `by-date?start=${start_date}&end=${end_date}&user=${by_user}&status=${by_status}&till=${by_till}`;
+  let query = transactionFilterQuery(start_date, end_date);
 
   $.get(api + query, function (transactions) {
     if (transactions.length > 0) {
@@ -4893,37 +4933,64 @@ function loadTransactions() {
             ? ' <span class="label label-warning">Partial Return</span>'
             : "";
 
+        // customer: registered (name) or walk-in
+        let custName = transactionCustomerName(trans?.customer);
+        let customerCell = custName
+          ? `<span class="txn-customer">${txnHtml(custName)}</span>`
+          : '<span class="txn-walkin">Walk in customer</span>';
+
+        // what's left on the customer's credit: the whole bill for a Credit
+        // sale, the unpaid part for a partial payment
+        let remaining = txnCreditPart(trans);
+        let isPartial = trans?.payment_type !== "Credit" && remaining > 0;
+        let remainingCell =
+          remaining > 0
+            ? `<span class="txn-remaining" title="Put on the customer's credit">${remaining.toFixed(2)}</span>`
+            : "";
+        // amounts without the currency (it's in the column headings) to save width
+        let num = (v) => {
+          let n = parseFloat(v);
+          return isNaN(n) ? "" : n.toFixed(2);
+        };
+        let changeAmount = Math.abs(parseFloat(trans?.change) || 0);
+        let when = moment(trans?.date);
+
+        let methodCell =
+          trans?.payment_type === "Credit"
+            ? '<span class="label label-warning">Credit</span>'
+            : isPartial
+            ? `${txnHtml(trans?.payment_type || "")} + Credit<span class="label label-info txn-partial">Partial payment</span>`
+            : txnHtml(trans?.payment_type || "");
+
         transaction_list += `<tr>
-                                <td>${trans?.order}${returnBadge}</td>
-                                <td class="nobr" data-order="${moment(trans?.date).valueOf() || 0}">${moment(trans?.date).format(
+                                <td class="txn-invoice">${trans?.order}${returnBadge}</td>
+                                <td data-order="${when.valueOf() || 0}" data-export="${when.format(
                                   "DD MMM YYYY, hh:mm:ss A"
-                                )}</td>
-                                <td>${settings.symbol + trans?.total}</td>
-                                <td>${
-                                  trans?.paid == ""
-                                    ? ""
-                                    : settings.symbol + trans?.paid
-                                }</td>
-                                <td>${
-                                  trans?.change
-                                    ? settings.symbol +
-                                      Math.abs(trans?.change).toFixed(2)
+                                )}"><span class="nobr">${when.format("DD MMM YYYY")}</span><small class="txn-sub">${when.format(
+                                  "hh:mm A"
+                                )}</small></td>
+                                <td data-export="${txnHtml(custName || "Walk in customer")}">${customerCell}</td>
+                                <td class="txn-num">${num(trans?.total)}</td>
+                                <td class="txn-num" data-export="${trans?.paid == "" ? "" : num(trans?.paid)}">${
+                                  trans?.paid == "" ? "" : num(trans?.paid)
+                                }${
+                                  changeAmount > 0.004
+                                    ? `<small class="txn-sub">change ${changeAmount.toFixed(2)}</small>`
                                     : ""
                                 }</td>
-                                <td>${trans?.payment_type}${
-                                  trans?.payment_type !== "Credit" && parseFloat(trans?.credit_amount) > 0
-                                    ? " + Credit"
-                                    : ""
-                                }</td>
-                                <td>${trans?.till}</td>
-                                <td>${trans?.user}</td>
-                                <td>${
-                                  trans?.paid == ""
-                                    ? '<button class="btn btn-dark"><i class="fa fa-search-plus"></i></button>'
-                                    : '<button onClick="$(this).viewTransaction(' +
-                                      index +
-                                      ')" class="btn btn-info"><i class="fa fa-search-plus"></i></button></td>'
-                                }</tr>
+                                <td class="txn-num">${changeAmount > 0.004 ? changeAmount.toFixed(2) : ""}</td>
+                                <td class="txn-num">${remainingCell}</td>
+                                <td data-export="${txnHtml(
+                                  trans?.payment_type === "Credit"
+                                    ? "Credit"
+                                    : isPartial
+                                    ? (trans?.payment_type || "") + " + Credit (Partial)"
+                                    : trans?.payment_type || ""
+                                )}">${methodCell}</td>
+                                <td data-export="${txnHtml((trans?.user || "") + " (Till " + (trans?.till ?? "") + ")")}">${txnHtml(
+                                  trans?.user || ""
+                                )}<small class="txn-sub">Till ${txnHtml(trans?.till ?? "")}</small></td>
+                                <td><button onClick="$(this).viewTransaction(${index})" class="btn btn-info btn-sm txn-view" title="View invoice"><i class="fa fa-search-plus"></i></button></td></tr>
                     `;
 
         if (counter == transactions?.length) {
@@ -4966,6 +5033,9 @@ function loadTransactions() {
           }
 
           $("#transaction_list").html(transaction_list);
+          // the currency is shown once in the amount headings
+          let cur = String(settings.symbol || "").trim();
+          $("#transactionList .txn-cur").text(cur ? "(" + cur + ")" : "");
           $("#transactionList").DataTable(
             Object.assign(
               standardTableOptions({
@@ -4976,12 +5046,14 @@ function loadTransactions() {
                   [
                     $("#transactionsDateRange .date-range-label").text() || "All dates",
                     "Status: " + $("#status option:selected").text(),
+                    by_method ? "Method: " + $("#paymentMethodFilter option:selected").text() : "",
                     $("#tills").val() && $("#tills").val() != 0 ? "Till: " + $("#tills option:selected").text() : "",
                     $("#users").val() && $("#users").val() != 0 ? "Cashier: " + $("#users option:selected").text() : "",
                   ].filter(Boolean).join("   ·   "),
-                exportColumns: [0, 1, 2, 3, 4, 5, 6, 7],
-                sumColumns: [2, 3], // Total, Paid
-                actionColumns: [8],
+                exportColumns: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+                sumColumns: [3, 4, 6], // Total, Paid, Remaining
+                actionColumns: [9],
+                hiddenColumns: [5], // Change: shown under Paid on screen, own column in exports
               }),
               { order: [[1, "desc"]] }
             )
@@ -5661,7 +5733,12 @@ $.fn.submitReturn = function () {
 
 $("#status").change(function () {
   let selectedStatus = parseInt($(this).find("option:selected").val());
-  by_status = isNaN(selectedStatus) ? 1 : selectedStatus;
+  by_status = isNaN(selectedStatus) ? 2 : selectedStatus;
+  loadTransactions();
+});
+
+$("#paymentMethodFilter").change(function () {
+  by_method = $(this).val() || "";
   loadTransactions();
 });
 

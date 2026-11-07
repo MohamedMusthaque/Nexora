@@ -474,6 +474,127 @@ body.transactions-mode.totals-compact #totals #counter{
   font-weight: normal;
 }
 
+/* ---- Transactions list: customer, remaining (on credit), partial payment ---- */
+#transactionList .txn-customer{
+  font-weight: 600;
+  color: #36404a;
+}
+#transactionList .txn-walkin{
+  color: #98a6ad;
+  font-style: italic;
+}
+#transactionList .txn-remaining{
+  font-weight: 600;
+  color: #d9822b;
+}
+/* "Partial payment" badge on its own line under "Cash + Credit" */
+#transactionList .txn-partial{
+  display: table;
+  margin-top: 3px;
+  font-size: 10px;
+}
+/* All columns fit the invoice area without sideways scrolling: compact
+   cells, second lines (time, till) under the main value, amounts without
+   the currency (it's in the headings). */
+#transactionList{
+  width: 100% !important;
+}
+#transactionList > thead > tr > th,
+#transactionList > tbody > tr > td{
+  padding: 8px 5px;
+  font-size: 13px;
+  vertical-align: top;
+}
+/* !important: dataTables.bootstrap pads sortable headings by 30px for the arrows */
+#transactionList > thead > tr > th{
+  padding-right: 16px !important;
+  white-space: nowrap;
+  font-size: 12.5px;
+}
+#transactionList > thead > tr > th.txn-num{
+  text-align: right;
+}
+/* "(Rs.)" on a second line under the amount headings */
+#transactionList > thead .txn-cur{
+  display: block;
+  font-weight: normal;
+  font-size: 11px;
+  color: #98a6ad;
+}
+#transactionList .txn-num{
+  text-align: right;
+  white-space: nowrap;
+}
+#transactionList .nobr{
+  white-space: nowrap;
+}
+#transactionList .txn-sub{
+  display: block;
+  font-size: 11px;
+  color: #98a6ad;
+  white-space: nowrap;
+}
+#transactionList .txn-invoice .label{
+  display: table;
+  margin-top: 3px;
+  font-size: 10px;
+}
+#transactionList .txn-view{
+  padding: 3px 8px;
+}
+/* the invoice area no longer needs its own sideways scrollbar */
+.leftMargin{
+  overflow-x: visible !important;
+}
+/* medium screens: a bit smaller still */
+@media (max-width: 1365px){
+  #transactionList > thead > tr > th,
+  #transactionList > tbody > tr > td{
+    font-size: 12px;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  #transactionList > thead > tr > th{
+    padding-right: 14px !important;
+    font-size: 11.5px;
+  }
+}
+/* badges may wrap ("Partial / payment") so they never widen a column */
+#transactionList .txn-invoice .label,
+#transactionList .txn-partial{
+  white-space: normal;
+  line-height: 1.25;
+  text-align: left;
+}
+/* 992-1199px: the invoice area is narrowest here (65% beside Products) */
+@media (min-width: 992px) and (max-width: 1199px){
+  #transactionList > thead > tr > th,
+  #transactionList > tbody > tr > td{
+    font-size: 11.5px;
+    padding: 7px 3px;
+  }
+  #transactionList > thead > tr > th{
+    padding-right: 12px !important;
+    font-size: 11px;
+  }
+  #transactionList > thead > tr > th.sorting,
+  #transactionList > thead > tr > th.sorting_asc,
+  #transactionList > thead > tr > th.sorting_desc{
+    background-position: center right 1px;
+  }
+  #transactionList .txn-sub{
+    font-size: 10.5px;
+  }
+  #transactionList .txn-invoice .label,
+  #transactionList .txn-partial{
+    font-size: 9.5px;
+    padding: 2px 4px;
+  }
+  #transactionList .txn-view{
+    padding: 2px 6px;
+  }
+}
+
 /* ---- Pay window: compact layout that always fits the screen ----
    (.modal-fit keeps header and footer in place; the body scrolls only on
    very short screens) */

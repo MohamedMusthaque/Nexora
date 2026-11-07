@@ -189,9 +189,20 @@
                         <div class="col-md-1">
                             <span>Status</span>
                             <select id="status" class="form-control status">
-                                <option value="2">All</option>
-                                <option value="1" selected>Paid</option>
-                                <option value="0">Unpaid</option>
+                                <option value="2" selected>All</option>
+                                <option value="1">Paid</option>
+                                <option value="0">Credit</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <span>Payment Method</span>
+                            <select id="paymentMethodFilter" class="form-control">
+                                <option value="" selected>All</option>
+                                <option value="Cash">Cash</option>
+                                <option value="Card">Card</option>
+                                <option value="Bank Transfer">Bank Transfer</option>
+                                <option value="Credit">Credit</option>
+                                <option value="Partial">Partial Payment</option>
                             </select>
                         </div>
                         <div class="col-md-4">
@@ -262,11 +273,12 @@
                                     <tr>                                                                      
                                         <th>Invoice</th>                                      
                                         <th>Date</th>
-                                        <th>Total</th>
-                                        <th>Paid</th>
-                                        <th>Change</th>
+                                        <th>Customer</th>
+                                        <th class="txn-num">Total <span class="txn-cur"></span></th>
+                                        <th class="txn-num">Paid <span class="txn-cur"></span></th>
+                                        <th class="txn-num">Change <span class="txn-cur"></span></th>
+                                        <th class="txn-num" title="Amount put on the customer's credit (not paid at the till)">Remaining <span class="txn-cur"></span></th>
                                         <th>Method</th>
-                                        <th>Till</th>
                                         <th>Cashier</th>
                                         <th>View</th>
                                     </tr>

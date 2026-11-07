@@ -128,19 +128,33 @@ app.get("/by-date", function(req, res) {
   if (endDate) dateRange.$lte = endDate.toJSON();
   if (startDate || endDate) query.$and.push({ date: dateRange });
 
-  // Paid = Cash / Card / Bank Transfer sales; Unpaid = Credit sales;
-  // ("Mpesa" stays in the list only so sales recorded before Mpesa was
-  // removed from the system still show up in reports)
-  // All (2) = Paid + Unpaid. Held orders (status 0, not Credit) are excluded from all.
-  let paidQuery = { $and: [{ status: 1 }, { payment_type: { $in: ["Cash", "Card", "Bank Transfer", "Mpesa"] } }] };
+  // Paid (1) = completed sales that aren't Credit sales (Cash, Card, Bank
+  // Transfer, and older method names such as Mpesa); Credit (0) = Credit
+  // sales + part-credit sales; All (2) = every completed sale.
+  // Held orders (status 0, not Credit) are excluded from all.
+  let paidQuery = { $and: [{ status: 1 }, { payment_type: { $ne: "Credit" } }] };
   let unpaidQuery = CREDIT_SALES_QUERY; // Credit sales + split payments with a part on credit
 
   if (status === 0) {
     query.$and.push(unpaidQuery);
   } else if (status === 2) {
-    query.$and.push({ $or: [paidQuery, unpaidQuery] });
+    // every completed sale, whatever the method (Cash, Card, Bank Transfer,
+    // Credit, part credit, and any older method names)
+    query.$and.push({ $or: [{ status: 1 }, unpaidQuery] });
   } else {
     query.$and.push(paidQuery);
+  }
+
+  // Payment method: Cash / Card / Bank Transfer = paid in full that way;
+  // Credit = the whole bill on credit; Partial = part paid now, rest on credit
+  let method = String(req.query.method || "");
+  let partOnCredit = { credit_amount: { $gt: 0 } };
+  if (method === "Partial") {
+    query.$and.push({ payment_type: { $ne: "Credit" } }, partOnCredit);
+  } else if (method === "Credit") {
+    query.$and.push({ payment_type: "Credit" });
+  } else if (["Cash", "Card", "Bank Transfer"].includes(method)) {
+    query.$and.push({ payment_type: method }, { $not: partOnCredit });
   }
 
   if (user !== 0) {
@@ -159,19 +173,16 @@ app.get("/by-date", function(req, res) {
 });
 
 
-// All completed (Cash / Card / Bank Transfer) and Credit transactions
-// ("Mpesa" below only matches sales recorded before Mpesa was removed)
-// for one registered customer, newest first. Held orders are excluded.
+// All completed transactions (Cash / Card / Bank Transfer / Credit / part
+// credit, and older method names) for one registered customer, newest
+// first. Held orders are excluded.
 app.get("/by-customer/:customerId", function(req, res) {
   let rawId = req.params.customerId;
   let numericId = parseInt(rawId);
   let ids = isNaN(numericId) ? [rawId] : [numericId, String(numericId)];
 
-  let paidQuery = { $and: [{ status: 1 }, { payment_type: { $in: ["Cash", "Card", "Bank Transfer", "Mpesa"] } }] };
-  let creditQuery = { payment_type: "Credit" };
-
   transactionsDB.find(
-    { $and: [{ "customer.id": { $in: ids } }, { $or: [paidQuery, creditQuery] }] }
+    { $and: [{ "customer.id": { $in: ids } }, { $or: [{ status: 1 }, CREDIT_SALES_QUERY] }] }
   ).sort({ date: -1 }).exec(function(err, docs) {
     if (err) return res.status(500).send(err);
     res.send(docs || []);
