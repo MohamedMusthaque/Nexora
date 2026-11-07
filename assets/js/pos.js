@@ -802,6 +802,7 @@ if (!authedThisSession) {
 
   $.get(api + "users/user/" + user._id, function (data) {
     user = data;
+    applyProfitPermission();
     $("#loggedin-user").text(user.fullname);
     $("#cashier").attr("title", user.fullname);
   });
@@ -866,6 +867,7 @@ if (!authedThisSession) {
     if (0 == user.perm_settings) {
       $(".p_five").hide();
     }
+    applyProfitPermission();
 
     // function to load products
     function loadProducts() {
@@ -2801,6 +2803,8 @@ if (!authedThisSession) {
         $("#perm_settings").prop("checked", false);
       }
 
+      $("#perm_profit").prop("checked", allUsers[index].perm_profit == 1);
+
       $("#userModal").modal("show");
     };
 
@@ -4629,6 +4633,7 @@ if (!authedThisSession) {
       $("#perm_transactions").prop("checked", user.perm_transactions == 1);
       $("#perm_users").prop("checked", user.perm_users == 1);
       $("#perm_settings").prop("checked", user.perm_settings == 1);
+      $("#perm_profit").prop("checked", user.perm_profit == 1);
     });
 
     $("#add-user").click(function () {
@@ -4931,8 +4936,24 @@ function renderProfit(result) {
 // below); Till / Cashier / Status are shared with the Transactions page.
 let profitDateFilter = null;
 
+// The Profit section is only for users with the "View Profit" permission
+// (the Administrator always has it). Users saved before this permission
+// existed have no perm_profit value, so they don't see profit until it is
+// granted in Users.
+function canViewProfit() {
+  return !!(user && (user._id === 1 || user.perm_profit == 1));
+}
+
+function applyProfitPermission() {
+  $("#profitSection").toggle(canViewProfit());
+}
+
 // fetches the sales for the Profit date range + page filters, then shows profit
 function refreshProfit() {
+  if (!canViewProfit()) {
+    $("#profitSection").hide();
+    return;
+  }
   let requestId = ++profitRequestId;
   let range = profitDateFilter ? profitDateFilter.getRange() : null;
   let start = range ? range.start.toDate().toJSON() : "";

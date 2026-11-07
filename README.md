@@ -113,7 +113,7 @@ Whether operating on a standalone checkout computer or configured across multipl
 
 - **👥 User Roles & Permissions**:
   - Multi-staff user accounts.
-  - Granular permissions: control access to Products, Categories, Transactions, Users, and Settings.
+  - Granular permissions: control access to Products, Categories, Transactions, Profit, Users, and Settings.
   - Bootstrap Administrator protection to prevent accidental lockouts.
 
 - **🧾 Receipt & Document Printing**:
