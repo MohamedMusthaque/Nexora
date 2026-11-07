@@ -73,6 +73,9 @@ Whether operating on a standalone checkout computer or configured across multipl
 - Invoice table shows the **customer** and the **remaining** amount on credit, and fits the screen without sideways scrolling.
 - Styled **Excel (`.xlsx`)** and **PDF** exports on every list, with date filters defaulting to *All dates*.
 
+**Settings**
+- **Reset Database**: clears all data (sales, customers, products, store settings and images) while keeping the user accounts, after an automatic backup.
+
 **Other**
 - Pop-up windows always fit the screen and scroll; consistent table toolbars and pagination.
 - Show / hide buttons on password fields.
@@ -130,6 +133,7 @@ Whether operating on a standalone checkout computer or configured across multipl
   - Embedded NoSQL datastores (NeDB) requiring no complex database installations.
   - One-click database backup to timestamped folders.
   - Full restore capability and custom data storage path selector.
+  - Reset Database to start fresh while keeping user accounts (backed up automatically first).
 
 ---
 
@@ -249,6 +253,25 @@ You can access the built-in backup tools directly from the app interface:
 - **Backup**: Exports an exact snapshot of your databases and uploaded media into a timestamped directory (e.g. `Nexora-Backup-YYYY-MM-DD/`).
 - **Restore**: Restores a previously created backup folder with database validation.
 - **Change Storage Location**: Move your datastore root directory to another disk drive or a shared network folder.
+
+### Reset Database
+**Settings > Reset Database** wipes the shop's data so you can start fresh, for example after training or testing:
+
+| Cleared | Kept |
+| :--- | :--- |
+| Sales & transactions (invoices, returns, credit payments, customer advances) | **User accounts** (usernames, passwords and permissions) |
+| Customers | |
+| Products, categories, stock and product history | |
+| Store settings (store name, receipt details, tax, logo) | |
+| Uploaded images | |
+
+How it works:
+1. Type `RESET` to confirm.
+2. A full backup is saved first to `<DataLocation>/Nexora-Backups/Nexora-Backup-Before-Reset-<date>/`.
+3. The app restarts and clears the data during start-up, before the databases are opened.
+
+> [!TIP]
+> A reset can be undone with **Restore Data**: choose the `Nexora-Backup-Before-Reset-...` folder.
 
 ---
 
