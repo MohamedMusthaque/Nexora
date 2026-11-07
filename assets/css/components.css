@@ -892,6 +892,35 @@ body.transactions-mode.totals-compact #totals #counter{
 .ph-footer ul.pagination{
   margin: 0 !important;
 }
+/* Every pager looks like the plain Bootstrap one (Previous | 1 | 2 | Next
+   joined in one bar). jquery.dataTables.min.css adds its own padding, 2px gaps,
+   borders and a dark hover gradient to each <li class="paginate_button">,
+   which split the DataTables pagers into spaced-out boxes; undo that so the
+   Bootstrap .pagination > li > a styles are the only ones that apply. */
+.dataTables_wrapper .dataTables_paginate .paginate_button,
+.dataTables_wrapper .dataTables_paginate .paginate_button:hover,
+.dataTables_wrapper .dataTables_paginate .paginate_button:active,
+.dataTables_wrapper .dataTables_paginate .paginate_button:focus,
+.dataTables_wrapper .dataTables_paginate .paginate_button.current,
+.dataTables_wrapper .dataTables_paginate .paginate_button.current:hover,
+.dataTables_wrapper .dataTables_paginate .paginate_button.disabled,
+.dataTables_wrapper .dataTables_paginate .paginate_button.disabled:hover,
+.dataTables_wrapper .dataTables_paginate .paginate_button.disabled:active{
+  padding: 0 !important;
+  margin: 0 !important;
+  min-width: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+}
+/* links without href (disabled Previous / Next) keep the normal cursor */
+.dataTables_wrapper .dataTables_paginate .paginate_button.disabled > a{
+  cursor: not-allowed;
+}
+.dataTables_wrapper .dataTables_paginate .paginate_button:not(.disabled) > a{
+  cursor: pointer;
+}
 #counter{
   font-size: 25px !important;
   font-weight: bold !important;
