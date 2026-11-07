@@ -858,6 +858,10 @@ if (!authedThisSession) {
     if (0 == user.perm_categories) {
       $(".p_two").hide();
     }
+    // the Products window also holds the Categories tab
+    if (0 == user.perm_products && 0 == user.perm_categories) {
+      $("#productsToolbarGroup").hide();
+    }
     if (0 == user.perm_transactions) {
       $(".p_three").hide();
     }
@@ -2808,12 +2812,49 @@ if (!authedThisSession) {
       $("#userModal").modal("show");
     };
 
+    // Categories live in a tab of the Products window: the category form
+    // replaces that window while open, then the Categories tab comes back
+    let returnToCategoriesTab = false;
+
+    function showProductsTab(tab) {
+      $('#Products .products-tabs a[href="#productsTab' + tab + '"]').tab("show");
+    }
+
+    function openCategoryForm() {
+      returnToCategoriesTab = $("#Products").hasClass("in");
+      $("#Products").modal("hide");
+      $("#newCategory").modal("show");
+    }
+
     $.fn.editCategory = function (index) {
-      $("#Categories").modal("hide");
       $("#categoryName").val(allCategories[index].name);
       $("#category_id").val(allCategories[index]._id);
-      $("#newCategory").modal("show");
+      openCategoryForm();
     };
+
+    $("#addCategoryBtn").on("click", function () {
+      $("#saveCategory").get(0).reset();
+      $("#category_id").val("");
+      openCategoryForm();
+    });
+
+    $("#newCategory").on("hidden.bs.modal", function () {
+      // an edit that was closed without saving must not turn the next add into an update
+      $("#saveCategory").get(0).reset();
+      $("#category_id").val("");
+      if (returnToCategoriesTab) {
+        returnToCategoriesTab = false;
+        showProductsTab("Categories");
+        $("#Products").modal("show");
+      }
+    });
+
+    // the categories table is measured while its tab is hidden
+    $('#Products .products-tabs a[href="#productsTabCategories"]').on("shown.bs.tab", function () {
+      if ($.fn.DataTable.isDataTable("#categoryList")) {
+        $("#categoryList").DataTable().columns.adjust();
+      }
+    });
 
     $.fn.deleteProduct = function (id, imagePath) {
       Swal.fire({
@@ -2895,14 +2936,13 @@ if (!authedThisSession) {
 
     $("#productModal").click(function () {
       loadProductList();
+      loadCategoryList();
+      // users who can only manage categories go straight to that tab
+      showProductsTab(user.perm_products == 0 ? "Categories" : "Products");
     });
 
     $("#usersModal").click(function () {
       loadUserList();
-    });
-
-    $("#categoryModal").click(function () {
-      loadCategoryList();
     });
 
     function loadUserList() {

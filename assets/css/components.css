@@ -356,15 +356,18 @@ body.transactions-mode.totals-compact #totals #counter{
   font-size: 12px;
   color: #98a6ad;
 }
-/* ---- Customer Transactions window: tabs ---- */
-#customerTransactionsModal .customer-tabs{
+/* ---- Customer Transactions window + Products window: tabs ---- */
+#customerTransactionsModal .customer-tabs,
+#Products .customer-tabs{
   margin-top: 16px;
   border-bottom: 2px solid #e3e3e3;
 }
-#customerTransactionsModal .customer-tabs > li{
+#customerTransactionsModal .customer-tabs > li,
+#Products .customer-tabs > li{
   margin-bottom: -2px;
 }
-#customerTransactionsModal .customer-tabs > li > a{
+#customerTransactionsModal .customer-tabs > li > a,
+#Products .customer-tabs > li > a{
   padding: 9px 16px;
   margin-right: 4px;
   border: none;
@@ -374,31 +377,38 @@ body.transactions-mode.totals-compact #totals #counter{
   font-weight: 600;
   background: transparent;
 }
-#customerTransactionsModal .customer-tabs > li > a:hover{
+#customerTransactionsModal .customer-tabs > li > a:hover,
+#Products .customer-tabs > li > a:hover{
   color: #4c5667;
   background: transparent;
   border-bottom-color: #cfd6dc;
 }
 #customerTransactionsModal .customer-tabs > li.active > a,
+#Products .customer-tabs > li.active > a,
 #customerTransactionsModal .customer-tabs > li.active > a:hover,
-#customerTransactionsModal .customer-tabs > li.active > a:focus{
+#Products .customer-tabs > li.active > a:hover,
+#customerTransactionsModal .customer-tabs > li.active > a:focus,
+#Products .customer-tabs > li.active > a:focus{
   color: #3e9e8a;
   border: none;
   border-bottom: 2px solid #5fbeaa;
   background: transparent;
 }
-#customerTransactionsModal .customer-tabs .badge{
+#customerTransactionsModal .customer-tabs .badge,
+#Products .customer-tabs .badge{
   margin-left: 4px;
   background: #e8ecef;
   color: #4c5667;
   font-weight: 600;
 }
-#customerTransactionsModal .customer-tabs > li.active .badge{
+#customerTransactionsModal .customer-tabs > li.active .badge,
+#Products .customer-tabs > li.active .badge{
   background: #5fbeaa;
   color: #fff;
 }
 /* the theme gives .tab-content padding + a shadow box; here the tables use the full width */
-#customerTransactionsModal .customer-tab-content{
+#customerTransactionsModal .customer-tab-content,
+#Products .customer-tab-content{
   padding: 14px 0 0 !important;
   box-shadow: none !important;
   border: none !important;
@@ -2458,3 +2468,7 @@ ul.ColVis_collection li {
   background-color: #fb6d9d;
 }
 
+/* Products window: the tabs sit at the top of the window body */
+#Products .products-tabs{
+  margin-top: 0;
+}
