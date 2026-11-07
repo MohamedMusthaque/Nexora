@@ -804,6 +804,7 @@ if (!authedThisSession) {
     user = data;
     applyProfitPermission();
     applyExpensesPermission();
+    applySuppliersPermission();
     $("#loggedin-user").text(user.fullname);
     $("#cashier").attr("title", user.fullname);
   });
@@ -831,6 +832,11 @@ if (!authedThisSession) {
     loadCategories();
     loadProducts();
     loadCustomers();
+
+    // stock changed elsewhere (e.g. a GRN on the Suppliers page)
+    $(document).on("products:changed", function () {
+      loadProducts();
+    });
 
     if (settings && settings.symbol) {
       $("#price_curr, #payment_curr, #change_curr").text(settings.symbol);
@@ -874,6 +880,7 @@ if (!authedThisSession) {
     }
     applyProfitPermission();
     applyExpensesPermission();
+    applySuppliersPermission();
 
     // function to load products
     function loadProducts() {
@@ -2409,20 +2416,23 @@ if (!authedThisSession) {
       );
     }
 
-    // switches between the Point of Sale, Transactions and Expenses pages.
+    // switches between the Point of Sale, Transactions, Expenses and Suppliers pages.
     // The open page's button is hidden with .nav-current (not .hide()), so
     // buttons hidden by a permission stay hidden.
     function showPage(page) {
       $("#pos_view").toggle(page === "pos");
       $("#transactions_view").toggle(page === "transactions");
       $("#expenses_view").toggle(page === "expenses");
+      $("#suppliers_view").toggle(page === "suppliers");
       $("#pointofsale").toggle(page !== "pos");
       $("#transactions").toggleClass("nav-current", page === "transactions");
       $("#expensesNav").toggleClass("nav-current", page === "expenses");
+      $("#suppliersNav").toggleClass("nav-current", page === "suppliers");
 
       $("body")
         .toggleClass("transactions-mode", page === "transactions")
         .toggleClass("expenses-mode", page === "expenses")
+        .toggleClass("suppliers-mode", page === "suppliers")
         .removeClass("totals-compact");
       window.scrollTo(0, 0);
       if (page !== "pos") updateTransactionsStickyOffset();
@@ -2442,6 +2452,12 @@ if (!authedThisSession) {
       if (!canManageExpenses()) return;
       showPage("expenses");
       loadExpensesPage();
+    });
+
+    $("#suppliersNav").click(function () {
+      if (!canManageSuppliers()) return;
+      showPage("suppliers");
+      loadSuppliersPage();
     });
 
     $("#viewRefOrders").click(function () {
@@ -2822,6 +2838,7 @@ if (!authedThisSession) {
 
       $("#perm_profit").prop("checked", allUsers[index].perm_profit == 1);
       $("#perm_expenses").prop("checked", allUsers[index].perm_expenses == 1);
+      $("#perm_suppliers").prop("checked", allUsers[index].perm_suppliers == 1);
 
       $("#userModal").modal("show");
     };
@@ -3687,6 +3704,7 @@ if (!authedThisSession) {
       held: { label: "Held order", css: "label-default", group: "sales" },
       return: { label: "Return", css: "label-danger", group: "returns" },
       exchange: { label: "Exchange", css: "label-danger", group: "returns" },
+      grn: { label: "Goods received", css: "label-success", group: "purchases" },
       stock_adjustment: { label: "Stock adjustment", css: "label-info", group: "changes" },
       updated: { label: "Product edited", css: "label-primary", group: "changes" },
       created: { label: "Created", css: "label-primary", group: "changes" },
@@ -3728,6 +3746,16 @@ if (!authedThisSession) {
           ].filter(Boolean).join(" · ");
         case "stock_adjustment":
           return `Stock ${e.qty_before} → ${e.qty_after}`;
+        case "grn": {
+          let cost = (v) => (v === "" || v == null ? "not set" : sym + (parseFloat(v) || 0).toFixed(2));
+          return [
+            "From " + escapeHtml(e.supplier || ""),
+            e.payment_method ? "paid by " + escapeHtml(e.payment_method) : "",
+            e.received_date ? "received " + moment(e.received_date, "YYYY-MM-DD").format("DD MMM YYYY") : "",
+            `stock ${e.qty_before} → ${e.qty_after}`,
+            e.cost_after != null ? `cost price ${cost(e.cost_before)} → ${cost(e.cost_after)}` : "",
+          ].filter(Boolean).join(" · ");
+        }
         case "created":
           return [
             e.qty_after != null ? "Opening stock " + e.qty_after : "Stock not tracked",
@@ -4520,6 +4548,7 @@ if (!authedThisSession) {
       ["Sales & transactions", "invoices, returns, credit payments and customer advances"],
       ["Customers", "customer list and credit details"],
       ["Expenses", "expenses and expense types"],
+      ["Suppliers & GRNs", "suppliers, goods received notes and supplier payments"],
       ["Products & categories", "products, stock, categories and product history"],
       ["Store settings", "store name, receipt details, tax and logo"],
       ["Uploaded images", "product pictures and the store logo"],
@@ -4690,6 +4719,7 @@ if (!authedThisSession) {
       $("#perm_settings").prop("checked", user.perm_settings == 1);
       $("#perm_profit").prop("checked", user.perm_profit == 1);
       $("#perm_expenses").prop("checked", user.perm_expenses == 1);
+      $("#perm_suppliers").prop("checked", user.perm_suppliers == 1);
     });
 
     $("#add-user").click(function () {
@@ -5497,6 +5527,859 @@ $.fn.deleteExpenseType = function (id) {
         Swal.fire("Oops!", expenseErrorText(xhr, "Could not delete the expense type."), "warning");
       });
   });
+};
+
+// ---- Suppliers & GRN ----
+// Suppliers page: the supplier list (with what is owed to each) and the Good
+// Receive Notes (GRN). A GRN records goods received from a supplier or a
+// walk-in seller and adds the quantities to the products' stock (server:
+// api/suppliers.js). Credit GRNs are settled with "Pay Supplier" in the
+// supplier's transactions window. Needs the "Manage Suppliers & GRN"
+// permission (the Administrator always has it).
+let allSuppliers = [];
+let allGrns = [];
+let grnCache = {}; // GRNs by id, for the GRN details window
+let grnDateFilter = null;
+let grnProducts = []; // products offered in the GRN form (loaded when it opens)
+let grnLines = []; // lines of the GRN being entered
+let supplierTxnData = null; // { supplier, grns, payments } of the open supplier window
+
+function canManageSuppliers() {
+  return !!(user && (user._id === 1 || user.perm_suppliers == 1));
+}
+
+function applySuppliersPermission() {
+  let allowed = canManageSuppliers();
+  $("#suppliersNav").toggle(allowed);
+  // permission taken away while the page is open: back to the till
+  if (!allowed && $("#suppliers_view").is(":visible")) {
+    $("#pointofsale").trigger("click");
+  }
+}
+
+function supMoney(n) {
+  let sym = settings?.symbol || "";
+  n = Number(n) || 0;
+  return (n < 0 ? "-" : "") + sym + Math.abs(n).toFixed(2);
+}
+
+function supDate(date) {
+  let d = moment(date, "YYYY-MM-DD", true);
+  return d.isValid() ? d.format("DD MMM YYYY") : String(date || "");
+}
+
+function supError(xhr, fallback) {
+  return xhr && xhr.status >= 400 && xhr.status < 500 && xhr.responseText
+    ? xhr.responseText
+    : fallback;
+}
+
+function supRound(n) {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+// Opens window "to" in place of window "from" when "from" is open (Bootstrap
+// can't stack them); when "to" closes, "from" comes back after onReturn().
+function supSwapModal(from, to, onReturn) {
+  let $from = $(from);
+  let $to = $(to);
+  if (!$from.hasClass("in")) {
+    $to.modal("show");
+    return;
+  }
+  $to.one("hidden.bs.modal", function () {
+    if (typeof onReturn === "function") onReturn();
+    $from.modal("show");
+  });
+  $from.one("hidden.bs.modal", function () {
+    $to.modal("show");
+  });
+  $from.modal("hide");
+}
+
+function loadSuppliersPage() {
+  loadSuppliers();
+  loadGrns();
+}
+
+function loadSuppliers(done) {
+  $.get(api + "suppliers/all")
+    .done(function (suppliers) {
+      allSuppliers = suppliers || [];
+      renderSuppliers();
+      fillSupplierSelects();
+    })
+    .fail(function () {
+      Swal.fire("Oops!", "Could not load the suppliers.", "warning");
+    })
+    .always(function () {
+      if (typeof done === "function") done();
+    });
+}
+
+function loadGrns() {
+  $.get(api + "suppliers/grns")
+    .done(function (grns) {
+      allGrns = grns || [];
+      allGrns.forEach((g) => (grnCache[g._id] = g));
+      renderGrns();
+    })
+    .fail(function () {
+      Swal.fire("Oops!", "Could not load the GRNs.", "warning");
+    });
+}
+
+// supplier drop-downs: the GRN filter (keeps its choice) and the GRN form
+function fillSupplierSelects() {
+  let options = allSuppliers
+    .map((s) => `<option value="${s._id}">${txnHtml(s.name)}</option>`)
+    .join("");
+
+  let $filter = $("#grnSupplierFilter");
+  let chosen = $filter.val();
+  $filter.html(`<option value="">All</option><option value="0">Walk-in sellers</option>` + options);
+  if (chosen === "0" || allSuppliers.some((s) => String(s._id) === chosen)) $filter.val(chosen);
+
+  let $form = $("#grnSupplier");
+  let formChoice = $form.val();
+  $form.html(`<option value="0">Walk-in seller (not registered)</option>` + options);
+  if (formChoice && allSuppliers.some((s) => String(s._id) === formChoice)) $form.val(formChoice);
+}
+
+function renderSuppliers() {
+  let purchases = 0, owed = 0, owedCount = 0;
+  allSuppliers.forEach((s) => {
+    purchases += Number(s.purchases) || 0;
+    if (s.balance > 0.004) {
+      owed += s.balance;
+      owedCount++;
+    }
+  });
+  $("#suppliersCount").text(allSuppliers.length);
+  $("#suppliersTabCount").text(allSuppliers.length);
+  $("#suppliersPurchases").text(supMoney(purchases));
+  $("#suppliersOwed").text(supMoney(owed)).toggleClass("sup-owed", owed > 0.004);
+  $("#suppliersOwedNote").text(
+    owedCount ? owedCount + (owedCount === 1 ? " supplier" : " suppliers") + " to pay" : "nothing owed"
+  );
+
+  let rows = allSuppliers
+    .map((s) => {
+      let contact = [s.contact_person, s.phone, s.email].filter(Boolean);
+      let owedCell =
+        s.balance > 0.004
+          ? `<span class="text-danger"><b>${supMoney(s.balance)}</b></span>`
+          : `<span class="text-muted">${supMoney(0)}</span>`;
+      return `<tr>
+        <td><b>${txnHtml(s.name)}</b>${s.address ? `<br><small class="text-muted">${txnHtml(s.address)}</small>` : ""}</td>
+        <td data-export="${txnHtml(contact.join(", "))}">${contact.map(txnHtml).join("<br>")}</td>
+        <td class="text-right">${s.grn_count || 0}</td>
+        <td class="text-right nobr" data-order="${Number(s.purchases) || 0}">${supMoney(s.purchases)}</td>
+        <td class="text-right nobr" data-order="${Number(s.balance) || 0}">${owedCell}</td>
+        <td class="nobr"><span class="btn-group">
+          <button onClick="$(this).viewSupplier(${s._id})" class="btn btn-info" title="Transactions"><i class="fa fa-list"></i></button>
+          <button onClick="$(this).editSupplier(${s._id})" class="btn btn-warning" title="Edit"><i class="fa fa-edit"></i></button>
+          <button onClick="$(this).deleteSupplier(${s._id})" class="btn btn-danger" title="Delete"><i class="fa fa-trash"></i></button>
+        </span></td>
+      </tr>`;
+    })
+    .join("");
+
+  if ($.fn.DataTable.isDataTable("#supplierList")) $("#supplierList").DataTable().destroy();
+  $("#supplier_list").html(rows);
+  $("#supplierList").DataTable(
+    standardTableOptions({
+      noun: "suppliers",
+      searchPlaceholder: "Search suppliers...",
+      exportTitle: "Suppliers",
+      exportColumns: [0, 1, 2, 3, 4],
+      sumColumns: [3, 4],
+      actionColumns: [5],
+      emptyTable: "No suppliers yet - click Add Supplier",
+    })
+  );
+}
+
+function filteredGrns() {
+  let supplier = $("#grnSupplierFilter").val();
+  let paidBy = $("#grnPaidByFilter").val();
+  return allGrns.filter(
+    (g) =>
+      (!grnDateFilter || grnDateFilter.matches(g.received_date)) &&
+      (supplier === "" || supplier == null || String(g.supplier_id || 0) === supplier) &&
+      (!paidBy || g.payment_method === paidBy)
+  );
+}
+
+function grnsExportSubtitle() {
+  let parts = [$("#grnDateRange .date-range-label").text() || "All dates"];
+  if ($("#grnSupplierFilter").val() !== "") parts.push($("#grnSupplierFilter option:selected").text());
+  if ($("#grnPaidByFilter").val()) parts.push($("#grnPaidByFilter").val());
+  return parts.join("  ·  ");
+}
+
+function grnPaidByLabel(method) {
+  return method === "Credit"
+    ? `<span class="label label-warning">Credit</span>`
+    : txnHtml(method);
+}
+
+function renderGrns() {
+  let list = filteredGrns();
+  let total = 0, credit = 0, units = 0;
+  list.forEach((g) => {
+    total += Number(g.total) || 0;
+    if (g.payment_method === "Credit") credit += Number(g.total) || 0;
+    units += Number(g.total_quantity) || 0;
+  });
+  $("#grnsTotal").text(supMoney(total));
+  $("#grnsTotalNote").text(list.length + (list.length === 1 ? " GRN" : " GRNs"));
+  $("#grnsPaid").text(supMoney(total - credit));
+  $("#grnsCredit").text(supMoney(credit));
+  $("#grnsUnits").text(units);
+  $("#grnsTabCount").text(list.length);
+
+  let rows = list
+    .map(
+      (g) => `<tr>
+        <td class="nobr" data-order="${Number(g.seq) || 0}"><b>${txnHtml(g.grn_no)}</b></td>
+        <td class="nobr" data-order="${txnHtml(g.received_date)}">${supDate(g.received_date)}</td>
+        <td data-export="${txnHtml(g.supplier_name)}">${txnHtml(g.supplier_name)}${
+          g.walk_in ? ' <span class="label label-default">Walk-in</span>' : ""
+        }</td>
+        <td class="text-right">${g.item_count || (g.items || []).length}</td>
+        <td class="text-right">${g.total_quantity || 0}</td>
+        <td class="text-right nobr" data-order="${Number(g.total) || 0}">${supMoney(g.total)}</td>
+        <td data-export="${txnHtml(g.payment_method)}">${grnPaidByLabel(g.payment_method)}</td>
+        <td>${txnHtml(g.created_by || "")}</td>
+        <td><button onClick="$(this).viewGrn(${g._id})" class="btn btn-info btn-sm" title="View GRN"><i class="fa fa-search-plus"></i></button></td>
+      </tr>`
+    )
+    .join("");
+
+  if ($.fn.DataTable.isDataTable("#grnList")) $("#grnList").DataTable().destroy();
+  $("#grn_list").html(rows);
+  $("#grnList").DataTable(
+    Object.assign(
+      standardTableOptions({
+        noun: "GRNs",
+        searchPlaceholder: "Search GRNs...",
+        exportTitle: "Goods Received Notes",
+        exportColumns: [0, 1, 2, 3, 4, 5, 6, 7],
+        sumColumns: [4, 5],
+        exportSubtitle: grnsExportSubtitle,
+        actionColumns: [8],
+        emptyTable: allGrns.length ? "No GRNs match the filters" : "No GRNs yet - click New GRN",
+      }),
+      { order: [[1, "desc"], [0, "desc"]] }
+    )
+  );
+}
+
+// ---- supplier form ----
+function openSupplierForm(supplier) {
+  $("#saveSupplier").get(0).reset();
+  $("#supplier_id").val(supplier ? supplier._id : "");
+  $("#supplierModalTitle").text(supplier ? "Edit Supplier" : "Add Supplier");
+  if (supplier) {
+    $("#supplierName").val(supplier.name || "");
+    $("#supplierContact").val(supplier.contact_person || "");
+    $("#supplierPhone").val(supplier.phone || "");
+    $("#supplierEmail").val(supplier.email || "");
+    $("#supplierAddress").val(supplier.address || "");
+  }
+  $("#supplierModal").modal("show");
+}
+
+// ---- GRN form ----
+function grnProduct(id) {
+  return grnProducts.find((p) => String(p._id) === String(id));
+}
+
+function openGrnForm(supplierId) {
+  // fresh stock figures and cost prices for the product list
+  $.get(api + "inventory/products")
+    .done(function (products) {
+      grnProducts = (products || [])
+        .slice()
+        .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+      if (!grnProducts.length) {
+        Swal.fire("No products yet", "Add your products first, then receive stock for them with a GRN.", "info");
+        return;
+      }
+      prepareGrnForm(supplierId);
+      if ($("#supplierTransactionsModal").hasClass("in")) {
+        supSwapModal("#supplierTransactionsModal", "#grnModal", refreshSupplierTransactions);
+      } else {
+        $("#grnModal").modal("show");
+      }
+    })
+    .fail(function () {
+      Swal.fire("Oops!", "Could not load the products.", "warning");
+    });
+}
+
+function prepareGrnForm(supplierId) {
+  grnLines = [];
+  $("#saveGrn").get(0).reset();
+  fillSupplierSelects();
+  $("#grnSupplier").val(String(supplierId || 0));
+  $("#grnDate").val(moment().format("YYYY-MM-DD"));
+  $(".grn-currency").text(settings?.symbol ? "(" + settings.symbol + ")" : "");
+
+  $("#grnProduct").html(
+    `<option value=""></option>` +
+      grnProducts
+        .map((p) => {
+          let barcode = p.barcode != null && String(p.barcode) !== "NaN" ? String(p.barcode) : "";
+          return `<option value="${p._id}">${txnHtml(p.name)}${barcode ? " (" + txnHtml(barcode) + ")" : ""}</option>`;
+        })
+        .join("")
+  );
+  if ($("#grnProduct").data("chosen")) $("#grnProduct").trigger("chosen:updated");
+
+  updateGrnSupplierUi();
+  renderGrnLines();
+}
+
+// walk-in seller: show the name box, and no credit
+function updateGrnSupplierUi() {
+  let walkIn = $("#grnSupplier").val() === "0";
+  $(".grn-walkin-group").toggle(walkIn);
+  $('#grnPaidBy option[value="Credit"]').prop("disabled", walkIn);
+  if (walkIn && $("#grnPaidBy").val() === "Credit") $("#grnPaidBy").val("Cash");
+  $(".grn-credit-hint").toggle(walkIn);
+}
+
+function grnLineValid(line) {
+  return Number.isInteger(Number(line.quantity)) && Number(line.quantity) >= 1 && Number(line.unit_cost) >= 0 && line.unit_cost !== "";
+}
+
+function updateGrnTotals() {
+  let qty = 0, total = 0;
+  grnLines.forEach((l, i) => {
+    let lineTotal = grnLineValid(l) ? supRound(Number(l.quantity) * Number(l.unit_cost)) : 0;
+    if (grnLineValid(l)) {
+      qty += Number(l.quantity);
+      total += lineTotal;
+    }
+    $(`#grn_lines tr[data-index="${i}"] .grn-line-total`).text(grnLineValid(l) ? supMoney(lineTotal) : "-");
+    $(`#grn_lines tr[data-index="${i}"] .grn-line-after`).text(
+      l.tracked && grnLineValid(l) ? "→ " + (l.stock + Number(l.quantity)) : ""
+    );
+  });
+  $("#grnTotalQty").text(qty);
+  $("#grnTotal").text(supMoney(total));
+}
+
+function renderGrnLines() {
+  if (!grnLines.length) {
+    $("#grn_lines").html(
+      `<tr class="grn-empty"><td colspan="6">No products yet. Choose a product above, enter the quantity and unit cost, then click Add.</td></tr>`
+    );
+  } else {
+    $("#grn_lines").html(
+      grnLines
+        .map(
+          (l, i) => `<tr data-index="${i}">
+            <td><b>${txnHtml(l.name)}</b>${l.barcode ? `<br><small class="text-muted">${txnHtml(l.barcode)}</small>` : ""}</td>
+            <td class="text-right nobr">${l.tracked ? l.stock : '<span class="text-muted" title="Stock is not tracked for this product">not tracked</span>'}
+              <br><small class="text-success grn-line-after"></small></td>
+            <td><input type="number" class="form-control grn-line-qty" min="1" step="1" value="${txnHtml(l.quantity)}"></td>
+            <td><input type="number" class="form-control grn-line-cost" min="0" step="0.01" value="${txnHtml(l.unit_cost)}"></td>
+            <td class="text-right nobr grn-line-total"></td>
+            <td><button type="button" class="btn btn-danger btn-sm grn-line-remove" title="Remove"><i class="fa fa-times"></i></button></td>
+          </tr>`
+        )
+        .join("")
+    );
+  }
+  updateGrnTotals();
+}
+
+function addGrnLine() {
+  let p = grnProduct($("#grnProduct").val());
+  let qty = Number($("#grnQty").val());
+  let costText = $.trim($("#grnUnitCost").val());
+  let cost = Number(costText);
+
+  if (!p) {
+    Swal.fire("Oops!", "Please choose a product.", "warning");
+    return;
+  }
+  if (!Number.isInteger(qty) || qty < 1) {
+    Swal.fire("Oops!", "Please enter the quantity received (a whole number of at least 1).", "warning");
+    return;
+  }
+  if (costText === "" || !(cost >= 0)) {
+    Swal.fire("Oops!", "Please enter the unit cost (0 or more).", "warning");
+    return;
+  }
+
+  let existing = grnLines.find((l) => String(l.product_id) === String(p._id));
+  if (existing) {
+    // the same product again: add to its line
+    existing.quantity = (Number(existing.quantity) || 0) + qty;
+    existing.unit_cost = supRound(cost);
+  } else {
+    let barcode = p.barcode != null && String(p.barcode) !== "NaN" ? String(p.barcode) : "";
+    grnLines.push({
+      product_id: p._id,
+      name: p.name,
+      barcode: barcode,
+      stock: parseInt(p.quantity) || 0,
+      tracked: p.stock == 1,
+      quantity: qty,
+      unit_cost: supRound(cost),
+    });
+  }
+
+  $("#grnProduct").val("").trigger("chosen:updated");
+  $("#grnQty, #grnUnitCost").val("");
+  renderGrnLines();
+  $("#grnProduct").trigger("chosen:activate");
+}
+
+// ---- GRN details ----
+function grnDetailsHtml(g) {
+  let items = (g.items || [])
+    .map(
+      (i) => `<tr>
+        <td>${txnHtml(i.product_name)}${i.barcode ? `<br><small class="text-muted">${txnHtml(i.barcode)}</small>` : ""}</td>
+        <td class="text-right">${i.quantity}</td>
+        <td class="text-right nobr">${supMoney(i.unit_cost)}</td>
+        <td class="text-right nobr">${supMoney(i.total)}</td>
+      </tr>`
+    )
+    .join("");
+  let meta = [
+    ["GRN No", `<b>${txnHtml(g.grn_no)}</b>`],
+    ["Received", supDate(g.received_date)],
+    ["Supplier", txnHtml(g.supplier_name) + (g.walk_in ? ' <span class="label label-default">Walk-in</span>' : "")],
+    ["Paid By", grnPaidByLabel(g.payment_method)],
+    ["Added By", txnHtml(g.created_by || "-") + `<br><small>${moment(g.created_at).format("DD MMM YYYY, hh:mm A")}</small>`],
+  ];
+  if (g.note) meta.push(["Note", txnHtml(g.note)]);
+  return `<div class="grn-view-meta">${meta
+      .map((m) => `<div><small>${m[0].toUpperCase()}</small>${m[1]}</div>`)
+      .join("")}</div>
+    <table class="table table-bordered">
+      <thead><tr><th>Product</th><th class="txn-num">Quantity</th><th class="txn-num">Unit Cost</th><th class="txn-num">Line Total</th></tr></thead>
+      <tbody>${items}</tbody>
+      <tfoot><tr>
+        <th class="text-right">Total</th>
+        <th class="text-right">${g.total_quantity || 0}</th>
+        <th></th>
+        <th class="text-right nobr">${supMoney(g.total)}</th>
+      </tr></tfoot>
+    </table>`;
+}
+
+function showGrn(grn) {
+  $("#grnViewTitle").html(`<i class="fa fa-truck"></i> ${txnHtml(grn.grn_no)}`);
+  $("#grnViewBody").html(grnDetailsHtml(grn));
+  supSwapModal("#supplierTransactionsModal", "#grnViewModal", null);
+}
+
+// ---- supplier transactions (GRNs + payments) ----
+function openSupplierTransactions(id) {
+  $.get(api + "suppliers/transactions/" + id)
+    .done(function (data) {
+      supplierTxnData = data;
+      (data.grns || []).forEach((g) => (grnCache[g._id] = g));
+      renderSupplierTransactions();
+      $("#supplierTransactionsModal").modal("show");
+    })
+    .fail(function (xhr) {
+      Swal.fire("Oops!", supError(xhr, "Could not load the supplier's transactions."), "warning");
+    });
+}
+
+function refreshSupplierTransactions() {
+  if (!supplierTxnData) return;
+  $.get(api + "suppliers/transactions/" + supplierTxnData.supplier._id).done(function (data) {
+    supplierTxnData = data;
+    (data.grns || []).forEach((g) => (grnCache[g._id] = g));
+    renderSupplierTransactions();
+  });
+}
+
+function renderSupplierTransactions() {
+  let s = supplierTxnData.supplier;
+  $("#supplierTransactionsTitle").html(`<i class="fa fa-truck"></i> ${txnHtml(s.name)}`);
+  $("#supplierTransactionsContact").html(
+    [s.contact_person, s.phone, s.email, s.address].filter(Boolean).map(txnHtml).join(" &nbsp;·&nbsp; ") ||
+      "No contact details"
+  );
+  $("#supTxnPurchases").text(supMoney(s.purchases));
+  $("#supTxnGrnCount").text((s.grn_count || 0) + (s.grn_count === 1 ? " GRN" : " GRNs"));
+  $("#supTxnCredit").text(supMoney(s.credit_purchases));
+  $("#supTxnPaid").text(supMoney(s.credit_paid));
+  $("#supTxnOwed").text(supMoney(s.balance)).toggleClass("sup-owed", s.balance > 0.004);
+  $("#supTxnPayBtn").prop("disabled", !(s.balance > 0.004));
+
+  let events = [];
+  (supplierTxnData.grns || []).forEach((g) =>
+    events.push({
+      date: g.received_date,
+      at: g.created_at,
+      html: `<td class="nobr" data-order="${txnHtml(g.received_date)} ${txnHtml(g.created_at)}">${supDate(g.received_date)}</td>
+        <td><span class="label label-primary">GRN</span></td>
+        <td>${txnHtml(g.grn_no)}${g.note ? `<br><small class="text-muted">${txnHtml(g.note)}</small>` : ""}</td>
+        <td data-export="${txnHtml(g.payment_method)}">${grnPaidByLabel(g.payment_method)}</td>
+        <td class="text-right nobr">${supMoney(g.total)}</td>
+        <td class="text-right nobr">${
+          g.payment_method === "Credit" ? `<span class="text-danger">+${supMoney(g.total)}</span>` : '<span class="text-muted">-</span>'
+        }</td>
+        <td><button onClick="$(this).viewGrn(${g._id})" class="btn btn-info btn-sm" title="View GRN"><i class="fa fa-search-plus"></i></button></td>`,
+    })
+  );
+  (supplierTxnData.payments || []).forEach((p) =>
+    events.push({
+      date: p.date,
+      at: p.created_at,
+      html: `<td class="nobr" data-order="${txnHtml(p.date)} ${txnHtml(p.created_at)}">${supDate(p.date)}</td>
+        <td><span class="label label-success">Payment</span></td>
+        <td>${p.note ? txnHtml(p.note) : '<span class="text-muted">-</span>'}${p.created_by ? `<br><small class="text-muted">by ${txnHtml(p.created_by)}</small>` : ""}</td>
+        <td>${txnHtml(p.payment_method)}</td>
+        <td class="text-right nobr">${supMoney(p.amount)}</td>
+        <td class="text-right nobr"><span class="text-success">-${supMoney(p.amount)}</span></td>
+        <td></td>`,
+    })
+  );
+
+  if ($.fn.DataTable.isDataTable("#supplierTxnList")) $("#supplierTxnList").DataTable().destroy();
+  $("#supplier_txn_list").html(events.map((e) => `<tr>${e.html}</tr>`).join(""));
+  $("#supplierTxnList").DataTable(
+    Object.assign(
+      standardTableOptions({
+        noun: "transactions",
+        searchPlaceholder: "Search...",
+        exportTitle: "Supplier - " + s.name,
+        exportColumns: [0, 1, 2, 3, 4, 5],
+        exportSubtitle: () => "Owed now: " + supMoney(s.balance),
+        actionColumns: [6],
+        emptyTable: "No GRNs or payments for this supplier yet",
+      }),
+      { order: [[0, "desc"]] }
+    )
+  );
+}
+
+// ---- pay a supplier ----
+function openSupplierPayment() {
+  let s = supplierTxnData && supplierTxnData.supplier;
+  if (!s || !(s.balance > 0.004)) {
+    Swal.fire("Nothing to pay", "Nothing is owed to this supplier.", "info");
+    return;
+  }
+  $("#saveSupplierPayment").get(0).reset();
+  $("#supPayName").text(s.name);
+  $("#supPayOwed").text(supMoney(s.balance));
+  $("#supPayAmount").val(supRound(s.balance).toFixed(2)).attr("max", supRound(s.balance).toFixed(2));
+  $("#supPayDate").val(moment().format("YYYY-MM-DD"));
+  $("#supPayMethod").val("Cash");
+  $(".grn-currency").text(settings?.symbol ? "(" + settings.symbol + ")" : "");
+  supSwapModal("#supplierTransactionsModal", "#supplierPaymentModal", refreshSupplierTransactions);
+}
+
+$(function () {
+  grnDateFilter = initDateRangeFilter("#grnDateRange", renderGrns);
+  $("#grnSupplierFilter, #grnPaidByFilter").on("change", renderGrns);
+
+  $("#addSupplierBtn").on("click", function () {
+    openSupplierForm(null);
+  });
+  $("#newGrnBtn").on("click", function () {
+    openGrnForm(0);
+  });
+  $("#supTxnGrnBtn").on("click", function () {
+    if (supplierTxnData) openGrnForm(supplierTxnData.supplier._id);
+  });
+  $("#supTxnPayBtn").on("click", openSupplierPayment);
+
+  // tables measured while hidden (other tab / closed window) need re-measuring
+  $('#suppliers_view .suppliers-tabs a[data-toggle="tab"]').on("shown.bs.tab", function () {
+    ["#supplierList", "#grnList"].forEach((sel) => {
+      if ($.fn.DataTable.isDataTable(sel)) $(sel).DataTable().columns.adjust();
+    });
+  });
+  $("#supplierTransactionsModal").on("shown.bs.modal", function () {
+    if ($.fn.DataTable.isDataTable("#supplierTxnList")) $("#supplierTxnList").DataTable().columns.adjust();
+  });
+
+  $("#supplierModal").on("shown.bs.modal", function () {
+    $("#supplierName").trigger("focus");
+  });
+  $("#supplierPaymentModal").on("shown.bs.modal", function () {
+    $("#supPayAmount").trigger("focus").trigger("select");
+  });
+  // the product search box is set up once the window is visible (it measures itself)
+  $("#grnModal").on("shown.bs.modal", function () {
+    if (!$("#grnProduct").data("chosen")) {
+      $("#grnProduct").chosen({ width: "100%", search_contains: true, no_results_text: "No product matches" });
+    }
+    $("#grnProduct").trigger("chosen:updated").trigger("chosen:activate");
+  });
+
+  // ---- supplier form ----
+  $("#saveSupplier").on("submit", function (e) {
+    e.preventDefault();
+    let id = $("#supplier_id").val();
+    let payload = {
+      name: $.trim($("#supplierName").val()),
+      contact_person: $.trim($("#supplierContact").val()),
+      phone: $.trim($("#supplierPhone").val()),
+      email: $.trim($("#supplierEmail").val()),
+      address: $.trim($("#supplierAddress").val()),
+    };
+    if (!payload.name) {
+      Swal.fire("Oops!", "Please enter the supplier's name.", "warning");
+      return;
+    }
+    let $btn = $("#submitSupplier").prop("disabled", true);
+    $.ajax({
+      url: api + "suppliers/supplier" + (id ? "/" + id : ""),
+      type: id ? "PUT" : "POST",
+      contentType: "application/json",
+      data: JSON.stringify(payload),
+    })
+      .done(function () {
+        $("#supplierModal").modal("hide");
+        loadSuppliersPage(); // a rename shows on its GRNs too
+        Swal.fire({ title: id ? "Supplier Updated" : "Supplier Saved", icon: "success", timer: 1400, showConfirmButton: false });
+      })
+      .fail(function (xhr) {
+        Swal.fire("Oops!", supError(xhr, "Could not save the supplier."), "warning");
+      })
+      .always(function () {
+        $btn.prop("disabled", false);
+      });
+  });
+
+  // ---- GRN form ----
+  $("#grnSupplier").on("change", updateGrnSupplierUi);
+
+  $("#grnProduct").on("change", function () {
+    let p = grnProduct($(this).val());
+    if (!p) return;
+    let line = grnLines.find((l) => String(l.product_id) === String(p._id));
+    let cost = line ? line.unit_cost : p.cost_price;
+    $("#grnUnitCost").val(cost !== "" && cost != null && !isNaN(parseFloat(cost)) ? parseFloat(cost).toFixed(2) : "");
+    setTimeout(() => $("#grnQty").trigger("focus"), 0);
+  });
+
+  $("#grnAddLine").on("click", addGrnLine);
+  $("#grnQty, #grnUnitCost").on("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault(); // add the line, don't save the GRN
+      addGrnLine();
+    }
+  });
+
+  $("#grn_lines")
+    .on("input", ".grn-line-qty, .grn-line-cost", function () {
+      let i = parseInt($(this).closest("tr").data("index"));
+      let line = grnLines[i];
+      if (!line) return;
+      let val = $.trim($(this).val());
+      if ($(this).hasClass("grn-line-qty")) line.quantity = val === "" ? "" : Number(val);
+      else line.unit_cost = val === "" ? "" : Number(val);
+      updateGrnTotals();
+    })
+    .on("keydown", "input", function (e) {
+      if (e.key === "Enter") e.preventDefault();
+    })
+    .on("click", ".grn-line-remove", function () {
+      grnLines.splice(parseInt($(this).closest("tr").data("index")), 1);
+      renderGrnLines();
+    });
+
+  $("#saveGrn").on("submit", function (e) {
+    e.preventDefault();
+    let supplierId = parseInt($("#grnSupplier").val()) || 0;
+    let paidBy = $("#grnPaidBy").val();
+    let date = $("#grnDate").val();
+
+    if (!date) {
+      Swal.fire("Oops!", "Please enter the received date.", "warning");
+      return;
+    }
+    if (!grnLines.length) {
+      Swal.fire("Oops!", "Please add at least one product to the GRN.", "warning");
+      return;
+    }
+    let bad = grnLines.find((l) => !grnLineValid(l));
+    if (bad) {
+      Swal.fire("Oops!", `Please check "${bad.name}": the quantity must be a whole number of at least 1 and the unit cost 0 or more.`, "warning");
+      return;
+    }
+    if (paidBy === "Credit" && !supplierId) {
+      Swal.fire("Oops!", "Credit is only possible with a registered supplier.", "warning");
+      return;
+    }
+
+    let total = supRound(grnLines.reduce((s, l) => s + Number(l.quantity) * Number(l.unit_cost), 0));
+    let units = grnLines.reduce((s, l) => s + Number(l.quantity), 0);
+    let supplierName = supplierId
+      ? $("#grnSupplier option:selected").text()
+      : $.trim($("#grnWalkInName").val()) || "Walk-in seller";
+    let payload = {
+      supplier_id: supplierId,
+      walk_in_name: supplierId ? "" : $.trim($("#grnWalkInName").val()),
+      received_date: date,
+      payment_method: paidBy,
+      note: $.trim($("#grnNote").val()),
+      created_by: user?.fullname || "",
+      created_by_id: user?._id || "",
+      items: grnLines.map((l) => ({ product_id: l.product_id, quantity: Number(l.quantity), unit_cost: Number(l.unit_cost) })),
+    };
+
+    Swal.fire({
+      title: "Save this GRN?",
+      icon: "question",
+      html: `<p><b>${txnHtml(supplierName)}</b> · ${supDate(date)}</p>
+        <p>${grnLines.length} ${grnLines.length === 1 ? "product" : "products"}, ${units} units · <b>${supMoney(total)}</b> · ${txnHtml(paidBy)}</p>
+        <p class="text-muted" style="font-size: 13px;">The stock of these products goes up by the quantities received. A saved GRN can't be changed.</p>`,
+      showCancelButton: true,
+      confirmButtonText: "Save GRN",
+    }).then(function (result) {
+      if (!result.value) return;
+      let $btn = $("#submitGrn").prop("disabled", true);
+      $.ajax({
+        url: api + "suppliers/grn",
+        type: "POST",
+        contentType: "application/json",
+        data: JSON.stringify(payload),
+      })
+        .done(function (grn) {
+          grnCache[grn._id] = grn;
+          $("#grnModal").modal("hide");
+          loadSuppliersPage();
+          $(document).trigger("products:changed"); // new stock on the till and in Products
+          Swal.fire({
+            title: grn.grn_no + " saved",
+            text: "Stock updated for " + grn.item_count + (grn.item_count === 1 ? " product." : " products."),
+            icon: "success",
+          });
+        })
+        .fail(function (xhr) {
+          Swal.fire("Oops!", supError(xhr, "Could not save the GRN."), "warning");
+          if (xhr && xhr.status >= 500) {
+            // it may have been saved before the error (see the message): refresh
+            loadSuppliersPage();
+            $(document).trigger("products:changed");
+          }
+        })
+        .always(function () {
+          $btn.prop("disabled", false);
+        });
+    });
+  });
+
+  // ---- supplier payment ----
+  $("#saveSupplierPayment").on("submit", function (e) {
+    e.preventDefault();
+    let s = supplierTxnData && supplierTxnData.supplier;
+    if (!s) return;
+    let amount = supRound($("#supPayAmount").val());
+    if (!(amount > 0)) {
+      Swal.fire("Oops!", "Please enter an amount greater than zero.", "warning");
+      return;
+    }
+    if (amount > supRound(s.balance) + 0.004) {
+      Swal.fire("Oops!", "The payment is more than the amount owed (" + supMoney(s.balance) + ").", "warning");
+      return;
+    }
+    if (!$("#supPayDate").val()) {
+      Swal.fire("Oops!", "Please enter the payment date.", "warning");
+      return;
+    }
+    let $btn = $("#submitSupplierPayment").prop("disabled", true);
+    $.ajax({
+      url: api + "suppliers/payments",
+      type: "POST",
+      contentType: "application/json",
+      data: JSON.stringify({
+        supplier_id: s._id,
+        amount: amount,
+        date: $("#supPayDate").val(),
+        payment_method: $("#supPayMethod").val(),
+        note: $.trim($("#supPayNote").val()),
+        created_by: user?.fullname || "",
+      }),
+    })
+      .done(function (payment) {
+        $("#supplierPaymentModal").modal("hide"); // back to the supplier window (refreshed)
+        loadSuppliers();
+        Swal.fire({
+          title: "Payment Saved",
+          text: "Still owed to " + s.name + ": " + supMoney(payment.balance_after),
+          icon: "success",
+        });
+      })
+      .fail(function (xhr) {
+        Swal.fire("Oops!", supError(xhr, "Could not save the payment."), "warning");
+      })
+      .always(function () {
+        $btn.prop("disabled", false);
+      });
+  });
+});
+
+$.fn.viewSupplier = function (id) {
+  openSupplierTransactions(id);
+};
+
+$.fn.editSupplier = function (id) {
+  let s = allSuppliers.find((x) => x._id === id);
+  if (s) openSupplierForm(s);
+};
+
+$.fn.deleteSupplier = function (id) {
+  let s = allSuppliers.find((x) => x._id === id);
+  if (!s) return;
+  if (s.grn_count > 0) {
+    Swal.fire(
+      "Can't delete this supplier",
+      `"${s.name}" has ${s.grn_count} ${s.grn_count === 1 ? "GRN" : "GRNs"}, which stay linked to it.`,
+      "info"
+    );
+    return;
+  }
+  Swal.fire({
+    title: "Delete this supplier?",
+    html: `<b>${txnHtml(s.name)}</b>`,
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonColor: "#d33",
+    confirmButtonText: "Yes, delete it",
+  }).then(function (result) {
+    if (!result.value) return;
+    $.ajax({ url: api + "suppliers/supplier/" + id, type: "DELETE" })
+      .done(function () {
+        loadSuppliers();
+      })
+      .fail(function (xhr) {
+        Swal.fire("Oops!", supError(xhr, "Could not delete the supplier."), "warning");
+      });
+  });
+};
+
+$.fn.viewGrn = function (id) {
+  let grn = grnCache[id];
+  if (grn) {
+    showGrn(grn);
+    return;
+  }
+  $.get(api + "suppliers/grn/" + id)
+    .done(function (g) {
+      grnCache[g._id] = g;
+      showGrn(g);
+    })
+    .fail(function (xhr) {
+      Swal.fire("Oops!", supError(xhr, "Could not load the GRN."), "warning");
+    });
 };
 
 function loadTransactions() {

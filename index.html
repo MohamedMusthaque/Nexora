@@ -112,6 +112,11 @@
                                 <span class="btn-label"><i class="fa fa-money"></i> </span>  Expenses
                             </button>
 
+                            <!-- shown only with the "Manage Suppliers & GRN" permission (pos.js: applySuppliersPermission) -->
+                            <button id="suppliersNav" type="button" class="btn btn-default waves-effect waves-light" style="display: none;">
+                                <span class="btn-label"><i class="fa fa-truck"></i> </span>  Suppliers
+                            </button>
+
                             <button id="pointofsale" type="button" class="btn btn-default waves-effect waves-light">
                                 <span class="btn-label"><i class=" 	glyphicon glyphicon-shopping-cart"></i> </span>  Point of Sale
                             </button>
@@ -447,6 +452,138 @@
                                     </tr>
                                 </thead>
                                 <tbody id="expense_type_list"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+   </div>
+
+
+   <!-- Suppliers page (pos.js: "Suppliers & GRN"): suppliers + goods received notes -->
+   <div id="suppliers_view">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card-box">
+                    <div class="suppliers-header">
+                        <h3 style="margin: 0;">Suppliers</h3>
+                        <div class="suppliers-actions">
+                            <button type="button" class="btn btn-default waves-effect waves-light" id="addSupplierBtn">
+                                <i class="fa fa-plus"></i> Add Supplier
+                            </button>
+                            <button type="button" class="btn btn-warning waves-effect waves-light" id="newGrnBtn">
+                                <i class="fa fa-truck"></i> New GRN
+                            </button>
+                        </div>
+                    </div>
+
+                    <ul class="nav nav-tabs customer-tabs suppliers-tabs" role="tablist">
+                        <li role="presentation" class="active">
+                            <a href="#suppliersTabList" aria-controls="suppliersTabList" role="tab" data-toggle="tab">
+                                <i class="fa fa-users"></i> Suppliers <span class="badge" id="suppliersTabCount">0</span>
+                            </a>
+                        </li>
+                        <li role="presentation">
+                            <a href="#suppliersTabGrns" aria-controls="suppliersTabGrns" role="tab" data-toggle="tab">
+                                <i class="fa fa-truck"></i> Goods Received (GRN) <span class="badge" id="grnsTabCount">0</span>
+                            </a>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content customer-tab-content">
+                        <div role="tabpanel" class="tab-pane active" id="suppliersTabList">
+                            <div class="sup-tiles">
+                                <div class="sup-tile">
+                                    <h5>SUPPLIERS</h5>
+                                    <div class="sup-value" id="suppliersCount">0</div>
+                                </div>
+                                <div class="sup-tile">
+                                    <h5>TOTAL PURCHASES</h5>
+                                    <div class="sup-value" id="suppliersPurchases">0.00</div>
+                                    <small>all GRNs from registered suppliers</small>
+                                </div>
+                                <div class="sup-tile sup-tile-main">
+                                    <h5>OWED TO SUPPLIERS</h5>
+                                    <div class="sup-value" id="suppliersOwed">0.00</div>
+                                    <small id="suppliersOwedNote">credit GRNs not yet paid</small>
+                                </div>
+                            </div>
+                            <table class="table table-bordered" id="supplierList" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th>Supplier</th>
+                                        <th>Contact</th>
+                                        <th class="txn-num">GRNs</th>
+                                        <th class="txn-num">Purchases</th>
+                                        <th class="txn-num">Owed</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="supplier_list"></tbody>
+                            </table>
+                        </div>
+
+                        <div role="tabpanel" class="tab-pane" id="suppliersTabGrns">
+                            <div class="filter-bar sup-filters">
+                                <label>Received</label>
+                                <div class="date-range-filter" id="grnDateRange">
+                                    <div class="date-range-input" title="Filter GRNs by received date">
+                                        <i class="fa fa-calendar"></i>&nbsp;
+                                        <span class="date-range-label">All dates</span>
+                                        <i class="fa fa-caret-down"></i>
+                                    </div>
+                                    <button type="button" class="btn btn-default date-range-clear" title="Clear date filter (show all dates)" style="display: none;"><i class="fa fa-times"></i> Clear</button>
+                                </div>
+                                <label for="grnSupplierFilter">Supplier</label>
+                                <select id="grnSupplierFilter" class="form-control">
+                                    <option value="">All</option>
+                                    <option value="0">Walk-in sellers</option>
+                                </select>
+                                <label for="grnPaidByFilter">Paid By</label>
+                                <select id="grnPaidByFilter" class="form-control">
+                                    <option value="">All</option>
+                                    <option value="Cash">Cash</option>
+                                    <option value="Bank Transfer">Bank Transfer</option>
+                                    <option value="Card">Card</option>
+                                    <option value="Credit">Credit</option>
+                                </select>
+                            </div>
+                            <div class="sup-tiles">
+                                <div class="sup-tile sup-tile-main">
+                                    <h5>TOTAL PURCHASES</h5>
+                                    <div class="sup-value" id="grnsTotal">0.00</div>
+                                    <small id="grnsTotalNote">0 GRNs</small>
+                                </div>
+                                <div class="sup-tile">
+                                    <h5>PAID</h5>
+                                    <div class="sup-value" id="grnsPaid">0.00</div>
+                                    <small>cash, card &amp; bank transfer</small>
+                                </div>
+                                <div class="sup-tile">
+                                    <h5>ON CREDIT</h5>
+                                    <div class="sup-value" id="grnsCredit">0.00</div>
+                                </div>
+                                <div class="sup-tile">
+                                    <h5>UNITS RECEIVED</h5>
+                                    <div class="sup-value" id="grnsUnits">0</div>
+                                </div>
+                            </div>
+                            <table class="table table-bordered" id="grnList" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th>GRN No</th>
+                                        <th>Received</th>
+                                        <th>Supplier</th>
+                                        <th class="txn-num">Products</th>
+                                        <th class="txn-num">Units</th>
+                                        <th class="txn-num">Total</th>
+                                        <th>Paid By</th>
+                                        <th>Added By</th>
+                                        <th>View</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="grn_list"></tbody>
                             </table>
                         </div>
                     </div>
@@ -910,6 +1047,241 @@
 
 
 
+     <!-- Add / edit a supplier (pos.js: openSupplierForm) -->
+     <div id="supplierModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="supplierModalTitle" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog modal-md">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                        <h4 class="modal-title" id="supplierModalTitle">Add Supplier</h4>
+                    </div>
+                    <div class="modal-body">
+                        <form id="saveSupplier" autocomplete="off">
+                            <input type="hidden" id="supplier_id">
+                            <div class="form-group">
+                                <label for="supplierName">Supplier Name</label>
+                                <input type="text" id="supplierName" class="form-control" maxlength="100" placeholder="e.g. ABC Distributors" required>
+                            </div>
+                            <div class="row">
+                                <div class="col-sm-6 form-group">
+                                    <label for="supplierContact">Contact Person <small class="text-muted">(optional)</small></label>
+                                    <input type="text" id="supplierContact" class="form-control" maxlength="100">
+                                </div>
+                                <div class="col-sm-6 form-group">
+                                    <label for="supplierPhone">Phone <small class="text-muted">(optional)</small></label>
+                                    <input type="text" id="supplierPhone" class="form-control" maxlength="50">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="supplierEmail">Email <small class="text-muted">(optional)</small></label>
+                                <input type="email" id="supplierEmail" class="form-control" maxlength="100">
+                            </div>
+                            <div class="form-group">
+                                <label for="supplierAddress">Address <small class="text-muted">(optional)</small></label>
+                                <textarea id="supplierAddress" class="form-control" rows="2" maxlength="200"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-block waves-effect waves-light" id="submitSupplier">Save Supplier</button>
+                        </form>
+                    </div>
+               </div>
+          </div>
+     </div>
+
+     <!-- New Good Receive Note (pos.js: openGrnForm). Saving it adds the quantities to stock. -->
+     <div id="grnModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="grnModalTitle" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                        <h4 class="modal-title" id="grnModalTitle"><i class="fa fa-truck"></i> New Good Receive Note (GRN)</h4>
+                    </div>
+                    <div class="modal-body">
+                        <form id="saveGrn" autocomplete="off">
+                            <div class="row">
+                                <div class="col-sm-5 form-group">
+                                    <label for="grnSupplier">Supplier</label>
+                                    <select id="grnSupplier" class="form-control"></select>
+                                </div>
+                                <div class="col-sm-4 form-group grn-walkin-group">
+                                    <label for="grnWalkInName">Seller Name <small class="text-muted">(optional)</small></label>
+                                    <input type="text" id="grnWalkInName" class="form-control" maxlength="100" placeholder="Walk-in seller">
+                                </div>
+                                <div class="col-sm-3 form-group">
+                                    <label for="grnDate">Received Date</label>
+                                    <input type="date" id="grnDate" class="form-control" required>
+                                </div>
+                            </div>
+
+                            <div class="grn-add-bar">
+                                <div class="grn-add-product">
+                                    <label for="grnProduct">Product</label>
+                                    <select id="grnProduct" data-placeholder="Search a product by name or barcode..."></select>
+                                </div>
+                                <div class="grn-add-qty">
+                                    <label for="grnQty">Quantity</label>
+                                    <input type="number" id="grnQty" class="form-control" min="1" step="1" placeholder="0">
+                                </div>
+                                <div class="grn-add-cost">
+                                    <label for="grnUnitCost">Unit Cost <span class="text-muted grn-currency"></span></label>
+                                    <input type="number" id="grnUnitCost" class="form-control" min="0" step="0.01" placeholder="0.00">
+                                </div>
+                                <div class="grn-add-btn">
+                                    <button type="button" class="btn btn-success" id="grnAddLine"><i class="fa fa-plus"></i> Add</button>
+                                </div>
+                            </div>
+
+                            <table class="table table-bordered grn-lines" id="grnLines">
+                                <thead>
+                                    <tr>
+                                        <th>Product</th>
+                                        <th class="txn-num">In Stock</th>
+                                        <th class="txn-num" style="width: 110px;">Quantity</th>
+                                        <th class="txn-num" style="width: 130px;">Unit Cost</th>
+                                        <th class="txn-num">Line Total</th>
+                                        <th style="width: 44px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="grn_lines"></tbody>
+                                <tfoot>
+                                    <tr>
+                                        <th colspan="2" class="text-right">Total</th>
+                                        <th class="text-right" id="grnTotalQty">0</th>
+                                        <th></th>
+                                        <th class="text-right" id="grnTotal">0.00</th>
+                                        <th></th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+
+                            <div class="row">
+                                <div class="col-sm-5 form-group">
+                                    <label for="grnPaidBy">Paid By</label>
+                                    <select id="grnPaidBy" class="form-control">
+                                        <option value="Cash">Cash</option>
+                                        <option value="Bank Transfer">Bank Transfer</option>
+                                        <option value="Card">Card</option>
+                                        <option value="Credit">Credit (pay the supplier later)</option>
+                                    </select>
+                                    <span class="help-block grn-credit-hint" style="display: none;">Credit needs a registered supplier.</span>
+                                </div>
+                                <div class="col-sm-7 form-group">
+                                    <label for="grnNote">Note <small class="text-muted">(optional)</small></label>
+                                    <input type="text" id="grnNote" class="form-control" maxlength="500" placeholder="e.g. supplier invoice number">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-block waves-effect waves-light" id="submitGrn"><i class="fa fa-check"></i> Save GRN &amp; Update Stock</button>
+                        </form>
+                    </div>
+               </div>
+          </div>
+     </div>
+
+     <!-- One GRN's details (pos.js: showGrn) -->
+     <div id="grnViewModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="grnViewTitle" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                        <h4 class="modal-title" id="grnViewTitle">GRN</h4>
+                    </div>
+                    <div class="modal-body" id="grnViewBody"></div>
+               </div>
+          </div>
+     </div>
+
+     <!-- One supplier's GRNs and payments (pos.js: openSupplierTransactions) -->
+     <div id="supplierTransactionsModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="supplierTransactionsTitle" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                        <h4 class="modal-title" id="supplierTransactionsTitle">Supplier</h4>
+                    </div>
+                    <div class="modal-body">
+                        <div class="sup-contact text-muted" id="supplierTransactionsContact"></div>
+                        <div class="sup-tiles">
+                            <div class="sup-tile">
+                                <h5>TOTAL PURCHASES</h5>
+                                <div class="sup-value" id="supTxnPurchases">0.00</div>
+                                <small id="supTxnGrnCount">0 GRNs</small>
+                            </div>
+                            <div class="sup-tile">
+                                <h5>BOUGHT ON CREDIT</h5>
+                                <div class="sup-value" id="supTxnCredit">0.00</div>
+                            </div>
+                            <div class="sup-tile">
+                                <h5>PAID TO SUPPLIER</h5>
+                                <div class="sup-value" id="supTxnPaid">0.00</div>
+                                <small>settling credit</small>
+                            </div>
+                            <div class="sup-tile sup-tile-main">
+                                <h5>OWED NOW</h5>
+                                <div class="sup-value" id="supTxnOwed">0.00</div>
+                            </div>
+                        </div>
+                        <div class="filter-bar" style="margin-bottom: 10px;">
+                            <button type="button" class="btn btn-success" id="supTxnPayBtn"><i class="fa fa-money"></i> Pay Supplier</button>
+                            <button type="button" class="btn btn-warning" id="supTxnGrnBtn"><i class="fa fa-truck"></i> New GRN</button>
+                        </div>
+                        <table class="table table-bordered" id="supplierTxnList" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th>Reference</th>
+                                    <th>Paid By</th>
+                                    <th class="txn-num">Amount</th>
+                                    <th class="txn-num" title="How the amount owed to the supplier changed">Owed</th>
+                                    <th>View</th>
+                                </tr>
+                            </thead>
+                            <tbody id="supplier_txn_list"></tbody>
+                        </table>
+                    </div>
+               </div>
+          </div>
+     </div>
+
+     <!-- Pay a supplier what is owed for credit GRNs (pos.js: openSupplierPayment) -->
+     <div id="supplierPaymentModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="supplierPaymentTitle" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog modal-md">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                        <h4 class="modal-title" id="supplierPaymentTitle">Pay Supplier</h4>
+                    </div>
+                    <div class="modal-body">
+                        <form id="saveSupplierPayment" autocomplete="off">
+                            <p class="sup-pay-owed">Owed to <b id="supPayName"></b>: <b id="supPayOwed">0.00</b></p>
+                            <div class="row">
+                                <div class="col-sm-6 form-group">
+                                    <label for="supPayAmount">Amount <span class="text-muted grn-currency"></span></label>
+                                    <input type="number" id="supPayAmount" class="form-control" min="0.01" step="0.01" required>
+                                </div>
+                                <div class="col-sm-6 form-group">
+                                    <label for="supPayDate">Date</label>
+                                    <input type="date" id="supPayDate" class="form-control" required>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="supPayMethod">Paid By</label>
+                                <select id="supPayMethod" class="form-control">
+                                    <option value="Cash">Cash</option>
+                                    <option value="Bank Transfer">Bank Transfer</option>
+                                    <option value="Card">Card</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="supPayNote">Note <small class="text-muted">(optional)</small></label>
+                                <input type="text" id="supPayNote" class="form-control" maxlength="500" placeholder="e.g. cheque or transfer reference">
+                            </div>
+                            <button type="submit" class="btn btn-success btn-block waves-effect waves-light" id="submitSupplierPayment">Save Payment</button>
+                        </form>
+                    </div>
+               </div>
+          </div>
+     </div>
+
      <!-- Add / edit an expense (pos.js: openExpenseForm) -->
      <div id="expenseModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="expenseModalTitle" aria-hidden="true" style="display: none;">
             <div class="modal-dialog modal-md">
@@ -1167,6 +1539,9 @@
                            </div>
                           <div class="form-group">
                             <span><input type="checkbox" name="perm_expenses" id="perm_expenses"> Manage Expenses </span>
+                           </div>
+                          <div class="form-group">
+                            <span><input type="checkbox" name="perm_suppliers" id="perm_suppliers"> Manage Suppliers &amp; GRN </span>
                            </div>
                                 <div class="form-group">
                                     <span><input type="checkbox" name="perm_users" id="perm_users"> Manage Users and Permissions </span>
@@ -1495,6 +1870,7 @@
                         <option value="all">All activity</option>
                         <option value="sales">Sales (incl. credit &amp; held)</option>
                         <option value="returns">Returns &amp; exchanges</option>
+                        <option value="purchases">Goods received (GRN)</option>
                         <option value="changes">Stock adjustments &amp; product changes</option>
                     </select>
                     <label style="margin: 0 0 0 8px;">Date</label>
@@ -1788,7 +2164,7 @@
                         <div class="form-group reset-db-group">
                             <label>Reset Database</label> <br>
                             <button type="button" class="btn btn-danger" id="reset_database"><i class="fa fa-trash"></i> Reset Database...</button>
-                            <span class="help-block">Clears all sales, customers, products, expenses, store settings and images, keeping only the user accounts, then restarts the app. A backup is made automatically first.</span>
+                            <span class="help-block">Clears all sales, customers, products, expenses, suppliers and GRNs, store settings and images, keeping only the user accounts, then restarts the app. A backup is made automatically first.</span>
                         </div>
                     </div>
 

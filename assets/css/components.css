@@ -90,13 +90,15 @@
    body.transactions-mode is set while the Transactions view is open
    (pos.js). The summary boxes shrink (body.totals-compact) once scrolled. */
 body.transactions-mode,
-body.expenses-mode{
+body.expenses-mode,
+body.suppliers-mode{
   /* overflow-x: hidden on body would make it a scroll container and stop
      position: sticky from working; clip hides overflow the same way without that */
   overflow-x: clip;
 }
 body.transactions-mode .main-toolbar-row,
-body.expenses-mode .main-toolbar-row{
+body.expenses-mode .main-toolbar-row,
+body.suppliers-mode .main-toolbar-row{
   position: sticky;
   top: 0;
   z-index: 1000;
@@ -358,21 +360,24 @@ body.transactions-mode.totals-compact #totals #counter{
   font-size: 12px;
   color: #98a6ad;
 }
-/* ---- Customer Transactions window + Products window + Expenses page: tabs ---- */
+/* ---- Customer Transactions window + Products window + Expenses / Suppliers pages: tabs ---- */
 #customerTransactionsModal .customer-tabs,
 #Products .customer-tabs,
-#expenses_view .customer-tabs{
+#expenses_view .customer-tabs,
+#suppliers_view .customer-tabs{
   margin-top: 16px;
   border-bottom: 2px solid #e3e3e3;
 }
 #customerTransactionsModal .customer-tabs > li,
 #Products .customer-tabs > li,
-#expenses_view .customer-tabs > li{
+#expenses_view .customer-tabs > li,
+#suppliers_view .customer-tabs > li{
   margin-bottom: -2px;
 }
 #customerTransactionsModal .customer-tabs > li > a,
 #Products .customer-tabs > li > a,
-#expenses_view .customer-tabs > li > a{
+#expenses_view .customer-tabs > li > a,
+#suppliers_view .customer-tabs > li > a{
   padding: 9px 16px;
   margin-right: 4px;
   border: none;
@@ -384,7 +389,8 @@ body.transactions-mode.totals-compact #totals #counter{
 }
 #customerTransactionsModal .customer-tabs > li > a:hover,
 #Products .customer-tabs > li > a:hover,
-#expenses_view .customer-tabs > li > a:hover{
+#expenses_view .customer-tabs > li > a:hover,
+#suppliers_view .customer-tabs > li > a:hover{
   color: #4c5667;
   background: transparent;
   border-bottom-color: #cfd6dc;
@@ -392,12 +398,15 @@ body.transactions-mode.totals-compact #totals #counter{
 #customerTransactionsModal .customer-tabs > li.active > a,
 #Products .customer-tabs > li.active > a,
 #expenses_view .customer-tabs > li.active > a,
+#suppliers_view .customer-tabs > li.active > a,
 #customerTransactionsModal .customer-tabs > li.active > a:hover,
 #Products .customer-tabs > li.active > a:hover,
 #expenses_view .customer-tabs > li.active > a:hover,
+#suppliers_view .customer-tabs > li.active > a:hover,
 #customerTransactionsModal .customer-tabs > li.active > a:focus,
 #Products .customer-tabs > li.active > a:focus,
-#expenses_view .customer-tabs > li.active > a:focus{
+#expenses_view .customer-tabs > li.active > a:focus,
+#suppliers_view .customer-tabs > li.active > a:focus{
   color: #3e9e8a;
   border: none;
   border-bottom: 2px solid #5fbeaa;
@@ -405,7 +414,8 @@ body.transactions-mode.totals-compact #totals #counter{
 }
 #customerTransactionsModal .customer-tabs .badge,
 #Products .customer-tabs .badge,
-#expenses_view .customer-tabs .badge{
+#expenses_view .customer-tabs .badge,
+#suppliers_view .customer-tabs .badge{
   margin-left: 4px;
   background: #e8ecef;
   color: #4c5667;
@@ -413,14 +423,16 @@ body.transactions-mode.totals-compact #totals #counter{
 }
 #customerTransactionsModal .customer-tabs > li.active .badge,
 #Products .customer-tabs > li.active .badge,
-#expenses_view .customer-tabs > li.active .badge{
+#expenses_view .customer-tabs > li.active .badge,
+#suppliers_view .customer-tabs > li.active .badge{
   background: #5fbeaa;
   color: #fff;
 }
 /* the theme gives .tab-content padding + a shadow box; here the tables use the full width */
 #customerTransactionsModal .customer-tab-content,
 #Products .customer-tab-content,
-#expenses_view .customer-tab-content{
+#expenses_view .customer-tab-content,
+#suppliers_view .customer-tab-content{
   padding: 14px 0 0 !important;
   box-shadow: none !important;
   border: none !important;
@@ -2566,4 +2578,138 @@ ul.ColVis_collection li {
 /* one space between Point of Sale and the Users button group */
 .top-toolbar #usersToolbarGroup{
   margin-left: 4px;
+}
+
+/* ---- Suppliers page, GRN form and supplier windows ---- */
+#suppliers_view .suppliers-header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+#suppliers_view .suppliers-actions{
+  display: flex;
+  gap: 8px;
+}
+#suppliers_view .suppliers-tabs{
+  margin-top: 12px;
+}
+#suppliers_view .sup-filters{
+  margin-bottom: 14px;
+}
+#suppliers_view .sup-filters label{
+  margin: 0 0 0 8px;
+}
+#suppliers_view .sup-filters label:first-child{
+  margin-left: 0;
+}
+#suppliers_view .sup-filters select.form-control{
+  width: auto;
+  min-width: 150px;
+}
+.sup-tiles{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.sup-tile{
+  border: 1px solid #e3e3e3;
+  border-radius: 5px;
+  padding: 10px 14px;
+  background: #fafbfc;
+}
+.sup-tile h5{
+  margin: 0 0 4px;
+  font-size: 12px;
+  letter-spacing: 0.4px;
+  color: #98a6ad;
+}
+.sup-tile .sup-value{
+  font-size: 22px;
+  font-weight: bold;
+  color: #4c5667;
+  line-height: 1.2;
+}
+.sup-tile small{
+  font-size: 11px;
+  color: #98a6ad;
+}
+.sup-tile-main{
+  border-color: #5fbeaa;
+  background: #f1faf8;
+}
+.sup-tile-main .sup-value{
+  color: #3e9e8a;
+}
+.sup-tile-main .sup-value.sup-owed{
+  color: #d84340;
+}
+.sup-contact{
+  margin-bottom: 12px;
+}
+#supplierList .nobr,
+#grnList .nobr,
+#supplierTxnList .nobr,
+#grnViewModal .nobr{
+  white-space: nowrap;
+}
+
+/* GRN form: [product ......][qty][unit cost][Add] */
+#grnModal .grn-add-bar{
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid #e3e3e3;
+  border-radius: 5px;
+  background: #fafbfc;
+}
+#grnModal .grn-add-bar label{
+  display: block;
+  margin-bottom: 4px;
+}
+#grnModal .grn-add-product{
+  flex: 1 1 auto;
+  min-width: 0;
+}
+#grnModal .grn-add-qty{
+  flex: 0 0 110px;
+}
+#grnModal .grn-add-cost{
+  flex: 0 0 140px;
+}
+#grnModal .grn-add-btn{
+  flex: 0 0 auto;
+}
+#grnModal .chosen-container-single .chosen-single{
+  height: 34px;
+  line-height: 32px;
+}
+#grnModal .grn-lines input.form-control{
+  text-align: right;
+  height: 30px;
+  padding: 4px 8px;
+}
+#grnModal .grn-lines td{
+  vertical-align: middle;
+}
+#grnModal .grn-lines .grn-empty td{
+  text-align: center;
+  color: #98a6ad;
+  padding: 18px;
+}
+#grnViewModal .grn-view-meta{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 16px;
+  margin-bottom: 14px;
+}
+#grnViewModal .grn-view-meta small{
+  display: block;
+  color: #98a6ad;
+  font-size: 11px;
+  letter-spacing: 0.4px;
 }

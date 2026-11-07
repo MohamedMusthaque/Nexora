@@ -305,6 +305,62 @@ app.decrementInventory = function (products, callback) {
   );
 };
 
+// ---- Goods received (GRN, see suppliers.js) ----
+
+// the products with these ids (missing ones are simply not in the result)
+app.getProductsByIds = function (ids, callback) {
+  inventoryDB.find({ _id: { $in: ids.map((id) => parseInt(id)) } }, callback);
+};
+
+// Adds each received line to the product's stock and makes the line's unit
+// cost the product's cost price. Every line is logged in the product history
+// as a "grn" event.
+// items: [{ product_id, quantity, unit_cost }]
+// info: { grn_id, reference, supplier, payment_method, received_date,
+//         user, user_id }
+app.receiveGoods = function (items, info, callback) {
+  async.eachSeries(
+    items,
+    function (item, next) {
+      inventoryDB.findOne({ _id: parseInt(item.product_id) }, function (err, product) {
+        if (err) return next(err);
+        if (!product) return next(); // deleted meanwhile: nothing to add stock to
+
+        let qtyBefore = parseInt(product.quantity) || 0;
+        let qtyAfter = qtyBefore + item.quantity;
+        let set = { quantity: qtyAfter };
+        let costBefore = product.cost_price;
+        let costAfter = Number(item.unit_cost).toFixed(2);
+        let costChanged = String(costBefore ?? "") !== costAfter;
+        if (costChanged) set.cost_price = costAfter;
+
+        inventoryDB.update({ _id: product._id }, { $set: set }, {}, function (err) {
+          if (err) return next(err);
+          let extra = {
+            qty_change: item.quantity,
+            qty_before: qtyBefore,
+            qty_after: qtyAfter,
+            price: item.unit_cost,
+            amount: Math.round(item.quantity * item.unit_cost * 100) / 100,
+            reference: info.reference,
+            grn_id: info.grn_id,
+            supplier: info.supplier,
+            payment_method: info.payment_method,
+            received_date: info.received_date,
+          };
+          if (costChanged) {
+            extra.cost_before = costBefore;
+            extra.cost_after = costAfter;
+          }
+          logHistory([historyEntry(product, "grn", extra, { user: info.user, user_id: info.user_id })]);
+          next();
+        });
+      });
+    },
+    callback
+  );
+};
+
 app.incrementInventory = function (products, callback) {
   async.eachSeries(
     products,

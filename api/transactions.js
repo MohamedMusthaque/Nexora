@@ -333,7 +333,8 @@ app.post("/credit-payments", function(req, res) {
 // Everything that happened to one product, newest first:
 //  - sale / credit_sale / held  (from transactions; stock goes down when saved)
 //  - return / exchange          (from returns; stock goes up only if restocked)
-//  - created / updated / stock_adjustment / deleted (from the product log)
+//  - created / updated / stock_adjustment / grn / deleted (from the product log;
+//    grn = goods received from a supplier, see suppliers.js)
 app.get("/product-history/:productId", function(req, res) {
   let numericId = parseInt(req.params.productId);
   if (isNaN(numericId)) return res.status(400).send("Invalid product ID");

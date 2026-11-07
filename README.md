@@ -116,9 +116,15 @@ Whether operating on a standalone checkout computer or configured across multipl
   - Each expense records the date, amount, expense type, payment method (Cash, Card or Bank Transfer) and an optional description.
   - Filter by date, type and payment method, with totals per payment method and Excel / PDF export.
 
+- **🚚 Suppliers & Goods Received (GRN)**:
+  - Supplier register with contact details, total purchases and the amount owed to each supplier.
+  - Good Receive Notes: supplier or walk-in seller, products with quantity and unit cost, received date, and paid by Cash, Bank Transfer, Card or Credit.
+  - Saving a GRN adds the quantities to stock and sets each product's cost price to the unit cost received; it shows in each product's history.
+  - Per-supplier transactions (GRNs and payments) with **Pay Supplier** to settle credit purchases.
+
 - **👥 User Roles & Permissions**:
   - Multi-staff user accounts.
-  - Granular permissions: control access to Products, Categories, Transactions, Profit, Expenses, Users, and Settings.
+  - Granular permissions: control access to Products, Categories, Transactions, Profit, Expenses, Suppliers & GRN, Users, and Settings.
   - Bootstrap Administrator protection to prevent accidental lockouts.
 
 - **🧾 Receipt & Document Printing**:
@@ -260,6 +266,7 @@ Nexora/
 │   ├── expenses.js         # Expenses & expense types API
 │   ├── inventory.js        # Product catalog & stock API
 │   ├── settings.js         # App store info & receipt preferences API
+│   ├── suppliers.js        # Suppliers, goods received notes (GRN) & supplier payments API
 │   ├── transactions.js     # Sales, orders & reporting API
 │   └── users.js            # User accounts, login, permissions & first-run setup API
 ├── assets/                 # Frontend assets
@@ -282,7 +289,7 @@ Nexora/
 
 By default, NEXORA stores databases and media uploads locally under:
 - **Default Path**: `<UserHome>/Nexora/POS/` (or `%APPDATA%/POS` on Windows)
-  - `server/databases/*.db`: Lightweight NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`, `returns.db`, `credit_payments.db`, `customer_advances.db`, `product_history.db`, `expenses.db`, `expense_types.db`).
+  - `server/databases/*.db`: Lightweight NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`, `returns.db`, `credit_payments.db`, `customer_advances.db`, `product_history.db`, `expenses.db`, `expense_types.db`, `suppliers.db`, `grns.db`, `supplier_payments.db`).
   - `uploads/`: Uploaded product pictures and company receipt logos.
 - **Application Logs**: Saved under `<userData>/nexora.log`.
 
@@ -300,6 +307,7 @@ You can access the built-in backup tools directly from the app interface:
 | Sales & transactions (invoices, returns, credit payments, customer advances) | **User accounts** (usernames, passwords and permissions) |
 | Customers | |
 | Expenses and expense types | |
+| Suppliers, goods received notes (GRN) and supplier payments | |
 | Products, categories, stock and product history | |
 | Store settings (store name, receipt details, tax, logo) | |
 | Uploaded images | |
