@@ -4441,6 +4441,76 @@ if (!authedThisSession) {
       });
     });
 
+    // ---- Reset Database (Settings) ----
+    // Clears all data except the user accounts on the next start (see
+    // data:reset in start.js), after making a backup that Restore Data can
+    // bring back.
+    const RESET_CLEARS = [
+      ["Sales & transactions", "invoices, returns, credit payments and customer advances"],
+      ["Customers", "customer list and credit details"],
+      ["Products & categories", "products, stock, categories and product history"],
+      ["Store settings", "store name, receipt details, tax and logo"],
+      ["Uploaded images", "product pictures and the store logo"],
+    ];
+
+    $("#reset_database").on("click", function () {
+      let clears = RESET_CLEARS.map(
+        (c) => `<li><i class="fa fa-times-circle"></i><span><b>${c[0]}</b><small>${c[1]}</small></span></li>`
+      ).join("");
+
+      Swal.fire({
+        title: "Reset database",
+        icon: "warning",
+        html: `<div class="reset-db-dialog">
+                 <p>This clears all data. A backup is saved first, so it can be brought back with <b>Restore Data</b>.</p>
+                 <ul class="reset-db-list">${clears}</ul>
+                 <div class="reset-db-kept"><i class="fa fa-check-circle"></i><span><b>User accounts are kept</b><small>All users, passwords and permissions stay as they are.</small></span></div>
+                 <label class="reset-db-confirm" for="resetConfirmText">Type <b>RESET</b> to confirm</label>
+                 <input id="resetConfirmText" class="form-control" autocomplete="off" placeholder="RESET">
+               </div>`,
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        confirmButtonText: "Back up & Reset",
+        focusConfirm: false,
+        preConfirm: () => {
+          if ($.trim($(Swal.getPopup()).find("#resetConfirmText").val()) !== "RESET") {
+            Swal.showValidationMessage("Type RESET (in capitals) to confirm.");
+            return false;
+          }
+          return true;
+        },
+      }).then(function (result) {
+        if (!result.value) return;
+
+        // spinner started right away (not in didOpen, which can run after a
+        // quick reply and would then put the spinner on the next dialog)
+        Swal.fire({ title: "Backing up...", allowOutsideClick: false, allowEscapeKey: false });
+        Swal.showLoading();
+
+        ipcRenderer.invoke("data:reset").then(function (res) {
+          // the "Backing up..." spinner would otherwise hide the next dialog's button
+          Swal.hideLoading();
+          if (!res || !res.success) {
+            Swal.fire("Oops!", (res && res.error) || "Could not reset the database.", "error");
+            return;
+          }
+          Swal.fire({
+            title: "Ready to reset",
+            html:
+              `<p>All data except the user accounts will be cleared when the app restarts.</p>` +
+              (res.backupPath
+                ? `<p class="reset-db-backup">Backup saved to:<br><code>${$("<i>").text(res.backupPath).html()}</code></p>`
+                : ""),
+            icon: "success",
+            allowOutsideClick: false,
+            confirmButtonText: "Restart now",
+          }).then(function () {
+            ipcRenderer.send("app-relaunch", "");
+          });
+        });
+      });
+    });
+
     $("#net_settings_form").on("submit", function (e) {
       e.preventDefault();
       let formData = $(this).serializeObject();

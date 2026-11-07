@@ -3,7 +3,7 @@ const log = require('electron-log');
 const {app, BrowserWindow, ipcMain, dialog} = require('electron');
 const path = require('path')
 const fs = require('fs')
-const { getDataRoot, setDataRoot, getPosDir } = require('./lib/dataConfig')
+const { getDataRoot, setDataRoot, getPosDir, setPendingReset, takePendingReset } = require('./lib/dataConfig')
 
 // Single-instance guard: a second launch (double-click, installer, update)
 // would crash the express server with EADDRINUSE on port 8001. Quit instead
@@ -96,6 +96,8 @@ app.on("ready", async ()=>{
     return;
   }
   process.env.APPDATA = getDataRoot();
+  // a database reset requested from Settings runs now, before the datastores open
+  applyPendingReset();
   // multer's diskStorage (uploads) doesn't create its destination folder on
   // its own, unlike nedb (which mkdirp's server/databases internally) - so a
   // freshly chosen/empty data directory needs this or the first logo/product
@@ -246,6 +248,59 @@ ipcMain.handle('data:backup', async () => {
     return { success: false, error: e.message };
   }
 });
+
+// --- Reset database ---------------------------------------------------------
+// Settings > Reset Database clears all data (sales, customers, products,
+// store settings and uploaded images) but keeps the user accounts, so
+// everyone can still log in afterwards.
+const RESET_KEEP_FILES = ['users.db', 'users.db~'];
+
+// Backs up the current data, then schedules the reset for the next start
+// (the renderer relaunches the app straight after).
+ipcMain.handle('data:reset', async () => {
+  try {
+    const posDir = getPosDir();
+    let backupPath = null;
+    if (fs.existsSync(posDir)) {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      backupPath = path.join(getDataRoot(), 'Nexora-Backups', `Nexora-Backup-Before-Reset-${timestamp}`);
+      fs.mkdirSync(backupPath, { recursive: true });
+      fs.cpSync(posDir, path.join(backupPath, 'POS'), { recursive: true });
+    }
+
+    setPendingReset({ posDir, requestedAt: new Date().toISOString(), backupPath });
+    log.info('Database reset scheduled | backup:', backupPath);
+    return { success: true, backupPath };
+  } catch (e) {
+    log.error('Reset failed:', e);
+    return { success: false, error: e.message };
+  }
+});
+
+// Runs at start-up, before ./server opens the datastores: deletes every
+// database file except the users, and the uploaded images.
+function applyPendingReset() {
+  try {
+    const request = takePendingReset();
+    if (!request) return;
+    const posDir = getPosDir();
+    // only reset the data folder the request was made for
+    if (path.resolve(request.posDir) !== path.resolve(posDir)) {
+      log.warn('Pending database reset skipped: data location changed.');
+      return;
+    }
+    const dbDir = path.join(posDir, 'server', 'databases');
+    if (fs.existsSync(dbDir)) {
+      fs.readdirSync(dbDir)
+        .filter((f) => !RESET_KEEP_FILES.includes(f))
+        .forEach((f) => fs.rmSync(path.join(dbDir, f), { recursive: true, force: true }));
+    }
+    fs.rmSync(path.join(posDir, 'uploads'), { recursive: true, force: true });
+    log.info('Database reset done (user accounts kept).');
+  } catch (e) {
+    log.error('Database reset failed:', e);
+  }
+}
 
 ipcMain.handle('data:restore', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
