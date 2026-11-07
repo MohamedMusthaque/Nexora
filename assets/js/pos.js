@@ -5709,6 +5709,7 @@ function renderSuppliers() {
         <td class="text-right nobr" data-order="${Number(s.advance) || 0}">${advanceCell}</td>
         <td class="nobr"><span class="btn-group">
           <button onClick="$(this).viewSupplier(${s._id})" class="btn btn-info" title="Transactions"><i class="fa fa-list"></i></button>
+          <button onClick="$(this).paySupplier(${s._id})" class="btn btn-success" title="${s.balance > 0.004 ? "Pay supplier" : "Pay in advance"}"><i class="fa fa-money"></i></button>
           <button onClick="$(this).editSupplier(${s._id})" class="btn btn-warning" title="Edit"><i class="fa fa-edit"></i></button>
           <button onClick="$(this).deleteSupplier(${s._id})" class="btn btn-danger" title="Delete"><i class="fa fa-trash"></i></button>
         </span></td>
@@ -6064,6 +6065,7 @@ function grnDetailsHtml(g) {
   return `<div class="grn-view-meta">${meta
       .map((m) => `<div><small>${m[0].toUpperCase()}</small>${m[1]}</div>`)
       .join("")}</div>
+    <div class="modal-fit-scroll grn-view-scroll">
     <table class="table table-bordered">
       <thead><tr><th>Product</th><th class="txn-num">Quantity</th><th class="txn-num">Unit Cost</th><th class="txn-num">Line Total</th></tr></thead>
       <tbody>${items}</tbody>
@@ -6073,7 +6075,8 @@ function grnDetailsHtml(g) {
         <th></th>
         <th class="text-right nobr">${supMoney(g.total)}</th>
       </tr></tfoot>
-    </table>`;
+    </table>
+    </div>`;
 }
 
 function showGrn(grn) {
@@ -6118,6 +6121,7 @@ function renderSupplierTransactions() {
   $("#supTxnPaid").text(supMoney(s.credit_paid));
   $("#supTxnOwed").text(supMoney(s.balance)).toggleClass("sup-owed", s.balance > 0.004);
   $("#supTxnAdvance").text(supMoney(s.advance));
+  $("#supTxnPayBtn").html('<i class="fa fa-money"></i> ' + (s.balance > 0.004 ? "Pay Supplier" : "Pay in Advance"));
 
   // Balance after each entry, in the order they were saved (the order the
   // server applied payments and advances): + owed, - advance
@@ -6190,11 +6194,15 @@ function renderSupplierTransactions() {
 function updateSupplierPaymentHint() {
   let s = supplierTxnData && supplierTxnData.supplier;
   let amount = supRound($("#supPayAmount").val());
+  let owed = s ? Number(s.balance) || 0 : 0;
   if (!s || !(amount > 0)) {
-    $("#supPayHint").text("");
+    $("#supPayHint").html(
+      s && !(owed > 0.004)
+        ? '<i class="fa fa-info-circle"></i> Nothing is owed to this supplier, so the whole payment is kept as an advance and used by the next GRNs from them.'
+        : ""
+    );
     return;
   }
-  let owed = Number(s.balance) || 0;
   let toCredit = Math.min(amount, owed);
   let toAdvance = supRound(amount - toCredit);
   let parts = [];
@@ -6207,6 +6215,9 @@ function openSupplierPayment() {
   let s = supplierTxnData && supplierTxnData.supplier;
   if (!s) return;
   $("#saveSupplierPayment").get(0).reset();
+  let owing = s.balance > 0.004;
+  $("#supplierPaymentTitle").html('<i class="fa fa-money"></i> ' + (owing ? "Pay Supplier" : "Pay in Advance"));
+  $("#submitSupplierPayment").text(owing ? "Save Payment" : "Save Advance Payment");
   $("#supPayName").text(s.name);
   $("#supPayOwed").text(supMoney(s.balance));
   $("#supPayAdvance").text(supMoney(s.advance));
@@ -6484,6 +6495,19 @@ $(function () {
       });
   });
 });
+
+// Pay button in the supplier list: straight to the payment window (paying
+// what is owed, or in advance when nothing is owed)
+$.fn.paySupplier = function (id) {
+  $.get(api + "suppliers/transactions/" + id)
+    .done(function (data) {
+      supplierTxnData = data;
+      openSupplierPayment();
+    })
+    .fail(function (xhr) {
+      Swal.fire("Oops!", supError(xhr, "Could not load the supplier."), "warning");
+    });
+};
 
 $.fn.viewSupplier = function (id) {
   openSupplierTransactions(id);
