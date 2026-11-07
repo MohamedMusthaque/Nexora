@@ -334,6 +334,12 @@ app.post( "/grn", function ( req, res ) {
                     let advance = supplier ? Math.max( -position, 0 ) : 0;
                     let advanceUsed = round2( Math.min( advance, total ) );
                     let amountDue = round2( total - advanceUsed );
+                    // the supplier's position after this GRN (+ owed, - advance):
+                    // a credit GRN adds what is still due, and the advance used is
+                    // no longer held by the supplier
+                    let positionAfter = supplier
+                        ? round2( position + advanceUsed + ( paymentMethod === "Credit" ? amountDue : 0 ) )
+                        : 0;
                     let grn = {
                         _id: newId(),
                         seq: seq,
@@ -349,6 +355,8 @@ app.post( "/grn", function ( req, res ) {
                         total: total,
                         advance_used: advanceUsed,
                         amount_due: amountDue,
+                        position_before: supplier ? round2( position ) : 0,
+                        position_after: positionAfter,
                         note: note,
                         created_by: createdBy,
                         created_at: new Date().toJSON()
@@ -404,29 +412,39 @@ app.post( "/payments", function ( req, res ) {
             if ( !supplier ) { done(); return res.status( 404 ).send( "That supplier no longer exists." ); }
             supplierPosition( supplierId, function ( err, position ) {
                 if ( err ) { done(); return res.status( 500 ).send( "Could not save the payment." ); }
-                let owed = Math.max( position, 0 );
-                let toCredit = round2( Math.min( amount, owed ) );
-                let payment = {
-                    _id: newId(),
-                    supplier_id: supplierId,
-                    supplier_name: supplier.name,
-                    amount: amount,
-                    date: date,
-                    payment_method: method,
-                    to_credit: toCredit,
-                    to_advance: round2( amount - toCredit ),
-                    note: String( body.note || "" ).trim().slice( 0, MAX_NOTE ),
-                    created_by: cleanText( body.created_by, 100 ),
-                    created_at: new Date().toJSON()
-                };
-                supplierPaymentsDB.insert( payment, function ( err, doc ) {
-                    done();
-                    if ( err ) return res.status( 500 ).send( "Could not save the payment." );
+                // numbered for the payment bill (PAY-00001, PAY-00002, ...)
+                supplierPaymentsDB.find( {} ).sort( { seq: -1 } ).limit( 1 ).exec( function ( err, last ) {
+                    if ( err ) { done(); return res.status( 500 ).send( "Could not save the payment." ); }
+                    let seq = ( last.length ? Number( last[0].seq ) || 0 : 0 ) + 1;
+                    let owed = Math.max( position, 0 );
+                    let toCredit = round2( Math.min( amount, owed ) );
                     let after = round2( position - amount );
-                    res.send( Object.assign( {}, doc, {
-                        balance_after: Math.max( after, 0 ),
-                        advance_after: Math.max( -after, 0 )
-                    } ) );
+                    let payment = {
+                        _id: newId(),
+                        seq: seq,
+                        payment_no: "PAY-" + String( seq ).padStart( 5, "0" ),
+                        supplier_id: supplierId,
+                        supplier_name: supplier.name,
+                        amount: amount,
+                        date: date,
+                        payment_method: method,
+                        to_credit: toCredit,
+                        to_advance: round2( amount - toCredit ),
+                        // the supplier's position before / after (+ owed, - advance), for the bill
+                        position_before: round2( position ),
+                        position_after: after,
+                        note: String( body.note || "" ).trim().slice( 0, MAX_NOTE ),
+                        created_by: cleanText( body.created_by, 100 ),
+                        created_at: new Date().toJSON()
+                    };
+                    supplierPaymentsDB.insert( payment, function ( err, doc ) {
+                        done();
+                        if ( err ) return res.status( 500 ).send( "Could not save the payment." );
+                        res.send( Object.assign( {}, doc, {
+                            balance_after: Math.max( after, 0 ),
+                            advance_after: Math.max( -after, 0 )
+                        } ) );
+                    } );
                 } );
             } );
         } );

@@ -5810,7 +5810,8 @@ function renderGrns() {
         <td class="text-right nobr" data-order="${Number(g.total) || 0}">${supMoney(g.total)}</td>
         <td data-export="${txnHtml(grnPaymentText(g))}">${grnPaymentHtml(g)}</td>
         <td>${txnHtml(g.created_by || "")}</td>
-        <td><button onClick="$(this).viewGrn(${g._id})" class="btn btn-info btn-sm" title="View GRN"><i class="fa fa-search-plus"></i></button></td>
+        <td class="nobr"><button onClick="$(this).viewGrn(${g._id})" class="btn btn-info btn-sm" title="View GRN"><i class="fa fa-search-plus"></i></button>
+          <button onClick="$(this).grnBill(${g._id})" class="btn btn-default btn-sm" title="GRN bill"><i class="fa fa-print"></i></button></td>
       </tr>`
     )
     .join("");
@@ -6079,10 +6080,160 @@ function grnDetailsHtml(g) {
     </div>`;
 }
 
+let grnViewing = null; // the GRN open in the GRN details window (its Print Bill button)
+
 function showGrn(grn) {
+  grnViewing = grn;
   $("#grnViewTitle").html(`<i class="fa fa-truck"></i> ${txnHtml(grn.grn_no)}`);
   $("#grnViewBody").html(grnDetailsHtml(grn));
   supSwapModal("#supplierTransactionsModal", "#grnViewModal", null);
+}
+
+// ---- bills: GRN and supplier payment, in the same style as the POS bill ----
+// Shown in the sales bill window (#orderModal) and printed with its Print
+// button ($.fn.print prints `receipt`). A supplier's balance on a bill is its
+// position: + owed to the supplier, - advance held by the supplier.
+let supBillPositionCache = {}; // "g<id>" / "p<id>" -> { before, after }, worked out in the supplier window
+
+function supBillPositionFor(kind, doc) {
+  if (doc.position_after !== undefined && doc.position_after !== null) {
+    return { before: Number(doc.position_before) || 0, after: Number(doc.position_after) || 0 };
+  }
+  return supBillPositionCache[kind + doc._id] || null; // saved before bills existed
+}
+
+function supBillPositionText(pos) {
+  pos = Number(pos) || 0;
+  return pos > 0.004 ? "Owed " + supMoney(pos) : pos < -0.004 ? "Advance " + supMoney(-pos) : "Settled";
+}
+
+function supBillHeader(title) {
+  return `<p style="text-align: center;">
+      ${settings.img ? '<img style="max-width: 100px;" src="' + img_path + settings.img + '" /><br>' : ""}
+      <span style="font-size: 22px;">${settings.store || ""}</span> <br>
+      ${settings.address_one || ""} <br>
+      ${settings.address_two || ""} <br>
+      ${settings.contact ? "Tel: " + settings.contact + "<br>" : ""}
+    </p>
+    <hr>
+    <p style="text-align: center; font-size: 13px;"><b>${title}</b></p>`;
+}
+
+// a summary line in a 4-column bill table: label : value
+function supBillRow(label, value, big) {
+  if (big) {
+    let h = (t) => `<h3 style="margin: 4px 0;">${t}</h3>`;
+    return `<tr><td colspan="2">${h(label)}</td><td>${h(":")}</td><td style="text-align: right;">${h(value)}</td></tr>`;
+  }
+  return `<tr><td colspan="2">${label}</td><td>:</td><td style="text-align: right;">${value}</td></tr>`;
+}
+
+function supBillSignatures(left, right) {
+  let line = (t) =>
+    `<td style="width: 45%; border-top: 1px dotted #000; text-align: center; padding-top: 3px;">${t}</td>`;
+  return `<table width="100%" style="margin-top: 35px;"><tr>${line(left)}<td style="width: 10%;"></td>${line(right)}</tr></table>`;
+}
+
+function grnBillHtml(g) {
+  let items = (g.items || [])
+    .map(
+      (i) => `<tr>
+        <td>${txnHtml(i.product_name)}</td>
+        <td>${i.quantity}</td>
+        <td>${supMoney(i.unit_cost)}</td>
+        <td style="text-align: right;">${supMoney(i.total)}</td>
+      </tr>`
+    )
+    .join("");
+  let used = Number(g.advance_used) || 0;
+  let due = grnAmountDue(g);
+  let payment = "";
+  if (used > 0) payment += supBillRow("From supplier advance", supMoney(used));
+  if (g.payment_method === "Credit") payment += supBillRow("On credit", "<b>" + supMoney(due) + "</b>");
+  else if (g.payment_method !== "Advance") payment += supBillRow("Paid by " + txnHtml(g.payment_method), supMoney(due));
+  let pos = g.walk_in ? null : supBillPositionFor("g", g);
+  if (pos) payment += supBillRow("Supplier balance now", "<b>" + supBillPositionText(pos.after) + "</b>");
+
+  return `<div style="font-size: 10px;">
+    ${supBillHeader("GOODS RECEIVED NOTE")}
+    <p>
+      GRN No : <b>${txnHtml(g.grn_no)}</b> <br>
+      Supplier : ${txnHtml(g.supplier_name)}${g.walk_in ? " (Walk-in)" : ""} <br>
+      Received on : ${supDate(g.received_date)} <br>
+      Received by : ${txnHtml(g.created_by || "-")} <br>
+      Date : ${moment(g.created_at).format("DD MMM YYYY HH:mm:ss")}
+    </p>
+    <hr>
+    <table width="100%">
+      <thead style="text-align: left;">
+        <tr><th>Item</th><th>Qty</th><th>Cost</th><th style="text-align: right;">Total</th></tr>
+      </thead>
+      <tbody>
+        ${items}
+        <tr><td colspan="4"><hr style="margin: 4px 0;"></td></tr>
+        ${supBillRow("Products / Units", (g.item_count || (g.items || []).length) + " / " + (g.total_quantity || 0))}
+        ${supBillRow("Total", supMoney(g.total), true)}
+        ${payment}
+      </tbody>
+    </table>
+    ${g.note ? "<p>Note : " + txnHtml(g.note) + "</p>" : ""}
+    <hr>
+    ${supBillSignatures("Received by", "Supplier")}
+  </div>`;
+}
+
+function supplierPaymentBillHtml(p) {
+  let pos = supBillPositionFor("p", p);
+  let amount = Number(p.amount) || 0;
+  let toAdvance = Number(p.to_advance) || 0;
+  let toCredit = p.to_credit !== undefined ? Number(p.to_credit) || 0 : amount - toAdvance;
+  let name = p.supplier_name || (supplierTxnData && supplierTxnData.supplier ? supplierTxnData.supplier.name : "");
+  return `<div style="font-size: 10px;">
+    ${supBillHeader(toCredit > 0 ? "SUPPLIER PAYMENT" : "ADVANCE PAYMENT TO SUPPLIER")}
+    <p>
+      Payment No : <b>${txnHtml(p.payment_no || p._id)}</b> <br>
+      Supplier : ${txnHtml(name)} <br>
+      Paid on : ${supDate(p.date)} <br>
+      Paid by : ${txnHtml(p.created_by || "-")} <br>
+      Date : ${moment(p.created_at).format("DD MMM YYYY HH:mm:ss")}
+    </p>
+    <hr>
+    <table width="100%">
+      <tbody>
+        ${pos ? supBillRow("Balance before", supBillPositionText(pos.before)) : ""}
+        ${supBillRow("Amount paid", supMoney(amount), true)}
+        ${supBillRow("Method", txnHtml(p.payment_method))}
+        ${toCredit > 0 && toAdvance > 0 ? supBillRow("Settled credit", supMoney(toCredit)) : ""}
+        ${toAdvance > 0 ? supBillRow("Kept as advance", "<b>" + supMoney(toAdvance) + "</b>") : ""}
+        ${pos ? supBillRow("Balance now", "<b>" + supBillPositionText(pos.after) + "</b>") : ""}
+      </tbody>
+    </table>
+    ${p.note ? "<p>Note : " + txnHtml(p.note) + "</p>" : ""}
+    ${toAdvance > 0 ? '<p style="text-align: center;">The advance is used by the next GRNs from this supplier.</p>' : ""}
+    <hr>
+    ${supBillSignatures("Paid by", "Received by (Supplier)")}
+  </div>`;
+}
+
+// Shows a bill in the bill window; over the supplier window it takes its
+// place and the supplier window comes back when the bill is closed.
+function showSupplierBill(html) {
+  receipt = html;
+  $("#viewTransaction").html(html);
+  if ($("#supplierTransactionsModal").hasClass("in")) supSwapModal("#supplierTransactionsModal", "#orderModal", null);
+  else $("#orderModal").modal("show");
+}
+
+// After saving: close window "closing", then show the bill. When closing it
+// brings the supplier window back, the bill waits until that has opened.
+function showSupplierBillAfter(closing, html) {
+  $(closing).one("hidden.bs.modal", function () {
+    let $sup = $("#supplierTransactionsModal");
+    let m = $sup.data("bs.modal");
+    if (m && m.isShown && !$sup.hasClass("in")) $sup.one("shown.bs.modal", () => showSupplierBill(html));
+    else showSupplierBill(html);
+  });
+  $(closing).modal("hide");
 }
 
 // ---- supplier transactions (GRNs + payments) ----
@@ -6140,7 +6291,9 @@ function renderSupplierTransactions() {
   let rows = entries.map((e, i) => {
     if (e.kind === "grn") {
       let g = e.g;
+      let before = position;
       position += (g.payment_method === "Credit" ? grnAmountDue(g) : 0) + (Number(g.advance_used) || 0);
+      supBillPositionCache["g" + g._id] = { before: before, after: position };
       return `<tr>
         <td class="nobr" data-order="${i}">${supDate(g.received_date)}</td>
         <td><span class="label label-primary">GRN</span></td>
@@ -6148,11 +6301,14 @@ function renderSupplierTransactions() {
         <td data-export="${txnHtml(grnPaymentText(g))}">${grnPaymentHtml(g)}</td>
         <td class="text-right nobr">${supMoney(g.total)}</td>
         ${balanceCell(position)}
-        <td><button onClick="$(this).viewGrn(${g._id})" class="btn btn-info btn-sm" title="View GRN"><i class="fa fa-search-plus"></i></button></td>
+        <td class="nobr"><button onClick="$(this).viewGrn(${g._id})" class="btn btn-info btn-sm" title="View GRN"><i class="fa fa-search-plus"></i></button>
+          <button onClick="$(this).grnBill(${g._id})" class="btn btn-default btn-sm" title="GRN bill"><i class="fa fa-print"></i></button></td>
       </tr>`;
     }
     let p = e.p;
+    let before = position;
     position -= Number(p.amount) || 0;
+    supBillPositionCache["p" + p._id] = { before: before, after: position };
     let split =
       Number(p.to_advance) > 0
         ? `<br><small class="text-success">${
@@ -6166,7 +6322,7 @@ function renderSupplierTransactions() {
         <td>${txnHtml(p.payment_method)}</td>
         <td class="text-right nobr">${supMoney(p.amount)}</td>
         ${balanceCell(position)}
-        <td></td>
+        <td><button onClick="$(this).supplierPaymentBill(${p._id})" class="btn btn-default btn-sm" title="Payment bill"><i class="fa fa-print"></i></button></td>
       </tr>`;
   });
 
@@ -6251,6 +6407,12 @@ $(function () {
     if (supplierTxnData) openGrnForm(supplierTxnData.supplier._id);
   });
   $("#supTxnPayBtn").on("click", openSupplierPayment);
+  // GRN details window: print its bill straight away (same printing as the bill window)
+  $("#grnViewPrint").on("click", function () {
+    if (!grnViewing) return;
+    receipt = grnBillHtml(grnViewing);
+    $(this).print();
+  });
   $("#supPayAmount").on("input", updateSupplierPaymentHint);
 
   // tables measured while hidden (other tab / closed window) need re-measuring
@@ -6417,19 +6579,10 @@ $(function () {
       })
         .done(function (grn) {
           grnCache[grn._id] = grn;
-          $("#grnModal").modal("hide");
+          // like a sale: the GRN's bill comes up, ready to print
+          showSupplierBillAfter("#grnModal", grnBillHtml(grn));
           loadSuppliersPage();
           $(document).trigger("products:changed"); // new stock on the till and in Products
-          let advanceText =
-            Number(grn.advance_used) > 0
-              ? " " + supMoney(grn.advance_used) + " was paid from the supplier's advance" +
-                (Number(grn.advance_after) > 0.004 ? " (" + supMoney(grn.advance_after) + " advance left)." : ".")
-              : "";
-          Swal.fire({
-            title: grn.grn_no + " saved",
-            text: "Stock updated for " + grn.item_count + (grn.item_count === 1 ? " product." : " products.") + advanceText,
-            icon: "success",
-          });
         })
         .fail(function (xhr) {
           Swal.fire("Oops!", supError(xhr, "Could not save the GRN."), "warning");
@@ -6474,18 +6627,10 @@ $(function () {
       }),
     })
       .done(function (payment) {
-        $("#supplierPaymentModal").modal("hide"); // back to the supplier window (refreshed)
+        // back to the supplier window (refreshed) if it was open, and the
+        // payment's bill comes up, ready to print
+        showSupplierBillAfter("#supplierPaymentModal", supplierPaymentBillHtml(payment));
         loadSuppliers();
-        Swal.fire({
-          title: "Payment Saved",
-          text:
-            Number(payment.advance_after) > 0.004
-              ? "Advance with " + s.name + ": " + supMoney(payment.advance_after) + " (used by the next GRNs)."
-              : Number(payment.balance_after) > 0.004
-              ? "Still owed to " + s.name + ": " + supMoney(payment.balance_after)
-              : "Everything owed to " + s.name + " is settled.",
-          icon: "success",
-        });
       })
       .fail(function (xhr) {
         Swal.fire("Oops!", supError(xhr, "Could not save the payment."), "warning");
@@ -6546,6 +6691,28 @@ $.fn.deleteSupplier = function (id) {
         Swal.fire("Oops!", supError(xhr, "Could not delete the supplier."), "warning");
       });
   });
+};
+
+// GRN bill (print button in the GRN list and the supplier window)
+$.fn.grnBill = function (id) {
+  if (grnCache[id]) {
+    showSupplierBill(grnBillHtml(grnCache[id]));
+    return;
+  }
+  $.get(api + "suppliers/grn/" + id)
+    .done(function (g) {
+      grnCache[g._id] = g;
+      showSupplierBill(grnBillHtml(g));
+    })
+    .fail(function (xhr) {
+      Swal.fire("Oops!", supError(xhr, "Could not load the GRN."), "warning");
+    });
+};
+
+// supplier payment / advance payment bill (print button in the supplier window)
+$.fn.supplierPaymentBill = function (id) {
+  let p = supplierTxnData && (supplierTxnData.payments || []).find((x) => x._id === id);
+  if (p) showSupplierBill(supplierPaymentBillHtml(p));
 };
 
 $.fn.viewGrn = function (id) {

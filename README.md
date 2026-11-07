@@ -122,6 +122,7 @@ Whether operating on a standalone checkout computer or configured across multipl
   - Saving a GRN adds the quantities to stock and sets each product's cost price to the unit cost received; it shows in each product's history.
   - Per-supplier transactions (GRNs and payments) with **Pay Supplier** to settle credit purchases.
   - Paying a supplier more than is owed keeps the extra as the supplier's **advance**; the next GRNs from that supplier use it up automatically before the chosen payment method.
+  - **Bills** like the POS bill: a GRN bill (GRN-00001, …) and a supplier / advance payment bill (PAY-00001, …) come up after saving, ready to print, and can be reprinted from the GRN list, the supplier's transactions and the GRN details. They show the supplier's balance before / after (owed or advance) and signature lines.
 
 - **👥 User Roles & Permissions**:
   - Multi-staff user accounts.
