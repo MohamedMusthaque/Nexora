@@ -121,6 +121,7 @@ Whether operating on a standalone checkout computer or configured across multipl
   - Good Receive Notes: supplier or walk-in seller, products with quantity and unit cost, received date, and paid by Cash, Bank Transfer, Card or Credit.
   - Saving a GRN adds the quantities to stock and sets each product's cost price to the unit cost received; it shows in each product's history.
   - Per-supplier transactions (GRNs and payments) with **Pay Supplier** to settle credit purchases.
+  - Paying a supplier more than is owed keeps the extra as the supplier's **advance**; the next GRNs from that supplier use it up automatically before the chosen payment method.
 
 - **👥 User Roles & Permissions**:
   - Multi-staff user accounts.

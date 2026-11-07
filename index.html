@@ -508,6 +508,11 @@
                                     <div class="sup-value" id="suppliersOwed">0.00</div>
                                     <small id="suppliersOwedNote">credit GRNs not yet paid</small>
                                 </div>
+                                <div class="sup-tile">
+                                    <h5>ADVANCE WITH SUPPLIERS</h5>
+                                    <div class="sup-value" id="suppliersAdvance">0.00</div>
+                                    <small id="suppliersAdvanceNote">paid in advance, used by the next GRNs</small>
+                                </div>
                             </div>
                             <table class="table table-bordered" id="supplierList" style="width: 100%;">
                                 <thead>
@@ -517,6 +522,7 @@
                                         <th class="txn-num">GRNs</th>
                                         <th class="txn-num">Purchases</th>
                                         <th class="txn-num">Owed</th>
+                                        <th class="txn-num" title="Paid in advance; the next GRNs use it first">Advance</th>
                                         <th>Action</th>
                                     </tr>
                                 </thead>
@@ -547,6 +553,7 @@
                                     <option value="Bank Transfer">Bank Transfer</option>
                                     <option value="Card">Card</option>
                                     <option value="Credit">Credit</option>
+                                    <option value="Advance">Supplier advance</option>
                                 </select>
                             </div>
                             <div class="sup-tiles">
@@ -558,7 +565,7 @@
                                 <div class="sup-tile">
                                     <h5>PAID</h5>
                                     <div class="sup-value" id="grnsPaid">0.00</div>
-                                    <small>cash, card &amp; bank transfer</small>
+                                    <small id="grnsPaidNote">cash, card &amp; bank transfer</small>
                                 </div>
                                 <div class="sup-tile">
                                     <h5>ON CREDIT</h5>
@@ -1130,6 +1137,8 @@
                                 </div>
                             </div>
 
+                            <!-- the lines scroll inside this box; headings and the Total row stay visible -->
+                            <div class="grn-lines-scroll">
                             <table class="table table-bordered grn-lines" id="grnLines">
                                 <thead>
                                     <tr>
@@ -1152,6 +1161,10 @@
                                     </tr>
                                 </tfoot>
                             </table>
+                            </div>
+
+                            <!-- the supplier's advance is used for this GRN first (pos.js: updateGrnAdvanceInfo) -->
+                            <div class="alert alert-success grn-advance-info" style="display: none;"></div>
 
                             <div class="row">
                                 <div class="col-sm-5 form-group">
@@ -1212,11 +1225,16 @@
                             <div class="sup-tile">
                                 <h5>PAID TO SUPPLIER</h5>
                                 <div class="sup-value" id="supTxnPaid">0.00</div>
-                                <small>settling credit</small>
+                                <small>credit settled &amp; advances</small>
                             </div>
                             <div class="sup-tile sup-tile-main">
                                 <h5>OWED NOW</h5>
                                 <div class="sup-value" id="supTxnOwed">0.00</div>
+                            </div>
+                            <div class="sup-tile">
+                                <h5>ADVANCE</h5>
+                                <div class="sup-value" id="supTxnAdvance">0.00</div>
+                                <small>used by the next GRNs</small>
                             </div>
                         </div>
                         <div class="filter-bar" style="margin-bottom: 10px;">
@@ -1231,7 +1249,7 @@
                                     <th>Reference</th>
                                     <th>Paid By</th>
                                     <th class="txn-num">Amount</th>
-                                    <th class="txn-num" title="How the amount owed to the supplier changed">Owed</th>
+                                    <th class="txn-num" title="What is owed to the supplier (or held as advance) after this entry">Balance After</th>
                                     <th>View</th>
                                 </tr>
                             </thead>
@@ -1252,7 +1270,7 @@
                     </div>
                     <div class="modal-body">
                         <form id="saveSupplierPayment" autocomplete="off">
-                            <p class="sup-pay-owed">Owed to <b id="supPayName"></b>: <b id="supPayOwed">0.00</b></p>
+                            <p class="sup-pay-owed"><b id="supPayName"></b> &nbsp;·&nbsp; Owed: <b id="supPayOwed">0.00</b> &nbsp;·&nbsp; Advance: <b id="supPayAdvance">0.00</b></p>
                             <div class="row">
                                 <div class="col-sm-6 form-group">
                                     <label for="supPayAmount">Amount <span class="text-muted grn-currency"></span></label>
@@ -1263,6 +1281,7 @@
                                     <input type="date" id="supPayDate" class="form-control" required>
                                 </div>
                             </div>
+                            <p class="help-block" id="supPayHint"></p>
                             <div class="form-group">
                                 <label for="supPayMethod">Paid By</label>
                                 <select id="supPayMethod" class="form-control">

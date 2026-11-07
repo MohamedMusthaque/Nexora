@@ -2713,3 +2713,119 @@ ul.ColVis_collection li {
   font-size: 11px;
   letter-spacing: 0.4px;
 }
+
+/* GRN form: the product lines scroll in their own box, so the payment fields
+   and Save button stay in reach; headings and the Total row stay visible */
+#grnModal .grn-lines-scroll{
+  max-height: max(220px, calc(100vh - 560px));
+  overflow-y: auto;
+  overflow-x: auto;
+  margin-bottom: 15px;
+  border: 1px solid #e3e3e3;
+  border-radius: 4px;
+}
+#grnModal .grn-lines-scroll > .grn-lines{
+  margin-bottom: 0;
+  border: none;
+}
+#grnModal .grn-lines-scroll > .grn-lines > thead > tr > th{
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f6f8fa;
+  box-shadow: inset 0 -1px 0 #dfe3e8;
+}
+#grnModal .grn-lines-scroll > .grn-lines > tfoot > tr > th{
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: #f6f8fa;
+  box-shadow: inset 0 1px 0 #dfe3e8;
+}
+#grnModal .grn-lines-scroll::-webkit-scrollbar{
+  width: 8px;
+  height: 8px;
+}
+#grnModal .grn-lines-scroll::-webkit-scrollbar-thumb{
+  background: #cfd6dc;
+  border-radius: 4px;
+}
+
+/* ---- Suppliers page: fixed to the window, only the table scrolls ----
+   The page doesn't scroll; #suppliers_view gets the window's remaining
+   height (pos.js: fitSuppliersView) and the open tab's table fills what is
+   left below the header, filters and totals, scrolling up and down. */
+body.suppliers-mode{
+  overflow: hidden;
+}
+body.suppliers-mode #suppliers_view > .row{
+  height: 100%;
+}
+body.suppliers-mode #suppliers_view > .row > .col-md-12{
+  height: 100%;
+}
+body.suppliers-mode #suppliers_view .card-box{
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0;
+  overflow: auto; /* very short windows: the whole card scrolls instead */
+}
+body.suppliers-mode #suppliers_view .card-box > .suppliers-header,
+body.suppliers-mode #suppliers_view .card-box > .suppliers-tabs{
+  flex: 0 0 auto;
+}
+body.suppliers-mode #suppliers_view .card-box > .tab-content{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+body.suppliers-mode #suppliers_view .tab-content > .tab-pane.active{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+body.suppliers-mode #suppliers_view .tab-pane > .sup-tiles,
+body.suppliers-mode #suppliers_view .tab-pane > .sup-filters{
+  flex: 0 0 auto;
+}
+body.suppliers-mode #suppliers_view .tab-pane > .dataTables_wrapper{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+body.suppliers-mode #suppliers_view .dataTables_wrapper > .ph-toolbar,
+body.suppliers-mode #suppliers_view .dataTables_wrapper > .ph-footer{
+  flex: 0 0 auto;
+}
+body.suppliers-mode #suppliers_view .dataTables_wrapper > .ph-table-scroll{
+  flex: 1 1 auto;
+  min-height: 160px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border-bottom: 1px solid #e3e3e3;
+}
+body.suppliers-mode #suppliers_view .ph-table-scroll > table{
+  margin-top: 0 !important;   /* dataTables.bootstrap adds 6px above the table */
+  margin-bottom: 0 !important;
+}
+/* headings stay visible while the rows scroll */
+body.suppliers-mode #suppliers_view .ph-table-scroll > table > thead > tr > th{
+  /* !important: jquery.dataTables.min.css sets position: relative on sortable headings */
+  position: sticky !important;
+  top: 0;
+  z-index: 2;
+  background: #f6f8fa;
+  box-shadow: inset 0 -1px 0 #dfe3e8;
+}
+body.suppliers-mode #suppliers_view .ph-table-scroll::-webkit-scrollbar{
+  width: 8px;
+  height: 8px;
+}
+body.suppliers-mode #suppliers_view .ph-table-scroll::-webkit-scrollbar-thumb{
+  background: #cfd6dc;
+  border-radius: 4px;
+}

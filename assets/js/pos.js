@@ -2436,6 +2436,7 @@ if (!authedThisSession) {
         .removeClass("totals-compact");
       window.scrollTo(0, 0);
       if (page !== "pos") updateTransactionsStickyOffset();
+      if (page === "suppliers") fitSuppliersView();
     }
 
     $("#transactions").click(function () {
@@ -5534,7 +5535,9 @@ $.fn.deleteExpenseType = function (id) {
 // Receive Notes (GRN). A GRN records goods received from a supplier or a
 // walk-in seller and adds the quantities to the products' stock (server:
 // api/suppliers.js). Credit GRNs are settled with "Pay Supplier" in the
-// supplier's transactions window. Needs the "Manage Suppliers & GRN"
+// supplier's transactions window; paying more than is owed leaves the rest
+// as the supplier's advance, which the next GRNs use up first (server-side).
+// Needs the "Manage Suppliers & GRN"
 // permission (the Administrator always has it).
 let allSuppliers = [];
 let allGrns = [];
@@ -5597,6 +5600,19 @@ function supSwapModal(from, to, onReturn) {
   $from.modal("hide");
 }
 
+// The Suppliers page is fixed to the window: it gets the height left below
+// the toolbar, and its tables scroll inside it (body.suppliers-mode in
+// components.css). Run when the page opens and whenever the window resizes.
+function fitSuppliersView() {
+  let el = document.getElementById("suppliers_view");
+  if (!el || !$(el).is(":visible")) return;
+  let top = el.getBoundingClientRect().top;
+  el.style.height = Math.max(window.innerHeight - top - 15, 320) + "px";
+  ["#supplierList", "#grnList"].forEach((sel) => {
+    if ($.fn.DataTable.isDataTable(sel)) $(sel).DataTable().columns.adjust();
+  });
+}
+
 function loadSuppliersPage() {
   loadSuppliers();
   loadGrns();
@@ -5647,14 +5663,24 @@ function fillSupplierSelects() {
 }
 
 function renderSuppliers() {
-  let purchases = 0, owed = 0, owedCount = 0;
+  let purchases = 0, owed = 0, owedCount = 0, advance = 0, advanceCount = 0;
   allSuppliers.forEach((s) => {
     purchases += Number(s.purchases) || 0;
     if (s.balance > 0.004) {
       owed += s.balance;
       owedCount++;
     }
+    if (s.advance > 0.004) {
+      advance += s.advance;
+      advanceCount++;
+    }
   });
+  $("#suppliersAdvance").text(supMoney(advance));
+  $("#suppliersAdvanceNote").text(
+    advanceCount
+      ? "held by " + advanceCount + (advanceCount === 1 ? " supplier" : " suppliers") + ", used by the next GRNs"
+      : "paid in advance, used by the next GRNs"
+  );
   $("#suppliersCount").text(allSuppliers.length);
   $("#suppliersTabCount").text(allSuppliers.length);
   $("#suppliersPurchases").text(supMoney(purchases));
@@ -5670,12 +5696,17 @@ function renderSuppliers() {
         s.balance > 0.004
           ? `<span class="text-danger"><b>${supMoney(s.balance)}</b></span>`
           : `<span class="text-muted">${supMoney(0)}</span>`;
+      let advanceCell =
+        s.advance > 0.004
+          ? `<span class="text-success"><b>${supMoney(s.advance)}</b></span>`
+          : `<span class="text-muted">${supMoney(0)}</span>`;
       return `<tr>
         <td><b>${txnHtml(s.name)}</b>${s.address ? `<br><small class="text-muted">${txnHtml(s.address)}</small>` : ""}</td>
         <td data-export="${txnHtml(contact.join(", "))}">${contact.map(txnHtml).join("<br>")}</td>
         <td class="text-right">${s.grn_count || 0}</td>
         <td class="text-right nobr" data-order="${Number(s.purchases) || 0}">${supMoney(s.purchases)}</td>
         <td class="text-right nobr" data-order="${Number(s.balance) || 0}">${owedCell}</td>
+        <td class="text-right nobr" data-order="${Number(s.advance) || 0}">${advanceCell}</td>
         <td class="nobr"><span class="btn-group">
           <button onClick="$(this).viewSupplier(${s._id})" class="btn btn-info" title="Transactions"><i class="fa fa-list"></i></button>
           <button onClick="$(this).editSupplier(${s._id})" class="btn btn-warning" title="Edit"><i class="fa fa-edit"></i></button>
@@ -5692,9 +5723,9 @@ function renderSuppliers() {
       noun: "suppliers",
       searchPlaceholder: "Search suppliers...",
       exportTitle: "Suppliers",
-      exportColumns: [0, 1, 2, 3, 4],
-      sumColumns: [3, 4],
-      actionColumns: [5],
+      exportColumns: [0, 1, 2, 3, 4, 5],
+      sumColumns: [3, 4, 5],
+      actionColumns: [6],
       emptyTable: "No suppliers yet - click Add Supplier",
     })
   );
@@ -5721,20 +5752,46 @@ function grnsExportSubtitle() {
 function grnPaidByLabel(method) {
   return method === "Credit"
     ? `<span class="label label-warning">Credit</span>`
+    : method === "Advance"
+    ? `<span class="label label-success">Advance</span>`
     : txnHtml(method);
+}
+
+// what is left to pay after the supplier's advance (GRNs saved before
+// advances existed have no amount_due: all of the total)
+function grnAmountDue(g) {
+  return g.amount_due != null ? Number(g.amount_due) || 0 : Number(g.total) || 0;
+}
+
+// "Cash", or "Advance 100.00 + Credit 300.00" when an advance was used
+function grnPaymentText(g) {
+  let used = Number(g.advance_used) || 0;
+  if (!(used > 0) || g.payment_method === "Advance") return g.payment_method;
+  return "Advance " + supMoney(used) + " + " + g.payment_method + " " + supMoney(grnAmountDue(g));
+}
+
+function grnPaymentHtml(g) {
+  let used = Number(g.advance_used) || 0;
+  if (!(used > 0) || g.payment_method === "Advance") return grnPaidByLabel(g.payment_method);
+  return `${grnPaidByLabel(g.payment_method)} <span class="nobr">${supMoney(grnAmountDue(g))}</span>
+    <br><small class="text-success nobr">+ advance ${supMoney(used)}</small>`;
 }
 
 function renderGrns() {
   let list = filteredGrns();
-  let total = 0, credit = 0, units = 0;
+  let total = 0, credit = 0, units = 0, advance = 0;
   list.forEach((g) => {
     total += Number(g.total) || 0;
-    if (g.payment_method === "Credit") credit += Number(g.total) || 0;
+    if (g.payment_method === "Credit") credit += grnAmountDue(g);
+    advance += Number(g.advance_used) || 0;
     units += Number(g.total_quantity) || 0;
   });
   $("#grnsTotal").text(supMoney(total));
   $("#grnsTotalNote").text(list.length + (list.length === 1 ? " GRN" : " GRNs"));
   $("#grnsPaid").text(supMoney(total - credit));
+  $("#grnsPaidNote").text(
+    advance > 0.004 ? "incl. " + supMoney(advance) + " from supplier advances" : "cash, card & bank transfer"
+  );
   $("#grnsCredit").text(supMoney(credit));
   $("#grnsUnits").text(units);
   $("#grnsTabCount").text(list.length);
@@ -5750,7 +5807,7 @@ function renderGrns() {
         <td class="text-right">${g.item_count || (g.items || []).length}</td>
         <td class="text-right">${g.total_quantity || 0}</td>
         <td class="text-right nobr" data-order="${Number(g.total) || 0}">${supMoney(g.total)}</td>
-        <td data-export="${txnHtml(g.payment_method)}">${grnPaidByLabel(g.payment_method)}</td>
+        <td data-export="${txnHtml(grnPaymentText(g))}">${grnPaymentHtml(g)}</td>
         <td>${txnHtml(g.created_by || "")}</td>
         <td><button onClick="$(this).viewGrn(${g._id})" class="btn btn-info btn-sm" title="View GRN"><i class="fa fa-search-plus"></i></button></td>
       </tr>`
@@ -5807,12 +5864,15 @@ function openGrnForm(supplierId) {
         Swal.fire("No products yet", "Add your products first, then receive stock for them with a GRN.", "info");
         return;
       }
-      prepareGrnForm(supplierId);
-      if ($("#supplierTransactionsModal").hasClass("in")) {
-        supSwapModal("#supplierTransactionsModal", "#grnModal", refreshSupplierTransactions);
-      } else {
-        $("#grnModal").modal("show");
-      }
+      // fresh supplier advances too (an advance pays for the GRN first)
+      loadSuppliers(function () {
+        prepareGrnForm(supplierId);
+        if ($("#supplierTransactionsModal").hasClass("in")) {
+          supSwapModal("#supplierTransactionsModal", "#grnModal", refreshSupplierTransactions);
+        } else {
+          $("#grnModal").modal("show");
+        }
+      });
     })
     .fail(function () {
       Swal.fire("Oops!", "Could not load the products.", "warning");
@@ -5849,6 +5909,43 @@ function updateGrnSupplierUi() {
   $('#grnPaidBy option[value="Credit"]').prop("disabled", walkIn);
   if (walkIn && $("#grnPaidBy").val() === "Credit") $("#grnPaidBy").val("Cash");
   $(".grn-credit-hint").toggle(walkIn);
+  updateGrnAdvanceInfo();
+}
+
+function grnFormTotal() {
+  return supRound(
+    grnLines.reduce((s, l) => s + (grnLineValid(l) ? Number(l.quantity) * Number(l.unit_cost) : 0), 0)
+  );
+}
+
+// the chosen supplier's advance pays for the GRN first (the server does the
+// same when saving; this shows the split while entering it)
+function grnAdvanceSplit() {
+  let supplier = allSuppliers.find((s) => String(s._id) === $("#grnSupplier").val());
+  let advance = supplier ? Number(supplier.advance) || 0 : 0;
+  let total = grnFormTotal();
+  let used = supRound(Math.min(advance, total));
+  return { advance: advance, total: total, used: used, due: supRound(total - used) };
+}
+
+function updateGrnAdvanceInfo() {
+  let a = grnAdvanceSplit();
+  let covered = a.advance > 0.004 && a.total > 0 && a.due <= 0;
+  $("#grnPaidBy").prop("disabled", covered);
+  if (!(a.advance > 0.004)) {
+    $(".grn-advance-info").hide();
+    return;
+  }
+  let text = `<i class="fa fa-info-circle"></i> This supplier holds an advance of <b>${supMoney(a.advance)}</b>. `;
+  if (!(a.total > 0)) {
+    text += "It will be used for this GRN first.";
+  } else if (covered) {
+    text += `It pays for this whole GRN (<b>${supMoney(a.used)}</b>), so there is nothing else to pay` +
+      (a.advance - a.used > 0.004 ? `; <b>${supMoney(a.advance - a.used)}</b> stays as advance.` : ".");
+  } else {
+    text += `<b>${supMoney(a.used)}</b> of it is used for this GRN; the remaining <b>${supMoney(a.due)}</b> is paid by the method below.`;
+  }
+  $(".grn-advance-info").html(text).show();
 }
 
 function grnLineValid(line) {
@@ -5870,6 +5967,7 @@ function updateGrnTotals() {
   });
   $("#grnTotalQty").text(qty);
   $("#grnTotal").text(supMoney(total));
+  updateGrnAdvanceInfo();
 }
 
 function renderGrnLines() {
@@ -5956,9 +6054,12 @@ function grnDetailsHtml(g) {
     ["GRN No", `<b>${txnHtml(g.grn_no)}</b>`],
     ["Received", supDate(g.received_date)],
     ["Supplier", txnHtml(g.supplier_name) + (g.walk_in ? ' <span class="label label-default">Walk-in</span>' : "")],
-    ["Paid By", grnPaidByLabel(g.payment_method)],
-    ["Added By", txnHtml(g.created_by || "-") + `<br><small>${moment(g.created_at).format("DD MMM YYYY, hh:mm A")}</small>`],
+    ["Paid By", grnPaidByLabel(g.payment_method) + (Number(g.advance_used) > 0 && g.payment_method !== "Advance" ? " " + supMoney(grnAmountDue(g)) : "")],
   ];
+  if (Number(g.advance_used) > 0) meta.push(["From Supplier Advance", `<span class="text-success">${supMoney(g.advance_used)}</span>`]);
+  meta = meta.concat([
+    ["Added By", txnHtml(g.created_by || "-") + `<br><small>${moment(g.created_at).format("DD MMM YYYY, hh:mm A")}</small>`],
+  ]);
   if (g.note) meta.push(["Note", txnHtml(g.note)]);
   return `<div class="grn-view-meta">${meta
       .map((m) => `<div><small>${m[0].toUpperCase()}</small>${m[1]}</div>`)
@@ -6016,40 +6117,57 @@ function renderSupplierTransactions() {
   $("#supTxnCredit").text(supMoney(s.credit_purchases));
   $("#supTxnPaid").text(supMoney(s.credit_paid));
   $("#supTxnOwed").text(supMoney(s.balance)).toggleClass("sup-owed", s.balance > 0.004);
-  $("#supTxnPayBtn").prop("disabled", !(s.balance > 0.004));
+  $("#supTxnAdvance").text(supMoney(s.advance));
 
-  let events = [];
-  (supplierTxnData.grns || []).forEach((g) =>
-    events.push({
-      date: g.received_date,
-      at: g.created_at,
-      html: `<td class="nobr" data-order="${txnHtml(g.received_date)} ${txnHtml(g.created_at)}">${supDate(g.received_date)}</td>
+  // Balance after each entry, in the order they were saved (the order the
+  // server applied payments and advances): + owed, - advance
+  let entries = []
+    .concat((supplierTxnData.grns || []).map((g) => ({ kind: "grn", at: g.created_at, g: g })))
+    .concat((supplierTxnData.payments || []).map((p) => ({ kind: "payment", at: p.created_at, p: p })))
+    .sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  let position = 0;
+  let balanceCell = (pos) =>
+    pos > 0.004
+      ? `<td class="text-right nobr" data-export="Owed ${supMoney(pos)}"><span class="text-danger">Owed ${supMoney(pos)}</span></td>`
+      : pos < -0.004
+      ? `<td class="text-right nobr" data-export="Advance ${supMoney(-pos)}"><span class="text-success">Advance ${supMoney(-pos)}</span></td>`
+      : `<td class="text-right nobr" data-export="Settled"><span class="text-muted">Settled</span></td>`;
+
+  let rows = entries.map((e, i) => {
+    if (e.kind === "grn") {
+      let g = e.g;
+      position += (g.payment_method === "Credit" ? grnAmountDue(g) : 0) + (Number(g.advance_used) || 0);
+      return `<tr>
+        <td class="nobr" data-order="${i}">${supDate(g.received_date)}</td>
         <td><span class="label label-primary">GRN</span></td>
         <td>${txnHtml(g.grn_no)}${g.note ? `<br><small class="text-muted">${txnHtml(g.note)}</small>` : ""}</td>
-        <td data-export="${txnHtml(g.payment_method)}">${grnPaidByLabel(g.payment_method)}</td>
+        <td data-export="${txnHtml(grnPaymentText(g))}">${grnPaymentHtml(g)}</td>
         <td class="text-right nobr">${supMoney(g.total)}</td>
-        <td class="text-right nobr">${
-          g.payment_method === "Credit" ? `<span class="text-danger">+${supMoney(g.total)}</span>` : '<span class="text-muted">-</span>'
-        }</td>
-        <td><button onClick="$(this).viewGrn(${g._id})" class="btn btn-info btn-sm" title="View GRN"><i class="fa fa-search-plus"></i></button></td>`,
-    })
-  );
-  (supplierTxnData.payments || []).forEach((p) =>
-    events.push({
-      date: p.date,
-      at: p.created_at,
-      html: `<td class="nobr" data-order="${txnHtml(p.date)} ${txnHtml(p.created_at)}">${supDate(p.date)}</td>
+        ${balanceCell(position)}
+        <td><button onClick="$(this).viewGrn(${g._id})" class="btn btn-info btn-sm" title="View GRN"><i class="fa fa-search-plus"></i></button></td>
+      </tr>`;
+    }
+    let p = e.p;
+    position -= Number(p.amount) || 0;
+    let split =
+      Number(p.to_advance) > 0
+        ? `<br><small class="text-success">${
+            Number(p.to_credit) > 0 ? supMoney(p.to_credit) + " settled credit, " : ""
+          }${supMoney(p.to_advance)} to advance</small>`
+        : "";
+    return `<tr>
+        <td class="nobr" data-order="${i}">${supDate(p.date)}</td>
         <td><span class="label label-success">Payment</span></td>
-        <td>${p.note ? txnHtml(p.note) : '<span class="text-muted">-</span>'}${p.created_by ? `<br><small class="text-muted">by ${txnHtml(p.created_by)}</small>` : ""}</td>
+        <td>${p.note ? txnHtml(p.note) : '<span class="text-muted">-</span>'}${p.created_by ? `<br><small class="text-muted">by ${txnHtml(p.created_by)}</small>` : ""}${split}</td>
         <td>${txnHtml(p.payment_method)}</td>
         <td class="text-right nobr">${supMoney(p.amount)}</td>
-        <td class="text-right nobr"><span class="text-success">-${supMoney(p.amount)}</span></td>
-        <td></td>`,
-    })
-  );
+        ${balanceCell(position)}
+        <td></td>
+      </tr>`;
+  });
 
   if ($.fn.DataTable.isDataTable("#supplierTxnList")) $("#supplierTxnList").DataTable().destroy();
-  $("#supplier_txn_list").html(events.map((e) => `<tr>${e.html}</tr>`).join(""));
+  $("#supplier_txn_list").html(rows.join(""));
   $("#supplierTxnList").DataTable(
     Object.assign(
       standardTableOptions({
@@ -6057,7 +6175,8 @@ function renderSupplierTransactions() {
         searchPlaceholder: "Search...",
         exportTitle: "Supplier - " + s.name,
         exportColumns: [0, 1, 2, 3, 4, 5],
-        exportSubtitle: () => "Owed now: " + supMoney(s.balance),
+        exportSubtitle: () =>
+          s.advance > 0.004 ? "Advance now: " + supMoney(s.advance) : "Owed now: " + supMoney(s.balance),
         actionColumns: [6],
         emptyTable: "No GRNs or payments for this supplier yet",
       }),
@@ -6067,16 +6186,33 @@ function renderSupplierTransactions() {
 }
 
 // ---- pay a supplier ----
-function openSupplierPayment() {
+// how a payment amount is split: what is owed first, the rest to advance
+function updateSupplierPaymentHint() {
   let s = supplierTxnData && supplierTxnData.supplier;
-  if (!s || !(s.balance > 0.004)) {
-    Swal.fire("Nothing to pay", "Nothing is owed to this supplier.", "info");
+  let amount = supRound($("#supPayAmount").val());
+  if (!s || !(amount > 0)) {
+    $("#supPayHint").text("");
     return;
   }
+  let owed = Number(s.balance) || 0;
+  let toCredit = Math.min(amount, owed);
+  let toAdvance = supRound(amount - toCredit);
+  let parts = [];
+  if (toCredit > 0) parts.push(supMoney(toCredit) + (toCredit >= owed - 0.004 ? " settles everything owed" : " goes to what is owed"));
+  if (toAdvance > 0) parts.push(supMoney(toAdvance) + " becomes an advance, used by the next GRNs from this supplier");
+  $("#supPayHint").html('<i class="fa fa-info-circle"></i> ' + txnHtml(parts.join("; ")) + ".");
+}
+
+function openSupplierPayment() {
+  let s = supplierTxnData && supplierTxnData.supplier;
+  if (!s) return;
   $("#saveSupplierPayment").get(0).reset();
   $("#supPayName").text(s.name);
   $("#supPayOwed").text(supMoney(s.balance));
-  $("#supPayAmount").val(supRound(s.balance).toFixed(2)).attr("max", supRound(s.balance).toFixed(2));
+  $("#supPayAdvance").text(supMoney(s.advance));
+  // owed: suggest paying it all; nothing owed: the amount is an advance
+  $("#supPayAmount").val(s.balance > 0.004 ? supRound(s.balance).toFixed(2) : "");
+  updateSupplierPaymentHint();
   $("#supPayDate").val(moment().format("YYYY-MM-DD"));
   $("#supPayMethod").val("Cash");
   $(".grn-currency").text(settings?.symbol ? "(" + settings.symbol + ")" : "");
@@ -6085,6 +6221,13 @@ function openSupplierPayment() {
 
 $(function () {
   grnDateFilter = initDateRangeFilter("#grnDateRange", renderGrns);
+
+  // keep the Suppliers page fitted to the window (the toolbar can change
+  // height on its own too, e.g. buttons shown/hidden or wrapping)
+  $(window).on("resize", fitSuppliersView);
+  if (window.ResizeObserver && document.querySelector(".main-toolbar-row")) {
+    new ResizeObserver(fitSuppliersView).observe(document.querySelector(".main-toolbar-row"));
+  }
   $("#grnSupplierFilter, #grnPaidByFilter").on("change", renderGrns);
 
   $("#addSupplierBtn").on("click", function () {
@@ -6097,6 +6240,7 @@ $(function () {
     if (supplierTxnData) openGrnForm(supplierTxnData.supplier._id);
   });
   $("#supTxnPayBtn").on("click", openSupplierPayment);
+  $("#supPayAmount").on("input", updateSupplierPaymentHint);
 
   // tables measured while hidden (other tab / closed window) need re-measuring
   $('#suppliers_view .suppliers-tabs a[data-toggle="tab"]').on("shown.bs.tab", function () {
@@ -6221,6 +6365,13 @@ $(function () {
 
     let total = supRound(grnLines.reduce((s, l) => s + Number(l.quantity) * Number(l.unit_cost), 0));
     let units = grnLines.reduce((s, l) => s + Number(l.quantity), 0);
+    let split = grnAdvanceSplit();
+    let paymentText =
+      split.used > 0
+        ? split.due > 0
+          ? "Advance " + supMoney(split.used) + " + " + paidBy + " " + supMoney(split.due)
+          : "Paid from the supplier's advance"
+        : paidBy;
     let supplierName = supplierId
       ? $("#grnSupplier option:selected").text()
       : $.trim($("#grnWalkInName").val()) || "Walk-in seller";
@@ -6239,7 +6390,8 @@ $(function () {
       title: "Save this GRN?",
       icon: "question",
       html: `<p><b>${txnHtml(supplierName)}</b> · ${supDate(date)}</p>
-        <p>${grnLines.length} ${grnLines.length === 1 ? "product" : "products"}, ${units} units · <b>${supMoney(total)}</b> · ${txnHtml(paidBy)}</p>
+        <p>${grnLines.length} ${grnLines.length === 1 ? "product" : "products"}, ${units} units · <b>${supMoney(total)}</b></p>
+        <p>${txnHtml(paymentText)}</p>
         <p class="text-muted" style="font-size: 13px;">The stock of these products goes up by the quantities received. A saved GRN can't be changed.</p>`,
       showCancelButton: true,
       confirmButtonText: "Save GRN",
@@ -6257,9 +6409,14 @@ $(function () {
           $("#grnModal").modal("hide");
           loadSuppliersPage();
           $(document).trigger("products:changed"); // new stock on the till and in Products
+          let advanceText =
+            Number(grn.advance_used) > 0
+              ? " " + supMoney(grn.advance_used) + " was paid from the supplier's advance" +
+                (Number(grn.advance_after) > 0.004 ? " (" + supMoney(grn.advance_after) + " advance left)." : ".")
+              : "";
           Swal.fire({
             title: grn.grn_no + " saved",
-            text: "Stock updated for " + grn.item_count + (grn.item_count === 1 ? " product." : " products."),
+            text: "Stock updated for " + grn.item_count + (grn.item_count === 1 ? " product." : " products.") + advanceText,
             icon: "success",
           });
         })
@@ -6287,10 +6444,6 @@ $(function () {
       Swal.fire("Oops!", "Please enter an amount greater than zero.", "warning");
       return;
     }
-    if (amount > supRound(s.balance) + 0.004) {
-      Swal.fire("Oops!", "The payment is more than the amount owed (" + supMoney(s.balance) + ").", "warning");
-      return;
-    }
     if (!$("#supPayDate").val()) {
       Swal.fire("Oops!", "Please enter the payment date.", "warning");
       return;
@@ -6314,7 +6467,12 @@ $(function () {
         loadSuppliers();
         Swal.fire({
           title: "Payment Saved",
-          text: "Still owed to " + s.name + ": " + supMoney(payment.balance_after),
+          text:
+            Number(payment.advance_after) > 0.004
+              ? "Advance with " + s.name + ": " + supMoney(payment.advance_after) + " (used by the next GRNs)."
+              : Number(payment.balance_after) > 0.004
+              ? "Still owed to " + s.name + ": " + supMoney(payment.balance_after)
+              : "Everything owed to " + s.name + " is settled.",
           icon: "success",
         });
       })

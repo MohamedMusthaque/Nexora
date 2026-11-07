@@ -12,7 +12,9 @@ module.exports = app;
 // products, quantities and unit costs, the received date and how it was paid
 // (Cash, Card, Bank Transfer or Credit). Saving a GRN adds the quantities to
 // the products' stock. Credit GRNs are what the shop owes the supplier until
-// it is settled with supplier payments.
+// it is settled with supplier payments. Paying more than is owed leaves the
+// rest with the supplier as an advance, which the next GRNs from that supplier
+// use up automatically before the chosen payment method.
 
 const GRN_PAYMENT_METHODS = [ "Cash", "Bank Transfer", "Card", "Credit" ];
 const PAY_METHODS = [ "Cash", "Bank Transfer", "Card" ];
@@ -77,29 +79,41 @@ function validDate( value ) {
     return text;
 }
 
-// totals for one supplier from its GRNs and payments
+// Totals for one supplier from its GRNs and payments. Each supplier has one
+// running position:
+//   position = credit left to pay on GRNs + advance used by GRNs - payments
+// above zero the shop owes the supplier (balance); below zero the supplier
+// holds an advance. Owing and an advance never exist at the same time:
+// payments clear what is owed first, and GRNs use the advance first.
 function supplierSummary( grns, payments ) {
-    let purchases = 0, creditPurchases = 0, paid = 0;
+    let purchases = 0, creditPurchases = 0, advanceUsed = 0, paid = 0;
     grns.forEach( ( g ) => {
-        purchases += Number( g.total ) || 0;
-        if ( g.payment_method === "Credit" ) creditPurchases += Number( g.total ) || 0;
+        let total = Number( g.total ) || 0;
+        let used = Number( g.advance_used ) || 0;
+        purchases += total;
+        advanceUsed += used;
+        if ( g.payment_method === "Credit" ) creditPurchases += total - used;
     } );
     payments.forEach( ( p ) => { paid += Number( p.amount ) || 0; } );
+    let position = round2( creditPurchases + advanceUsed - paid );
     return {
         grn_count: grns.length,
         purchases: round2( purchases ),
         credit_purchases: round2( creditPurchases ),
+        advance_used: round2( advanceUsed ),
         credit_paid: round2( paid ),
-        balance: round2( creditPurchases - paid )
+        position: position,
+        balance: Math.max( position, 0 ), // owed to the supplier
+        advance: Math.max( -position, 0 ) // held by the supplier for the next GRNs
     };
 }
 
-function supplierBalance( supplierId, callback ) {
-    grnsDB.find( { supplier_id: supplierId, payment_method: "Credit" }, function ( err, grns ) {
+function supplierPosition( supplierId, callback ) {
+    grnsDB.find( { supplier_id: supplierId }, function ( err, grns ) {
         if ( err ) return callback( err );
         supplierPaymentsDB.find( { supplier_id: supplierId }, function ( err, payments ) {
             if ( err ) return callback( err );
-            callback( null, supplierSummary( grns, payments ).balance );
+            callback( null, supplierSummary( grns, payments ).position );
         } );
     } );
 }
@@ -135,7 +149,7 @@ app.get( "/", function ( req, res ) {
 app.get( "/all", function ( req, res ) {
     suppliersDB.find( {} ).sort( { name: 1 } ).exec( function ( err, suppliers ) {
         if ( err ) return res.status( 500 ).send( "Could not load the suppliers." );
-        grnsDB.find( { supplier_id: { $gt: 0 } }, { supplier_id: 1, total: 1, payment_method: 1 }, function ( err, grns ) {
+        grnsDB.find( { supplier_id: { $gt: 0 } }, { supplier_id: 1, total: 1, payment_method: 1, advance_used: 1 }, function ( err, grns ) {
             if ( err ) return res.status( 500 ).send( "Could not load the suppliers." );
             supplierPaymentsDB.find( {}, { supplier_id: 1, amount: 1 }, function ( err, payments ) {
                 if ( err ) return res.status( 500 ).send( "Could not load the suppliers." );
@@ -243,7 +257,9 @@ app.get( "/grn/:id", function ( req, res ) {
 // Body: { supplier_id (0 = walk-in seller), walk_in_name, received_date,
 //         payment_method, items: [{ product_id, quantity, unit_cost }],
 //         note, created_by, created_by_id }
-// Each product's cost price becomes the unit cost received.
+// Each product's cost price becomes the unit cost received. A supplier's
+// advance pays for the GRN first (advance_used); payment_method covers the
+// rest (amount_due), or is "Advance" when the advance paid for all of it.
 app.post( "/grn", function ( req, res ) {
     let body = req.body || {};
 
@@ -295,19 +311,29 @@ app.post( "/grn", function ( req, res ) {
         }
 
         let withSupplier = function ( callback ) {
-            if ( !supplierId ) return callback( null, null );
-            suppliersDB.findOne( { _id: supplierId }, callback );
+            if ( !supplierId ) return callback( null, null, 0 );
+            suppliersDB.findOne( { _id: supplierId }, function ( err, supplier ) {
+                if ( err || !supplier ) return callback( err, supplier, 0 );
+                supplierPosition( supplierId, function ( err, position ) {
+                    callback( err, supplier, position );
+                } );
+            } );
         };
 
-        withSupplier( function ( err, supplier ) {
-            if ( err ) return res.status( 500 ).send( "Could not check the supplier." );
-            if ( supplierId && !supplier ) return res.status( 400 ).send( "That supplier no longer exists. Please choose another one." );
+        // numbered and saved one at a time (GRN-00001, GRN-00002, ...), and the
+        // supplier's advance can't be used twice by two GRNs at once
+        inSeries( function ( done ) {
+            withSupplier( function ( err, supplier, position ) {
+                if ( err ) { done(); return res.status( 500 ).send( "Could not check the supplier." ); }
+                if ( supplierId && !supplier ) { done(); return res.status( 400 ).send( "That supplier no longer exists. Please choose another one." ); }
 
-            // numbered and saved one at a time (GRN-00001, GRN-00002, ...)
-            inSeries( function ( done ) {
                 grnsDB.find( {} ).sort( { seq: -1 } ).limit( 1 ).exec( function ( err, last ) {
                     if ( err ) { done(); return res.status( 500 ).send( "Could not save the GRN." ); }
                     let seq = ( last.length ? Number( last[0].seq ) || 0 : 0 ) + 1;
+                    let total = round2( items.reduce( ( s, i ) => s + i.total, 0 ) );
+                    let advance = supplier ? Math.max( -position, 0 ) : 0;
+                    let advanceUsed = round2( Math.min( advance, total ) );
+                    let amountDue = round2( total - advanceUsed );
                     let grn = {
                         _id: newId(),
                         seq: seq,
@@ -316,11 +342,13 @@ app.post( "/grn", function ( req, res ) {
                         supplier_name: supplier ? supplier.name : ( cleanText( body.walk_in_name, 100 ) || "Walk-in seller" ),
                         walk_in: !supplier,
                         received_date: receivedDate,
-                        payment_method: paymentMethod,
+                        payment_method: amountDue > 0 ? paymentMethod : "Advance",
                         items: items,
                         item_count: items.length,
                         total_quantity: items.reduce( ( s, i ) => s + i.quantity, 0 ),
-                        total: round2( items.reduce( ( s, i ) => s + i.total, 0 ) ),
+                        total: total,
+                        advance_used: advanceUsed,
+                        amount_due: amountDue,
                         note: note,
                         created_by: createdBy,
                         created_at: new Date().toJSON()
@@ -343,7 +371,7 @@ app.post( "/grn", function ( req, res ) {
                                 console.error( "GRN " + saved.grn_no + ": stock update failed:", err );
                                 return res.status( 500 ).send( "The GRN " + saved.grn_no + " was saved, but the stock could not be updated for every product. Please check the product quantities." );
                             }
-                            res.send( saved );
+                            res.send( Object.assign( {}, saved, { advance_after: round2( advance - advanceUsed ) } ) );
                         } );
                     } );
                 } );
@@ -353,9 +381,11 @@ app.post( "/grn", function ( req, res ) {
 } );
 
 
-// ---- Supplier payments (settling credit GRNs) ----
+// ---- Supplier payments (settling credit GRNs, or paying in advance) ----
 
 // Body: { supplier_id, amount, date, payment_method, note, created_by }
+// The payment settles what is owed first; the rest becomes the supplier's
+// advance (used by the next GRNs).
 app.post( "/payments", function ( req, res ) {
     let body = req.body || {};
     let supplierId = parseInt( body.supplier_id ) || 0;
@@ -372,13 +402,10 @@ app.post( "/payments", function ( req, res ) {
         suppliersDB.findOne( { _id: supplierId }, function ( err, supplier ) {
             if ( err ) { done(); return res.status( 500 ).send( "Could not save the payment." ); }
             if ( !supplier ) { done(); return res.status( 404 ).send( "That supplier no longer exists." ); }
-            supplierBalance( supplierId, function ( err, balance ) {
+            supplierPosition( supplierId, function ( err, position ) {
                 if ( err ) { done(); return res.status( 500 ).send( "Could not save the payment." ); }
-                if ( balance <= 0 ) { done(); return res.status( 400 ).send( "Nothing is owed to this supplier." ); }
-                if ( amount > balance + 0.004 ) {
-                    done();
-                    return res.status( 400 ).send( "The payment is more than the amount owed (" + balance.toFixed( 2 ) + ")." );
-                }
+                let owed = Math.max( position, 0 );
+                let toCredit = round2( Math.min( amount, owed ) );
                 let payment = {
                     _id: newId(),
                     supplier_id: supplierId,
@@ -386,6 +413,8 @@ app.post( "/payments", function ( req, res ) {
                     amount: amount,
                     date: date,
                     payment_method: method,
+                    to_credit: toCredit,
+                    to_advance: round2( amount - toCredit ),
                     note: String( body.note || "" ).trim().slice( 0, MAX_NOTE ),
                     created_by: cleanText( body.created_by, 100 ),
                     created_at: new Date().toJSON()
@@ -393,7 +422,11 @@ app.post( "/payments", function ( req, res ) {
                 supplierPaymentsDB.insert( payment, function ( err, doc ) {
                     done();
                     if ( err ) return res.status( 500 ).send( "Could not save the payment." );
-                    res.send( Object.assign( {}, doc, { balance_after: round2( balance - amount ) } ) );
+                    let after = round2( position - amount );
+                    res.send( Object.assign( {}, doc, {
+                        balance_after: Math.max( after, 0 ),
+                        advance_after: Math.max( -after, 0 )
+                    } ) );
                 } );
             } );
         } );
