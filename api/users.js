@@ -150,27 +150,65 @@ app.post( "/post" , function ( req, res ) {
 });
 
 
+// ---- First-run setup ----------------------------------------------------
+// A new installation has no user accounts. Instead of a built-in default
+// login, the app shows a setup screen that creates the administrator
+// (_id 1, full access). Setup is only possible while there are no users.
+
+app.get( "/setup-status", function ( req, res ) {
+    usersDB.count( {}, function ( err, count ) {
+        if ( err ) return res.status( 500 ).send( err );
+        res.send( { needsSetup: count === 0 } );
+    } );
+} );
+
+app.post( "/setup", function ( req, res ) {
+    let fullname = String( req.body.fullname || "" ).trim();
+    let username = String( req.body.username || "" ).trim();
+    let password = String( req.body.password || "" );
+
+    if ( !fullname || fullname.length > 60 ) {
+        return res.status( 400 ).send( "Please enter the administrator's full name." );
+    }
+    if ( !/^[A-Za-z0-9._-]{3,30}$/.test( username ) ) {
+        return res.status( 400 ).send( "Username must be 3-30 characters: letters, numbers, dot, dash or underscore." );
+    }
+    if ( password.length < 6 || password.length > 100 ) {
+        return res.status( 400 ).send( "Password must be at least 6 characters." );
+    }
+
+    usersDB.count( {}, function ( err, count ) {
+        if ( err ) return res.status( 500 ).send( err );
+        if ( count > 0 ) return res.status( 409 ).send( "Setup has already been completed. Please log in." );
+
+        let User = {
+            "_id": 1,
+            "username": username,
+            "password": btoa( password ),
+            "fullname": fullname,
+            "perm_products": 1,
+            "perm_categories": 1,
+            "perm_transactions": 1,
+            "perm_users": 1,
+            "perm_settings": 1,
+            "status": ""
+        };
+        // the unique _id index stops a second, simultaneous setup
+        usersDB.insert( User, function ( err ) {
+            if ( err ) return res.status( 409 ).send( "Setup has already been completed. Please log in." );
+            res.send( { _id: 1, username: username, fullname: fullname } );
+        } );
+    } );
+} );
+
+
 app.get( "/check", function ( req, res ) {
     usersDB.findOne( {
         _id: 1
 }, function ( err, docs ) {
-        if(!docs) {
-            let User = {
-                "_id": 1,
-                "username": "admin",
-                "password": btoa("admin"),
-                "fullname": "Administrator",
-                "perm_products": 1,
-                "perm_categories": 1,
-                "perm_transactions": 1,
-                "perm_users": 1,
-                "perm_settings": 1,
-                "status": ""
-              }
-            usersDB.insert( User, function ( err, user ) {
-            });
-        }
-        else if(docs.perm_products != 1 || docs.perm_categories != 1 || docs.perm_transactions != 1 || docs.perm_users != 1 || docs.perm_settings != 1) {
+        // No administrator yet: nothing to do here - a new installation creates
+        // it on the first-run setup screen (POST /setup), never as admin/admin.
+        if(docs && (docs.perm_products != 1 || docs.perm_categories != 1 || docs.perm_transactions != 1 || docs.perm_users != 1 || docs.perm_settings != 1)) {
             // The bootstrap Administrator account (_id 1) must always have full access.
             // Its permissions can end up stripped if its profile is ever saved without
             // the permission checkboxes being populated (e.g. editing your own profile).
@@ -187,6 +225,7 @@ app.get( "/check", function ( req, res ) {
             }, {}, function ( err, numReplaced ) {
             } );
         }
+        res.sendStatus( 200 );
     } );
 } );
  

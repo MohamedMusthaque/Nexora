@@ -27,7 +27,7 @@
 - [Overview](#-overview)
 - [What's New in 1.0.1](#-whats-new-in-101)
 - [Key Features](#-key-features)
-- [Default Login Credentials](#-default-login-credentials)
+- [First-Run Setup](#-first-run-setup)
 - [Prerequisites](#-prerequisites)
 - [Quick Start & Installation](#-quick-start--installation)
 - [Available Scripts](#-available-scripts)
@@ -73,7 +73,8 @@ Whether operating on a standalone checkout computer or configured across multipl
 - Invoice table shows the **customer** and the **remaining** amount on credit, and fits the screen without sideways scrolling.
 - Styled **Excel (`.xlsx`)** and **PDF** exports on every list, with date filters defaulting to *All dates*.
 
-**Settings**
+**Setup & Settings**
+- **First-run setup**: a Welcome screen creates the administrator account (no more default `admin` / `admin` login).
 - **Reset Database**: clears all data (sales, customers, products, store settings and images) while keeping the user accounts, after an automatic backup.
 
 **Other**
@@ -137,16 +138,22 @@ Whether operating on a standalone checkout computer or configured across multipl
 
 ---
 
-## 🔐 Default Login Credentials
+## 🔐 First-Run Setup
 
-Upon fresh installation or first launch, an initial Administrator account is automatically initialized:
+There is no built-in default login. The first time NEXORA POS starts on a machine (when no user accounts exist yet), it shows a **Welcome** screen to create the administrator account:
 
-| Role | Username | Password | Permissions |
-| :--- | :--- | :--- | :--- |
-| **Administrator** | `admin` | `admin` | Full Access (All modules) |
+| Field | Rules |
+| :--- | :--- |
+| **Full name** | Required |
+| **Username** | 3-30 characters: letters, numbers, dot, dash or underscore |
+| **Password** | At least 6 characters, entered twice to confirm |
 
-> [!IMPORTANT]
-> Change the default administrator password in **Settings > Users** immediately after your first login for production deployments.
+The administrator gets **full access** to all modules and is logged in straight away. Next:
+1. Add your store details (name, address, currency, tax, receipt footer and logo) in **Settings**.
+2. Add other staff accounts and their permissions in **Users**.
+
+> [!NOTE]
+> The setup screen only appears while there are no user accounts, so it can't be used to take over an existing installation. **Reset Database** keeps user accounts, so it does not bring the setup screen back.
 
 ---
 
@@ -197,6 +204,10 @@ yarn electron
 
 This starts the Express API server on `http://localhost:8001` and opens the desktop Electron window with live hot-reloading enabled via `nodemon`.
 
+### 4. First Launch
+
+On a new machine the app opens the **Welcome** screen. Create the administrator account there (see [First-Run Setup](#-first-run-setup)), then add your store details in **Settings**.
+
 ---
 
 ## 📜 Available Scripts
@@ -211,6 +222,27 @@ This starts the Express API server on `http://localhost:8001` and opens the desk
 | `npm run dist:linux` | `yarn dist:linux` | Packages an installer/executable for Linux |
 | `npm run electron-build` | `yarn electron-build`| Runs electron-builder with default configuration |
 
+### Building & Packaging
+
+The version number comes from `package.json` (currently **1.0.1**). To build the Windows installer and portable zip:
+
+```bash
+npx electron-builder --win --publish never
+```
+
+Output (in `dist/`):
+
+| File | Purpose |
+| :--- | :--- |
+| `Nexora Setup <version>.exe` | One-click installer (installs for the current user) |
+| `Nexora-<version>-win.zip` | Portable version: unzip and run `Nexora.exe` |
+| `latest.yml`, `*.blockmap` | Used by the auto-updater |
+
+Notes:
+- The packaging settings are in the `build` section of `package.json`. They take priority over `electron-builder.yml`.
+- Local data folders (`server/`, `UsersmusthAppDataRoaming/`), screenshots and editor settings are excluded, so no databases or user accounts are packed into the installer.
+- When uploading a release to GitHub by hand, name the installer `Nexora-Setup-<version>.exe` (with dashes) to match `latest.yml`, so auto-updates can find it.
+
 ---
 
 ## 📂 Project Architecture
@@ -223,18 +255,18 @@ Nexora/
 │   ├── inventory.js        # Product catalog & stock API
 │   ├── settings.js         # App store info & receipt preferences API
 │   ├── transactions.js     # Sales, orders & reporting API
-│   └── users.js            # User authentication & permissions API
+│   └── users.js            # User accounts, login, permissions & first-run setup API
 ├── assets/                 # Frontend assets
 │   ├── css/                # Bootstrap & custom styling
 │   ├── images/             # Logos, icons, and badges
 │   ├── js/                 # pos.js (core POS controller) & plugins
 │   └── plugins/            # DataTables, DateRangePicker, Chosen, etc.
 ├── lib/
-│   └── dataConfig.js       # Data location, backup, and restore helpers
+│   └── dataConfig.js       # Data location and pending database-reset helpers
 ├── screenshots/            # UI preview captures
 ├── index.html              # Main application window layout
 ├── server.js               # Express server entry point (PORT 8001)
-├── start.js                # Electron main process & window lifecycle
+├── start.js                # Electron main process: window, backup / restore / reset
 └── package.json            # Dependencies, build configs, and scripts
 ```
 
@@ -319,6 +351,19 @@ Electron enforces a single-instance lock to prevent multiple instances from open
   ```powershell
   Get-Process -Id (Get-NetTCPConnection -LocalPort 8001).OwningProcess | Stop-Process -Force
   ```
+
+### 4. The Welcome (setup) screen appears on a machine that already had data
+The setup screen only shows when the app finds **no user accounts** in its data folder.
+- **Cause**: The data folder is empty or has changed, for example after a new Windows user profile, a deleted `POS` folder, or a data location that points to another drive that isn't connected.
+- **Solution**: Reconnect the drive or folder and restart the app. To bring back a backup instead, complete the setup, then use **Settings > Restore Data** and pick the backup folder.
+
+### 5. Build fails with `Device or resource busy` / `EBUSY`
+A file in the build output folder is locked, often by OneDrive sync or antivirus when the project is inside a OneDrive folder.
+- Build into a fresh folder:
+  ```bash
+  npx electron-builder --win --publish never --config.directories.output=dist-1.0.1
+  ```
+- Or pause OneDrive sync, restart the PC, and delete the old `dist/` folder.
 
 ---
 

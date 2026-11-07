@@ -768,9 +768,22 @@ auth = storage.get("auth");
 user = storage.get("user");
 
 if (!authedThisSession) {
-  $.get(api + "users/check/", function (data) {});
   $("#loading").show();
-  authenticate();
+  // first launch on this machine (no user accounts yet): set up the
+  // administrator instead of logging in
+  $.get(api + "users/setup-status")
+    .done(function (status) {
+      if (status && status.needsSetup) {
+        showFirstRunSetup();
+      } else {
+        $.get(api + "users/check/");
+        authenticate();
+      }
+    })
+    .fail(function () {
+      $.get(api + "users/check/");
+      authenticate();
+    });
 } else {
   $("#loading").show();
 
@@ -5809,6 +5822,119 @@ function authenticate() {
         <div class="form-group"><input type="submit" class="btn btn-block btn-default" value="Login"></div></form>`
   );
 }
+
+// ---- First-run setup: create the administrator account ----
+// Shown instead of the login when the app has no user accounts yet (a new
+// installation). The account gets full access; more users are added later
+// in Users.
+function showFirstRunSetup() {
+  $("#loading").addClass("first-run");
+  $("#loading #load").remove();
+  $("#loading").append(
+    `<div id="load" class="setup-card">
+      <div class="text-center"><img src="assets/images/Nexora-Logo.png" alt="Nexora" style="max-height: 80px; margin-bottom: 14px;"></div>
+      <h3 class="setup-title">Welcome to NEXORA POS</h3>
+      <p class="setup-intro">Create the administrator account to get started. This account has full access and can add other users later.</p>
+      <form id="firstRunSetup" autocomplete="off" novalidate>
+        <div class="form-group">
+          <label for="setupFullname">Full name</label>
+          <input type="text" id="setupFullname" name="fullname" class="form-control" maxlength="60" placeholder="e.g. Mohamed Musthaque">
+        </div>
+        <div class="form-group">
+          <label for="setupUsername">Username</label>
+          <input type="text" id="setupUsername" name="username" class="form-control" maxlength="30" placeholder="e.g. admin">
+          <span class="help-block">3-30 characters: letters, numbers, dot, dash or underscore.</span>
+        </div>
+        <div class="form-group">
+          <label for="setupPassword">Password</label>
+          <input type="password" id="setupPassword" name="password" class="form-control" placeholder="At least 6 characters">
+        </div>
+        <div class="form-group">
+          <label for="setupPassword2">Confirm password</label>
+          <input type="password" id="setupPassword2" name="password2" class="form-control" placeholder="Type the password again">
+        </div>
+        <div class="setup-error text-danger" style="display: none;"></div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <button type="submit" class="btn btn-block btn-success"><i class="fa fa-check"></i> Create account &amp; start</button>
+        </div>
+      </form>
+    </div>`
+  );
+  setTimeout(() => $("#setupFullname").trigger("focus"), 50);
+}
+
+// the same rules the server checks (api/users.js POST /setup)
+function firstRunSetupError(f) {
+  if (!f.fullname) return "Please enter the administrator's full name.";
+  if (!/^[A-Za-z0-9._-]{3,30}$/.test(f.username))
+    return "Username must be 3-30 characters: letters, numbers, dot, dash or underscore.";
+  if (f.password.length < 6) return "Password must be at least 6 characters.";
+  if (f.password !== f.password2) return "The two passwords don't match.";
+  return "";
+}
+
+$("body").on("submit", "#firstRunSetup", function (e) {
+  e.preventDefault();
+  let $form = $(this);
+  let f = {
+    fullname: $.trim($form.find("[name=fullname]").val()),
+    username: $.trim($form.find("[name=username]").val()),
+    password: $form.find("[name=password]").val() || "",
+    password2: $form.find("[name=password2]").val() || "",
+  };
+  let showError = (msg) => $form.find(".setup-error").text(msg).toggle(!!msg);
+  let problem = firstRunSetupError(f);
+  if (problem) return showError(problem);
+  showError("");
+
+  let $btn = $form.find("button[type=submit]").prop("disabled", true);
+  $.ajax({
+    url: api + "users/setup",
+    type: "POST",
+    data: JSON.stringify({ fullname: f.fullname, username: f.username, password: f.password }),
+    contentType: "application/json; charset=utf-8",
+  })
+    .done(function () {
+      // log straight in with the new account
+      $.ajax({
+        url: api + "users/login",
+        type: "POST",
+        data: JSON.stringify({ username: f.username, password: f.password }),
+        contentType: "application/json; charset=utf-8",
+      })
+        .done(function (data) {
+          if (data && data._id) {
+            storage.set("auth", { auth: true });
+            storage.set("user", data);
+            sessionStorage.setItem("auth", "1");
+            Swal.fire({
+              title: "Administrator account created",
+              text: "Welcome, " + f.fullname + "! Next, add your store details in Settings.",
+              icon: "success",
+              allowOutsideClick: false,
+            }).then(() => ipcRenderer.send("app-reload", ""));
+          } else {
+            backToLogin();
+          }
+        })
+        .fail(backToLogin);
+    })
+    .fail(function (xhr) {
+      $btn.prop("disabled", false);
+      if (xhr && xhr.status === 409) {
+        // someone already set it up (e.g. another till): go to the login
+        Swal.fire("Already set up", xhr.responseText || "Please log in.", "info").then(backToLogin);
+      } else {
+        showError((xhr && xhr.status === 400 && xhr.responseText) || "Could not create the account. Please try again.");
+      }
+    });
+
+  function backToLogin() {
+    $("#loading").removeClass("first-run");
+    $("#loading #load").remove();
+    authenticate();
+  }
+});
 
 $("body").on("submit", "#account", function (e) {
   e.preventDefault();
