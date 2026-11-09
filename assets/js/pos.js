@@ -6071,9 +6071,14 @@ function openGrnForm(supplierId) {
   // fresh stock figures and cost prices for the product list
   $.get(api + "inventory/products")
     .done(function (products) {
+      // by name, and products with the same name by cost price
       grnProducts = (products || [])
         .slice()
-        .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+        .sort(
+          (a, b) =>
+            String(a.name || "").localeCompare(String(b.name || "")) ||
+            (parseFloat(a.cost_price) || 0) - (parseFloat(b.cost_price) || 0)
+        );
       if (!grnProducts.length) {
         Swal.fire("No products yet", "Add your products first, then receive stock for them with a GRN.", "info");
         return;
@@ -6100,13 +6105,24 @@ function prepareGrnForm(supplierId) {
   $("#grnSupplier").val(String(supplierId || 0));
   $("#grnDate").val(moment().format("YYYY-MM-DD"));
   $(".grn-currency").text(settings?.symbol ? "(" + settings.symbol + ")" : "");
+  $("#grnSellPrice").prop("disabled", false);
+  $("#grnNewBarcode").val("");
+  $(".grn-add-barcode").hide();
+  $("#grnAddHint").html("");
+  grnSellTyped = false;
 
   $("#grnProduct").html(
     `<option value=""></option>` +
       grnProducts
         .map((p) => {
+          // name — cost · stock · barcode: products with the same name (one
+          // per cost price) can be told apart at a glance
           let barcode = p.barcode != null && String(p.barcode) !== "NaN" ? String(p.barcode) : "";
-          return `<option value="${p._id}">${txnHtml(p.name)}${barcode ? " (" + txnHtml(barcode) + ")" : ""}</option>`;
+          let cost = grnCostOf(p);
+          let parts = [cost === null ? "no cost yet" : "cost " + supMoney(cost)];
+          if (p.stock == 1) parts.push("stock " + (parseInt(p.quantity) || 0));
+          if (barcode) parts.push(barcode);
+          return `<option value="${p._id}">${txnHtml(p.name)} — ${txnHtml(parts.join(" · "))}</option>`;
         })
         .join("")
   );
@@ -6163,19 +6179,45 @@ function updateGrnAdvanceInfo() {
 }
 
 function grnLineValid(line) {
+  let target = grnLineTarget(line.product_id, line.unit_cost);
   return (
     Number.isInteger(Number(line.quantity)) &&
     Number(line.quantity) >= 1 &&
     Number(line.unit_cost) >= 0 &&
     line.unit_cost !== "" &&
-    Number(line.selling_price) >= 0 &&
-    line.selling_price !== ""
+    (target.kind !== "new" || (line.selling_price !== "" && Number(line.selling_price) >= 0))
   );
 }
 
-// Goods at a different cost are a new set with their own selling price (and
-// barcode): a selling price that keeps the product's margin now. Same cost =
-// the price now.
+// ---- one product per cost price (the server decides the same way:
+// api/suppliers.js resolveGrnProducts) ----
+// Goods go to the product with the same name and category whose cost price
+// is the unit cost; when there is none, a new product is created for them
+// with its own selling price and barcode. A product without a cost price yet
+// simply takes the goods.
+function grnCostOf(p) {
+  let c = parseFloat(p && p.cost_price);
+  return isNaN(c) ? null : supRound(c);
+}
+
+function grnFamily(p) {
+  let key = (x) => String(x.name || "").trim().toLowerCase() + "||" + String(x.category ?? "");
+  return grnProducts.filter((x) => key(x) === key(p));
+}
+
+// { kind: "existing", product, setsCost } | { kind: "new", product (the one
+// chosen) } | { kind: "unknown" } (no product / cost yet)
+function grnLineTarget(productId, cost) {
+  let p = grnProduct(productId);
+  if (!p || cost === "" || cost == null || isNaN(Number(cost))) return { kind: "unknown", product: p };
+  let c = supRound(cost);
+  let same = [p].concat(grnFamily(p).filter((x) => x !== p)).find((x) => grnCostOf(x) === c);
+  if (same) return { kind: "existing", product: same };
+  if (grnCostOf(p) === null) return { kind: "existing", product: p, setsCost: true };
+  return { kind: "new", product: p };
+}
+
+// a selling price for goods at a new cost that keeps the product's margin
 function grnSuggestedPrice(costNow, priceNow, cost) {
   let c = parseFloat(costNow), p = parseFloat(priceNow);
   if (isNaN(p)) return "";
@@ -6183,47 +6225,144 @@ function grnSuggestedPrice(costNow, priceNow, cost) {
   return supRound((Number(cost) * p) / c);
 }
 
-// The cost changed but the selling price didn't: not allowed (the server
-// refuses it too). Returns the message, or "" when the line is fine.
-function grnPriceRuleProblem(l) {
-  let costNow = parseFloat(l.current_cost);
-  if (isNaN(costNow) || l.unit_cost === "" || l.selling_price === "") return "";
-  if (supRound(costNow) === supRound(l.unit_cost)) return "";
-  if (supRound(l.selling_price) !== supRound(l.current_price)) return "";
-  let suggested = grnSuggestedPrice(l.current_cost, l.current_price, l.unit_cost);
-  return `The unit cost of "${l.name}" changed from ${supMoney(costNow)} to ${supMoney(l.unit_cost)}, so these goods need their own selling price (not ${supMoney(l.current_price)})${
-    suggested !== "" ? ". Same margin: " + supMoney(suggested) : ""
-  }.`;
-}
-
-// under a line's selling price: the price now, and warnings
-function grnSellHint(l) {
-  let sell = Number(l.selling_price), cost = Number(l.unit_cost);
-  if (grnPriceRuleProblem(l)) {
-    return `<span class="text-danger">cost changed: needs a new price</span>`;
+// A new product needs a selling price none of the products with its name
+// has. Returns the message, or "" when the line is fine.
+function grnNewPriceProblem(l) {
+  let t = grnLineTarget(l.product_id, l.unit_cost);
+  if (t.kind !== "new") return "";
+  let p = t.product;
+  let suggested = grnSuggestedPrice(p.cost_price, p.price, l.unit_cost);
+  let margin = suggested !== "" ? " Same margin: " + supMoney(suggested) + "." : "";
+  let intro = `No "${p.name}" has the cost price ${supMoney(l.unit_cost)} yet, so a new product is created for these goods`;
+  if (l.selling_price === "" || l.selling_price == null || isNaN(Number(l.selling_price))) {
+    return intro + " and it needs its own selling price." + margin;
   }
-  if (l.selling_price !== "" && l.unit_cost !== "" && sell < cost) {
-    return `<span class="text-danger">below the unit cost</span>`;
-  }
-  if (l.current_price !== "" && l.current_price != null && parseFloat(l.current_price) !== sell) {
-    return `<span class="text-muted">now ${supMoney(l.current_price)}</span>`;
+  let taken = grnFamily(p).find((x) => supRound(x.price) === supRound(l.selling_price));
+  if (taken) {
+    return `${intro}, which needs a selling price of its own: ${supMoney(l.selling_price)} is already the price of "${taken.name}"${
+      taken.barcode ? " (" + taken.barcode + ")" : ""
+    }.${margin}`;
   }
   return "";
+}
+
+// A barcode typed / scanned for a new product must be free: not a product's
+// barcode, and not the barcode of another new product in this GRN. Returns
+// the message, or "" (an empty barcode is fine: one is made).
+function grnNewBarcodeProblem(code, line) {
+  code = String(code || "").trim();
+  if (!code) return "";
+  if (/\s/.test(code)) return `The barcode "${code}" contains spaces.`;
+  let owner = grnProducts.find((x) => x.barcode != null && String(x.barcode) === code);
+  if (owner) return `The barcode ${code} already belongs to "${owner.name}". Scan or type another one, or leave it empty to create one.`;
+  let t = line ? grnLineTarget(line.product_id, line.unit_cost) : null;
+  let other = grnLines.find((x) => {
+    if (x === line || String(x.new_barcode || "").trim() !== code) return false;
+    let xt = grnLineTarget(x.product_id, x.unit_cost);
+    if (xt.kind !== "new") return false;
+    // lines that become the same new product (same name, category and cost) may share it
+    return !(t && t.kind === "new" && grnFamily(xt.product).includes(t.product) && supRound(x.unit_cost) === supRound(line.unit_cost));
+  });
+  if (other) return `The barcode ${code} is already given to another new product in this GRN ("${other.name}", cost ${supMoney(other.unit_cost)}).`;
+  return "";
+}
+
+// A new barcode for a new product (the Fill buttons): 12 digits with a check
+// digit, the same kind the product form's Fill button makes, and not used by
+// any product or by another line of this GRN.
+function grnFreshBarcode() {
+  let used = {};
+  grnProducts.forEach((p) => {
+    if (p.barcode != null) used[String(p.barcode)] = true;
+  });
+  grnLines.forEach((l) => {
+    if (l.new_barcode) used[String(l.new_barcode)] = true;
+  });
+  for (let attempt = 0; attempt < 50; attempt++) {
+    let digits = [];
+    for (let i = 0; i < 11; i++) digits.push(Math.floor(Math.random() * 10));
+    let odd = 0, even = 0;
+    digits.forEach((d, i) => (i % 2 === 0 ? (odd += d) : (even += d)));
+    let check = (odd * 3 + even) % 10;
+    digits.push(check ? 10 - check : 0);
+    let code = digits.join("");
+    if (!used[code]) return code;
+  }
+  return "";
+}
+
+// under a line's selling price
+function grnSellHint(l, t) {
+  if (t.kind === "existing") return `<span class="text-muted">its price now</span>`;
+  if (t.kind !== "new") return "";
+  if (grnNewPriceProblem(l)) return `<span class="text-danger">needs its own price</span>`;
+  if (l.selling_price !== "" && l.unit_cost !== "" && Number(l.selling_price) < Number(l.unit_cost)) {
+    return `<span class="text-danger">below the unit cost</span>`;
+  }
+  return `<span class="text-muted">new product's price</span>`;
+}
+
+// under a line's name: where the goods go
+function grnTargetNote(l, t) {
+  if (t.kind === "new") {
+    return `<span class="label label-warning">New product</span> <small class="text-muted">cost ${supMoney(l.unit_cost)}</small>`;
+  }
+  if (t.kind !== "existing") return "";
+  let p = t.product;
+  let code = p.barcode != null && String(p.barcode) !== "NaN" ? String(p.barcode) : "";
+  if (t.setsCost) return `<small class="text-muted">${txnHtml(code)} · first cost price: ${supMoney(l.unit_cost)}</small>`;
+  if (String(p._id) !== String(l.product_id)) {
+    return `<small class="text-success" title="The product with this cost price gets the stock">adds to ${txnHtml(code) || "the product"} (cost ${supMoney(grnCostOf(p))})</small>`;
+  }
+  return `<small class="text-muted">${txnHtml(code)} · adds to its stock</small>`;
+}
+
+// Brings a line's row up to date with where its goods go (the existing
+// product's price, or a suggested price for a new product), without
+// re-drawing the inputs being typed in.
+function refreshGrnLineRow(l, i) {
+  let $row = $(`#grn_lines tr[data-index="${i}"]`);
+  let t = grnLineTarget(l.product_id, l.unit_cost);
+  let $sell = $row.find(".grn-line-sell");
+  if (t.kind === "existing") {
+    l.selling_price = supRound(t.product.price);
+    $sell.prop("disabled", true).val(Number(l.selling_price).toFixed(2));
+  } else if (t.kind === "new") {
+    if ($sell.prop("disabled")) {
+      // just became a new product: suggest a price (unless one was typed)
+      if (!l.sell_typed || l.selling_price === "") {
+        let s = grnSuggestedPrice(t.product.cost_price, t.product.price, l.unit_cost);
+        l.selling_price = s;
+        $sell.val(s === "" ? "" : Number(s).toFixed(2));
+      }
+      $sell.prop("disabled", false);
+    }
+  }
+  let stockNow = t.kind === "existing" ? parseInt(t.product.quantity) || 0 : 0;
+  let tracked = t.kind === "existing" ? t.product.stock == 1 : t.product ? t.product.stock == 1 : false;
+  $row.find(".grn-line-target").html(grnTargetNote(l, t));
+  // a new product: its barcode (typed or scanned; empty = one is made)
+  let $code = $row.find(".grn-line-barcode-box");
+  $code.toggle(t.kind === "new");
+  let codeProblem = t.kind === "new" ? grnNewBarcodeProblem(l.new_barcode, l) : "";
+  $code.toggleClass("has-error", !!codeProblem).attr("title", codeProblem || "Barcode of the new product: scan or type it, or leave it empty to create one");
+  $row.find(".grn-line-stock").html(
+    tracked ? String(stockNow) : '<span class="text-muted" title="Stock is not tracked for this product">not tracked</span>'
+  );
+  $row.find(".grn-line-after").text(tracked && grnLineValid(l) ? "→ " + (stockNow + Number(l.quantity)) : "");
+  $row.find(".grn-line-sell-hint").html(grnSellHint(l, t));
 }
 
 function updateGrnTotals() {
   let qty = 0, total = 0;
   grnLines.forEach((l, i) => {
+    refreshGrnLineRow(l, i);
     let lineTotal = grnLineValid(l) ? supRound(Number(l.quantity) * Number(l.unit_cost)) : 0;
     if (grnLineValid(l)) {
       qty += Number(l.quantity);
       total += lineTotal;
     }
     $(`#grn_lines tr[data-index="${i}"] .grn-line-total`).text(grnLineValid(l) ? supMoney(lineTotal) : "-");
-    $(`#grn_lines tr[data-index="${i}"] .grn-line-after`).text(
-      l.tracked && grnLineValid(l) ? "→ " + (l.stock + Number(l.quantity)) : ""
-    );
-    $(`#grn_lines tr[data-index="${i}"] .grn-line-sell-hint`).html(grnSellHint(l));
   });
   $("#grnTotalQty").text(qty);
   $("#grnTotal").text(supMoney(total));
@@ -6233,28 +6372,65 @@ function updateGrnTotals() {
 function renderGrnLines() {
   if (!grnLines.length) {
     $("#grn_lines").html(
-      `<tr class="grn-empty"><td colspan="7">No products yet. Choose a product above, enter the quantity, unit cost and selling price, then click Add.</td></tr>`
+      `<tr class="grn-empty"><td colspan="7">No products yet. Choose a product above, enter the quantity and unit cost, then click Add. Goods at a new cost price become a new product with its own selling price.</td></tr>`
     );
   } else {
     $("#grn_lines").html(
       grnLines
-        .map(
-          (l, i) => `<tr data-index="${i}">
-            <td><b>${txnHtml(l.name)}</b>${l.barcode ? `<br><small class="text-muted">${txnHtml(l.barcode)}</small>` : ""}</td>
-            <td class="text-right nobr">${l.tracked ? l.stock : '<span class="text-muted" title="Stock is not tracked for this product">not tracked</span>'}
+        .map((l, i) => {
+          let t = grnLineTarget(l.product_id, l.unit_cost);
+          return `<tr data-index="${i}">
+            <td><b>${txnHtml(l.name)}</b><br><span class="grn-line-target"></span>
+              <div class="input-group input-group-sm grn-line-barcode-box" style="display: none;">
+                <span class="input-group-addon"><i class="fa fa-barcode"></i></span>
+                <input type="text" class="form-control grn-line-barcode" placeholder="Scan, type or Fill" autocomplete="off" maxlength="64" value="${txnHtml(l.new_barcode || "")}">
+                <span class="input-group-btn"><button type="button" class="btn btn-primary grn-line-fill" title="Create a barcode for the new product">Fill</button></span>
+              </div></td>
+            <td class="text-right nobr"><span class="grn-line-stock"></span>
               <br><small class="text-success grn-line-after"></small></td>
             <td><input type="number" class="form-control grn-line-qty" min="1" step="1" value="${txnHtml(l.quantity)}"></td>
             <td><input type="number" class="form-control grn-line-cost" min="0" step="0.01" value="${txnHtml(l.unit_cost)}"></td>
-            <td><input type="number" class="form-control grn-line-sell" min="0" step="0.01" value="${txnHtml(l.selling_price)}">
+            <td><input type="number" class="form-control grn-line-sell" min="0" step="0.01" value="${txnHtml(l.selling_price)}"${
+              t.kind === "existing" ? " disabled" : ""
+            }>
               <small class="grn-line-sell-hint"></small></td>
             <td class="text-right nobr grn-line-total"></td>
             <td><button type="button" class="btn btn-danger btn-sm grn-line-remove" title="Remove"><i class="fa fa-times"></i></button></td>
-          </tr>`
-        )
+          </tr>`;
+        })
         .join("")
     );
   }
   updateGrnTotals();
+}
+
+// the add bar: where the goods will go, and the selling price that goes with it
+function updateGrnAddBar() {
+  let t = grnLineTarget($("#grnProduct").val(), $.trim($("#grnUnitCost").val()));
+  let $sell = $("#grnSellPrice");
+  if (t.kind === "existing") {
+    $sell.prop("disabled", true).val((parseFloat(t.product.price) || 0).toFixed(2));
+    let code = t.product.barcode != null && String(t.product.barcode) !== "NaN" ? String(t.product.barcode) : "";
+    $("#grnAddHint").html(
+      t.setsCost
+        ? `<i class="fa fa-info-circle"></i> Adds to the stock of <b>${txnHtml(t.product.name)}</b>${code ? " (" + txnHtml(code) + ")" : ""} - its first cost price.`
+        : `<i class="fa fa-check-circle text-success"></i> Same cost price as <b>${txnHtml(t.product.name)}</b>${code ? " (" + txnHtml(code) + ")" : ""}: its stock goes up; it keeps selling at ${supMoney(t.product.price)}.`
+    );
+  } else if (t.kind === "new") {
+    if ($sell.prop("disabled") || !grnSellTyped) {
+      let s = grnSuggestedPrice(t.product.cost_price, t.product.price, $("#grnUnitCost").val());
+      $sell.val(s === "" ? "" : Number(s).toFixed(2));
+    }
+    $sell.prop("disabled", false);
+    $(".grn-add-barcode").show();
+    $("#grnAddHint").html(
+      `<i class="fa fa-plus-circle text-warning"></i> No <b>${txnHtml(t.product.name)}</b> has this cost price yet: these goods become a <b>new product</b> (same name and category). Enter its selling price, and scan or type its barcode (or leave it empty to create one).`
+    );
+  } else {
+    $sell.prop("disabled", false);
+    $("#grnAddHint").html("");
+  }
+  if (t.kind !== "new") $(".grn-add-barcode").hide();
 }
 
 function addGrnLine() {
@@ -6277,48 +6453,49 @@ function addGrnLine() {
     Swal.fire("Oops!", "Please enter the unit cost (0 or more).", "warning");
     return;
   }
-  if (sellText === "" || !(sell >= 0)) {
-    Swal.fire("Oops!", "Please enter the selling price for this stock (0 or more).", "warning");
-    return;
-  }
-  let ruleProblem = grnPriceRuleProblem({
-    name: p.name,
-    unit_cost: supRound(cost),
-    selling_price: supRound(sell),
-    current_cost: p.cost_price,
-    current_price: p.price,
-  });
-  if (ruleProblem) {
-    Swal.fire("New selling price needed", ruleProblem, "warning");
-    $("#grnSellPrice").trigger("focus").trigger("select");
-    return;
+  let target = grnLineTarget(p._id, cost);
+  let newBarcode = target.kind === "new" ? $.trim($("#grnNewBarcode").val()) : "";
+  if (target.kind === "new") {
+    let problem = grnNewPriceProblem({ product_id: p._id, unit_cost: supRound(cost), selling_price: sellText === "" ? "" : supRound(sell) });
+    if (problem) {
+      Swal.fire("Selling price needed", problem, "warning");
+      $("#grnSellPrice").trigger("focus").trigger("select");
+      return;
+    }
+    let codeProblem = grnNewBarcodeProblem(newBarcode, { product_id: p._id, unit_cost: supRound(cost) });
+    if (codeProblem) {
+      Swal.fire("Barcode already used", codeProblem, "warning");
+      $("#grnNewBarcode").trigger("focus").trigger("select");
+      return;
+    }
   }
 
-  let existing = grnLines.find((l) => String(l.product_id) === String(p._id));
+  // the same product at the same cost again: add to its line
+  let existing = grnLines.find((l) => String(l.product_id) === String(p._id) && supRound(l.unit_cost) === supRound(cost));
   if (existing) {
-    // the same product again: add to its line
     existing.quantity = (Number(existing.quantity) || 0) + qty;
-    existing.unit_cost = supRound(cost);
-    existing.selling_price = supRound(sell);
+    if (target.kind === "new") {
+      existing.selling_price = supRound(sell);
+      existing.sell_typed = true;
+      if (newBarcode) existing.new_barcode = newBarcode;
+    }
   } else {
-    let barcode = p.barcode != null && String(p.barcode) !== "NaN" ? String(p.barcode) : "";
     grnLines.push({
       product_id: p._id,
       name: p.name,
-      barcode: barcode,
-      stock: parseInt(p.quantity) || 0,
-      tracked: p.stock == 1,
       quantity: qty,
       unit_cost: supRound(cost),
-      selling_price: supRound(sell),
+      selling_price: target.kind === "existing" ? supRound(target.product.price) : supRound(sell),
       sell_typed: grnSellTyped, // typed by hand: a cost change doesn't re-suggest it
-      current_price: p.price, // the price the product sells at now
-      current_cost: p.cost_price, // and its cost now (a different cost needs a new price)
+      new_barcode: newBarcode, // a new product's barcode (empty = one is made)
     });
   }
 
   $("#grnProduct").val("").trigger("chosen:updated");
-  $("#grnQty, #grnUnitCost, #grnSellPrice").val("");
+  $("#grnQty, #grnUnitCost, #grnSellPrice, #grnNewBarcode").val("");
+  $("#grnSellPrice").prop("disabled", false);
+  $(".grn-add-barcode").hide();
+  $("#grnAddHint").html("");
   grnSellTyped = false;
   renderGrnLines();
   $("#grnProduct").trigger("chosen:activate");
@@ -6329,7 +6506,9 @@ function grnDetailsHtml(g) {
   let items = (g.items || [])
     .map(
       (i) => `<tr>
-        <td>${txnHtml(i.product_name)}${i.barcode ? `<br><small class="text-muted">${txnHtml(i.barcode)}</small>` : ""}</td>
+        <td>${txnHtml(i.product_name)}${i.new_product ? ' <span class="label label-warning" title="Created by this GRN: goods at a new cost price">New product</span>' : ""}${
+          i.barcode ? `<br><small class="text-muted">${txnHtml(i.barcode)}</small>` : ""
+        }</td>
         <td class="text-right">${i.quantity}</td>
         <td class="text-right nobr">${supMoney(i.unit_cost)}</td>
         <td class="text-right nobr">${i.selling_price != null ? supMoney(i.selling_price) : '<span class="text-muted">-</span>'}${
@@ -6355,7 +6534,7 @@ function grnDetailsHtml(g) {
       .join("")}</div>
     <div class="modal-fit-scroll grn-view-scroll">
     <table class="table table-bordered">
-      <thead><tr><th>Product</th><th class="txn-num">Quantity</th><th class="txn-num">Unit Cost</th><th class="txn-num" title="The price this batch is sold at">Selling Price</th><th class="txn-num">Line Total</th></tr></thead>
+      <thead><tr><th>Product</th><th class="txn-num">Quantity</th><th class="txn-num">Unit Cost</th><th class="txn-num" title="The price of the product that got the goods">Selling Price</th><th class="txn-num">Line Total</th></tr></thead>
       <tbody>${items}</tbody>
       <tfoot><tr>
         <th class="text-right">Total</th>
@@ -6492,7 +6671,7 @@ function grnBillHtml(g) {
     <hr>
     <table width="100%">
       <thead style="text-align: left;">
-        <tr><th>Item</th><th>Qty</th><th>Cost</th><th style="text-align: right;">Total</th></tr>
+        <tr><th>Item</th><th style="padding: 0 6px;">Qty</th><th style="padding: 0 6px;">Cost</th><th style="text-align: right;">Total</th></tr>
       </thead>
       <tbody>
         ${items}
@@ -6831,28 +7010,38 @@ $(function () {
   $("#grnProduct").on("change", function () {
     let p = grnProduct($(this).val());
     if (!p) return;
-    let line = grnLines.find((l) => String(l.product_id) === String(p._id));
-    let cost = line ? line.unit_cost : p.cost_price;
+    // starts at the product's cost price: same cost = its stock goes up
+    let cost = p.cost_price;
     $("#grnUnitCost").val(cost !== "" && cost != null && !isNaN(parseFloat(cost)) ? parseFloat(cost).toFixed(2) : "");
-    // suggested selling price: the price now at the same cost, else one that
-    // keeps the margin (goods at a new cost get their own price)
-    let sell = line ? line.selling_price : grnSuggestedPrice(p.cost_price, p.price, $("#grnUnitCost").val());
-    $("#grnSellPrice").val(sell !== "" && sell != null && !isNaN(parseFloat(sell)) ? parseFloat(sell).toFixed(2) : "");
-    grnSellTyped = !!(line && line.sell_typed);
+    $("#grnSellPrice").val("");
+    grnSellTyped = false;
+    updateGrnAddBar();
     setTimeout(() => $("#grnQty").trigger("focus"), 0);
   });
 
   $("#grnAddLine").on("click", addGrnLine);
-  // a new unit cost re-suggests the selling price (same margin) until a price is typed
-  $("#grnUnitCost").on("input", function () {
-    let p = grnProduct($("#grnProduct").val());
-    let cost = $.trim($(this).val());
-    if (!p || grnSellTyped || cost === "" || isNaN(Number(cost))) return;
-    let sell = grnSuggestedPrice(p.cost_price, p.price, Number(cost));
-    if (sell !== "") $("#grnSellPrice").val(Number(sell).toFixed(2));
-  });
+  // a new unit cost: the goods may go to another product (same cost) or
+  // become a new one (its price suggested until one is typed)
+  $("#grnUnitCost").on("input", updateGrnAddBar);
   $("#grnSellPrice").on("input", function () {
     grnSellTyped = true;
+  });
+
+  // Fill: like the product form's Fill button, creates a barcode when the box is empty
+  $("#grnFillBarcode").on("click", function () {
+    if ($.trim($("#grnNewBarcode").val()) === "") $("#grnNewBarcode").val(grnFreshBarcode());
+    let missing = ["#grnQty", "#grnUnitCost", "#grnSellPrice"].find((sel) => $.trim($(sel).val()) === "");
+    $(missing || "#grnAddLine").trigger("focus");
+  });
+
+  // a barcode scanner types the code and presses Enter: then fill in what is
+  // still missing, or add the line when everything is there
+  $("#grnNewBarcode").on("keydown", function (e) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    let missing = ["#grnQty", "#grnUnitCost", "#grnSellPrice"].find((sel) => $.trim($(sel).val()) === "");
+    if (missing) $(missing).trigger("focus");
+    else addGrnLine();
   });
 
   $("#grnQty, #grnUnitCost, #grnSellPrice").on("keydown", function (e) {
@@ -6874,19 +7063,33 @@ $(function () {
         line.sell_typed = true;
       } else {
         line.unit_cost = val === "" ? "" : Number(val);
-        // a new cost re-suggests the selling price (same margin) until one is typed
-        if (!line.sell_typed && line.unit_cost !== "" && !isNaN(line.unit_cost)) {
-          let sell = grnSuggestedPrice(line.current_cost, line.current_price, line.unit_cost);
-          if (sell !== "") {
-            line.selling_price = sell;
-            $(this).closest("tr").find(".grn-line-sell").val(Number(sell).toFixed(2));
-          }
+        // a new product's price follows the cost (same margin) until one is typed
+        let t = grnLineTarget(line.product_id, line.unit_cost);
+        if (t.kind === "new" && !line.sell_typed) {
+          let sell = grnSuggestedPrice(t.product.cost_price, t.product.price, line.unit_cost);
+          line.selling_price = sell;
+          $(this).closest("tr").find(".grn-line-sell").val(sell === "" ? "" : Number(sell).toFixed(2));
         }
       }
+      updateGrnTotals(); // where the goods go, and the price that goes with it
+    })
+    .on("input", ".grn-line-barcode", function () {
+      let line = grnLines[parseInt($(this).closest("tr").data("index"))];
+      if (!line) return;
+      line.new_barcode = $.trim($(this).val());
+      updateGrnTotals();
+    })
+    // a line's Fill button: a barcode for its new product when the box is empty
+    .on("click", ".grn-line-fill", function () {
+      let line = grnLines[parseInt($(this).closest("tr").data("index"))];
+      let $input = $(this).closest(".grn-line-barcode-box").find(".grn-line-barcode");
+      if (!line || $.trim($input.val()) !== "") return;
+      line.new_barcode = grnFreshBarcode();
+      $input.val(line.new_barcode);
       updateGrnTotals();
     })
     .on("keydown", "input", function (e) {
-      if (e.key === "Enter") e.preventDefault();
+      if (e.key === "Enter") e.preventDefault(); // a scanner's Enter doesn't save the GRN
     })
     .on("click", ".grn-line-remove", function () {
       grnLines.splice(parseInt($(this).closest("tr").data("index")), 1);
@@ -6909,14 +7112,23 @@ $(function () {
     }
     let bad = grnLines.find((l) => !grnLineValid(l));
     if (bad) {
-      Swal.fire("Oops!", `Please check "${bad.name}": the quantity must be a whole number of at least 1, and the unit cost and selling price 0 or more.`, "warning");
+      Swal.fire("Oops!", `Please check "${bad.name}": the quantity must be a whole number of at least 1, the unit cost 0 or more, and a new product needs its selling price.`, "warning");
       return;
     }
-    let needsPrice = grnLines.map(grnPriceRuleProblem).find(Boolean);
+    let needsPrice = grnLines.map(grnNewPriceProblem).find(Boolean);
     if (needsPrice) {
-      Swal.fire("New selling price needed", needsPrice, "warning");
+      Swal.fire("Selling price needed", needsPrice, "warning");
       return;
     }
+    let codeProblem = grnLines
+      .filter((l) => grnLineTarget(l.product_id, l.unit_cost).kind === "new")
+      .map((l) => grnNewBarcodeProblem(l.new_barcode, l))
+      .find(Boolean);
+    if (codeProblem) {
+      Swal.fire("Barcode already used", codeProblem, "warning");
+      return;
+    }
+    let newProducts = grnLines.filter((l) => grnLineTarget(l.product_id, l.unit_cost).kind === "new").length;
     if (paidBy === "Credit" && !supplierId) {
       Swal.fire("Oops!", "Credit is only possible with a registered supplier.", "warning");
       return;
@@ -6946,7 +7158,10 @@ $(function () {
         product_id: l.product_id,
         quantity: Number(l.quantity),
         unit_cost: Number(l.unit_cost),
-        selling_price: Number(l.selling_price),
+        // only used for a new product (goods at a new cost price)
+        selling_price: grnLineTarget(l.product_id, l.unit_cost).kind === "new" ? Number(l.selling_price) : null,
+        // a new product's barcode, typed or scanned (empty = one is made)
+        new_barcode: grnLineTarget(l.product_id, l.unit_cost).kind === "new" ? String(l.new_barcode || "").trim() : "",
       })),
     };
 
@@ -6956,7 +7171,12 @@ $(function () {
       html: `<p><b>${txnHtml(supplierName)}</b> · ${supDate(date)}</p>
         <p>${grnLines.length} ${grnLines.length === 1 ? "product" : "products"}, ${units} units · <b>${supMoney(total)}</b></p>
         <p>${txnHtml(paymentText)}</p>
-        <p class="text-muted" style="font-size: 13px;">The stock of these products goes up by the quantities received. Stock already on hand is sold first at its own price; then this stock sells at the selling price entered here. A saved GRN can't be changed.</p>`,
+        ${
+          newProducts
+            ? `<p><span class="label label-warning">${newProducts} new ${newProducts === 1 ? "product" : "products"}</span> for goods at a new cost price, each with its own selling price and barcode.</p>`
+            : ""
+        }
+        <p class="text-muted" style="font-size: 13px;">Goods at a cost price a product already has go into that product's stock. A saved GRN can't be changed.</p>`,
       showCancelButton: true,
       confirmButtonText: "Save GRN",
     }).then(function (result) {

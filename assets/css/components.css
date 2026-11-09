@@ -2919,6 +2919,51 @@ ul.ColVis_collection li {
 .product-batches .nobr{
   white-space: nowrap;
 }
+/* GRN form: the new product's barcode (add bar and lines) */
+#grnModal .grn-add-barcode{
+  flex: 0 0 260px;
+}
+/* with the New Barcode field shown, the bar wraps: the product search keeps
+   its room and the barcode + Add move to a second row */
+#grnModal .grn-add-bar{
+  flex-wrap: wrap;
+}
+#grnModal .grn-add-product{
+  min-width: 240px;
+}
+#grnModal .grn-line-barcode-box .btn{
+  padding: 3px 8px;
+  height: 28px;
+}
+#grnModal .grn-line-barcode-box{
+  max-width: 260px !important;
+}
+#grnModal .grn-add-barcode .input-group-addon{
+  padding: 6px 8px;
+}
+#grnModal .grn-line-barcode-box{
+  margin-top: 4px;
+  max-width: 220px;
+}
+#grnModal .grn-line-barcode-box .input-group-addon{
+  padding: 4px 7px;
+}
+#grnModal .grn-line-barcode-box input.form-control{
+  text-align: left;
+  height: 28px;
+}
+/* GRN form: where the goods in the add bar go (existing product / new product) */
+#grnModal .grn-add-hint{
+  margin: -4px 0 10px;
+  font-size: 13px;
+  color: #4c5667;
+}
+#grnModal .grn-add-hint:empty{
+  display: none;
+}
+#grnModal .grn-line-target .label{
+  font-size: 10px;
+}
 /* GRN form: the hint under a line's selling price */
 #grnModal .grn-line-sell-hint{
   display: block;

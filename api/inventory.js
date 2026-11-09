@@ -616,140 +616,163 @@ app.decrementInventory = function (products, callback) {
   });
 };
 
-// ---- Goods received (GRN, see suppliers.js) ----
+// ---- Goods received: one product per cost price ----
+// A GRN line goes to the product (same name and category) that already has
+// the line's unit cost as its cost price: its stock goes up. When no such
+// product exists, suppliers.js first creates one (createGrnProduct): the same
+// name, category, picture and stock tracking, the line's unit cost as its cost
+// price and its own selling price and barcode. The till shows products with
+// the same name on one tile and asks which price to ring up.
+
+// A new, unique 12-digit barcode (same format as the product form's)
+function newProductBarcode(callback) {
+  let make = function () {
+    let digits = [];
+    for (let i = 0; i < 11; i++) digits.push(Math.floor(Math.random() * 10));
+    let odd = 0, even = 0;
+    digits.forEach((d, i) => (i % 2 === 0 ? (odd += d) : (even += d)));
+    let check = (odd * 3 + even) % 10;
+    digits.push(check ? 10 - check : 0);
+    return digits.join("");
+  };
+  let attempt = function (left) {
+    let code = make();
+    inventoryDB.findOne({ barcode: code }, function (err, taken) {
+      if (err) return callback(err);
+      if (taken && left > 0) return attempt(left - 1);
+      callback(null, code);
+    });
+  };
+  attempt(20);
+}
+
+let lastProductId = 0;
+function newProductId() {
+  // same form as the product form's ids (milliseconds x 1000 + random part)
+  let id = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+  lastProductId = Math.max(id, lastProductId + 1);
+  return lastProductId;
+}
+
+// Creates the product for goods received at a new cost: a copy of `source`
+// (name, category, picture, stock tracking) with no stock yet, the given cost
+// and selling price, and the barcode typed / scanned in the GRN form
+// (info.barcode) or a new one. callback(err, product)
+app.createGrnProduct = function (source, costPrice, sellingPrice, info, callback) {
+  let withBarcode = info.barcode
+    ? (cb) => cb(null, String(info.barcode))
+    : newProductBarcode;
+  withBarcode(function (err, barcode) {
+    if (err) return callback(err);
+    let product = {
+      _id: newProductId(),
+      price: money2(sellingPrice),
+      cost_price: money2(costPrice),
+      category: source.category,
+      quantity: 0,
+      name: source.name,
+      stock: source.stock == 1 ? 1 : 0,
+      barcode: barcode,
+      img: source.img || "",
+    };
+    inventoryDB.insert(product, function (err, saved) {
+      if (err) return callback(err);
+      logHistory([
+        historyEntry(saved, "created", {
+          qty_change: 0,
+          qty_before: 0,
+          qty_after: saved.stock == 1 ? 0 : null,
+          price: saved.price,
+          cost_price: saved.cost_price,
+          reference: info.reference || "",
+          note: "Created by " + (info.reference || "a GRN") + ": goods received at a new cost price",
+        }, { user: info.user, user_id: info.user_id }),
+      ]);
+      callback(null, saved);
+    });
+  });
+};
 
 // the products with these ids (missing ones are simply not in the result)
 app.getProductsByIds = function (ids, callback) {
   inventoryDB.find({ _id: { $in: ids.map((id) => parseInt(id)) } }, callback);
 };
 
-// Adds each received line to the product's stock. For a stock-tracked
-// product the line becomes a batch with its own unit cost and selling price
-// (stock already there before the first GRN becomes an "Opening stock"
-// batch first); the product's price / cost price are the current batch's.
-// A product that doesn't track stock simply takes the line's prices.
-// Every line is logged in the product history as a "grn" event.
-// items: [{ product_id, quantity, unit_cost, selling_price }]
+// all products (suppliers.js looks for one with the same name and cost)
+app.getAllProducts = function (callback) {
+  inventoryDB.find({}, callback);
+};
+
+// Adds each received line to its product's stock (the product with that
+// cost price, see above). A product without a cost price yet takes the
+// line's unit cost. Every line is logged in the product history as a "grn"
+// event with what was paid per unit.
+// items: [{ product_id, quantity, unit_cost }]
 // info: { grn_id, reference, supplier, payment_method, received_date,
 //         user, user_id }
-// callback(err, results) - results[i] for items[i]: { batch_id, batch_code }
-// (the barcode of the line's selling price; none for products without batches)
 app.receiveGoods = function (items, info, callback) {
   let who = { user: info.user, user_id: info.user_id };
-  let results = [];
+  let touched = {};
   inStockSeries(function (done) {
-    async.eachOfSeries(
+    async.eachSeries(
       items,
-      function (item, index, next) {
-        results[index] = null;
+      function (item, next) {
         inventoryDB.findOne({ _id: parseInt(item.product_id) }, function (err, product) {
           if (err) return next(err);
           if (!product) return next(); // deleted meanwhile: nothing to add stock to
 
           let qtyBefore = parseInt(product.quantity) || 0;
           let qtyAfter = qtyBefore + item.quantity;
-          let sellingPrice = item.selling_price != null ? money2(item.selling_price) : money2(product.price);
-          let tracked = product.stock == 1;
+          let set = { quantity: qtyAfter };
+          let noCost = product.cost_price === undefined || product.cost_price === null || product.cost_price === "";
+          if (noCost) set.cost_price = money2(item.unit_cost);
 
-          let logGrn = function (after, batchId) {
+          inventoryDB.update({ _id: product._id }, { $set: set }, {}, function (err) {
+            if (err) return next(err);
             let extra = {
               qty_change: item.quantity,
               qty_before: qtyBefore,
               qty_after: qtyAfter,
               price: item.unit_cost, // what was paid per unit on this GRN
-              selling_price: sellingPrice,
+              selling_price: money2(product.price),
               amount: Math.round(item.quantity * item.unit_cost * 100) / 100,
               reference: info.reference,
               grn_id: info.grn_id,
-              batch_id: batchId || null,
-              batch_code: results[index] ? results[index].batch_code : null,
               supplier: info.supplier,
               payment_method: info.payment_method,
               received_date: info.received_date,
+              new_product: !!item.new_product,
             };
-            if (String(product.cost_price ?? "") !== String(after.cost_price ?? "")) {
-              extra.cost_before = product.cost_price;
-              extra.cost_after = after.cost_price;
-            }
-            if (parseFloat(product.price) !== parseFloat(after.price)) {
-              extra.price_before = product.price;
-              extra.price_after = after.price;
+            if (noCost) {
+              extra.cost_before = product.cost_price ?? "";
+              extra.cost_after = set.cost_price;
             }
             logHistory([historyEntry(product, "grn", extra, who)]);
-          };
-
-          if (!tracked) {
-            let set = { quantity: qtyAfter, price: sellingPrice, cost_price: money2(item.unit_cost) };
-            return inventoryDB.update({ _id: product._id }, { $set: set }, {}, function (err) {
-              if (err) return next(err);
-              logGrn(Object.assign({}, product, set), null);
-              next();
-            });
-          }
-
-          productBatches(product._id, function (err, batches) {
-            if (err) return next(err);
-            let now = new Date().toJSON();
-            let toInsert = [];
-            if (!batches.length && qtyBefore > 0) {
-              let opening = {
-                _id: newBatchId(),
-                product_id: product._id,
-                seq: 0,
-                source: "opening",
-                grn_id: null,
-                reference: "Opening stock",
-                supplier: "",
-                received_date: "",
-                unit_cost: numOrNull(product.cost_price),
-                selling_price: money2(product.price),
-                qty_received: qtyBefore,
-                qty_left: qtyBefore,
-                created_at: now,
-              };
-              opening.barcode = batchCodeFor(product, [], opening.selling_price); // the product's barcode
-              toInsert.push(opening);
-            }
-            let batchId = newBatchId();
-            let batchCode = batchCodeFor(product, batches.concat(toInsert), sellingPrice);
-            results[index] = { batch_id: batchId, batch_code: batchCode };
-            toInsert.push({
-              barcode: batchCode,
-              _id: batchId,
-              product_id: product._id,
-              seq: batchId,
-              source: "grn",
-              grn_id: info.grn_id,
-              reference: info.reference,
-              supplier: info.supplier,
-              received_date: info.received_date,
-              unit_cost: Math.round(item.unit_cost * 100) / 100,
-              selling_price: sellingPrice,
-              qty_received: item.quantity,
-              qty_left: item.quantity,
-              created_at: now,
-            });
-            batchesDB.insert(toInsert, function (err) {
-              if (err) return next(err);
-              inventoryDB.update({ _id: product._id }, { $set: { quantity: qtyAfter } }, {}, function (err) {
-                if (err) return next(err);
-                // fixes any difference (e.g. stock below zero before) and sets
-                // the price of the batch being sold now
-                reconcileProduct(product._id, who, function (err) {
-                  if (err) return next(err);
-                  inventoryDB.findOne({ _id: product._id }, function (err, after) {
-                    logGrn(after || product, batchId);
-                    next();
-                  });
-                });
-              });
-            });
+            // products that still have stock batches from before: the new
+            // units join the batch being sold now
+            if (product.stock == 1) touched[product._id] = true;
+            next();
           });
         });
       },
       function (err) {
-        done();
-        callback(err, results);
+        if (err) {
+          done();
+          return callback(err);
+        }
+        async.eachSeries(
+          Object.keys(touched),
+          function (id, next) {
+            reconcileProduct(id, who, function (err) {
+              if (err) console.error("Batch update after GRN failed:", err);
+              next();
+            });
+          },
+          function () {
+            done();
+            callback(null);
+          }
+        );
       }
     );
   });

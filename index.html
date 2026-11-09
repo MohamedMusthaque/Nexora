@@ -1171,13 +1171,29 @@
                                 </div>
                                 <!-- this batch sells at its own price, after the earlier stock (pos.js: addGrnLine) -->
                                 <div class="grn-add-cost">
-                                    <label for="grnSellPrice" title="The price this batch is sold at. Earlier stock keeps its own price until it runs out.">Selling Price <span class="text-muted grn-currency"></span></label>
+                                    <label for="grnSellPrice" title="Goods at a cost price a product already has keep that product's price. Goods at a new cost price become a new product: enter its selling price.">Selling Price <span class="text-muted grn-currency"></span></label>
                                     <input type="number" id="grnSellPrice" class="form-control" min="0" step="0.01" placeholder="0.00">
+                                </div>
+                                <!-- only for goods that become a new product: its barcode, typed or scanned
+                                     (left empty, one is made) - pos.js: updateGrnAddBar -->
+                                <div class="grn-add-barcode" style="display: none;">
+                                    <label for="grnNewBarcode" title="Scan the barcode on the goods, type it, or click Fill to create one. Left empty, one is created when the GRN is saved.">New Barcode <span class="text-muted">(optional)</span></label>
+                                    <div class="input-group">
+                                        <span class="input-group-addon"><i class="fa fa-barcode"></i></span>
+                                        <input type="text" id="grnNewBarcode" class="form-control" placeholder="Scan, type or Fill" autocomplete="off" maxlength="64">
+                                        <span class="input-group-btn">
+                                            <!-- same as the product form's Fill button (pos.js: grnFreshBarcode) -->
+                                            <button type="button" class="btn btn-primary" id="grnFillBarcode" title="Create a barcode for the new product">Fill</button>
+                                        </span>
+                                    </div>
                                 </div>
                                 <div class="grn-add-btn">
                                     <button type="button" class="btn btn-success" id="grnAddLine"><i class="fa fa-plus"></i> Add</button>
                                 </div>
                             </div>
+
+                            <!-- where the goods go: the product with this cost, or a new product (pos.js: updateGrnAddBar) -->
+                            <div class="grn-add-hint" id="grnAddHint"></div>
 
                             <!-- the lines scroll inside this box; headings and the Total row stay visible -->
                             <div class="grn-lines-scroll">
@@ -1188,7 +1204,7 @@
                                         <th class="txn-num">In Stock</th>
                                         <th class="txn-num" style="width: 110px;">Quantity</th>
                                         <th class="txn-num" style="width: 130px;">Unit Cost</th>
-                                        <th class="txn-num" style="width: 130px;" title="The price this batch is sold at">Selling Price</th>
+                                        <th class="txn-num" style="width: 130px;" title="The price of the product that gets the goods (enter it for a new product)">Selling Price</th>
                                         <th class="txn-num">Line Total</th>
                                         <th style="width: 44px;"></th>
                                     </tr>

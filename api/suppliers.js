@@ -239,6 +239,120 @@ app.get( "/transactions/:id", function ( req, res ) {
 
 // ---- Goods Received Notes ----
 
+// One product per cost price. Each GRN line goes to the product with the same
+// name and category whose cost price is the line's unit cost: its stock goes
+// up. When there is none, a new product is created for the goods (same name,
+// category, picture and stock tracking; the unit cost as its cost price, the
+// line's own selling price, a new barcode) - unless the chosen product has no
+// cost price yet, which then simply takes the goods. Two lines of one GRN at
+// the same new cost share one new product.
+// A new product needs a selling price that none of the products with that
+// name already has (so the till can tell them apart).
+// Sets on each line: product_id (the product that gets the stock),
+// product_name, barcode, selling_price, new_product, requested_product_id.
+// callback(err, problem): problem = a message for the user; nothing is
+// created then.
+function resolveGrnProducts( items, info, callback ) {
+    Inventory.getAllProducts( function ( err, all ) {
+        if ( err ) return callback( err );
+        let family = ( p ) => String( p.name || "" ).trim().toLowerCase() + "||" + String( p.category ?? "" );
+        let costOf = ( p ) => {
+            let c = parseFloat( p.cost_price );
+            return isFinite( c ) ? round2( c ) : null;
+        };
+        let priceOf = ( p ) => round2( parseFloat( p.price ) || 0 );
+
+        // 1) decide every line first: a problem stops before anything is created
+        let plans = [];
+        for ( let i = 0; i < items.length; i++ ) {
+            let item = items[i];
+            let p = all.find( ( x ) => x._id === item.product_id );
+            if ( !p ) return callback( null, "Line " + ( i + 1 ) + ": that product no longer exists." );
+            let relatives = all.filter( ( x ) => family( x ) === family( p ) );
+            let sameCost = [ p ].concat( relatives.filter( ( x ) => x !== p ) ).find( ( x ) => costOf( x ) === item.unit_cost );
+            if ( sameCost ) {
+                plans.push( { target: sameCost } );
+                continue;
+            }
+            if ( costOf( p ) === null ) {
+                plans.push( { target: p } ); // no cost price yet: it takes these goods
+                continue;
+            }
+            let earlier = plans.find( ( pl ) => pl.create && pl.family === family( p ) && pl.cost === item.unit_cost );
+            if ( earlier ) {
+                if ( item.new_barcode && earlier.barcode && item.new_barcode !== earlier.barcode ) {
+                    return callback( null, "Line " + ( i + 1 ) + " (" + p.name + "): it goes to the same new product as an earlier line (cost " +
+                        item.unit_cost.toFixed( 2 ) + "), which has the barcode " + earlier.barcode + ". Use the same barcode or leave it empty." );
+                }
+                if ( item.new_barcode && !earlier.barcode ) earlier.barcode = item.new_barcode;
+                plans.push( { sameAs: earlier } );
+                continue;
+            }
+            let suggested = costOf( p ) > 0 ? round2( item.unit_cost * priceOf( p ) / costOf( p ) ) : null;
+            let lineName = "Line " + ( i + 1 ) + " (" + p.name + ")";
+            let why = ": no " + p.name + " has the cost price " + item.unit_cost.toFixed( 2 ) +
+                " yet, so a new product is created for these goods";
+            if ( item.selling_price === null ) {
+                return callback( null, lineName + why + " and it needs its own selling price" +
+                    ( suggested !== null ? " (same margin: " + suggested.toFixed( 2 ) + ")." : "." ) );
+            }
+            let taken = relatives.find( ( x ) => priceOf( x ) === item.selling_price );
+            if ( taken ) {
+                return callback( null, lineName + why + ", which needs a selling price of its own: " +
+                    item.selling_price.toFixed( 2 ) + " is already the price of " + taken.name +
+                    ( taken.barcode ? " (" + taken.barcode + ")" : "" ) +
+                    ( suggested !== null ? ". Same margin: " + suggested.toFixed( 2 ) + "." : "." ) );
+            }
+            plans.push( { create: true, source: p, family: family( p ), cost: item.unit_cost, price: item.selling_price, barcode: item.new_barcode, line: i } );
+        }
+
+        // a barcode typed or scanned for a new product must be free
+        let creating = plans.filter( ( pl ) => pl.create && pl.barcode );
+        for ( let n = 0; n < creating.length; n++ ) {
+            let pl = creating[n];
+            let owner = all.find( ( x ) => x.barcode != null && String( x.barcode ) === pl.barcode );
+            if ( owner ) {
+                return callback( null, "Line " + ( pl.line + 1 ) + ": the barcode " + pl.barcode + " already belongs to " + owner.name +
+                    ". Scan or type another barcode for the new product, or leave it empty to create one." );
+            }
+            let twin = creating.find( ( other ) => other !== pl && other.barcode === pl.barcode );
+            if ( twin ) {
+                return callback( null, "Lines " + ( Math.min( pl.line, twin.line ) + 1 ) + " and " + ( Math.max( pl.line, twin.line ) + 1 ) +
+                    " would create two new products with the same barcode " + pl.barcode + "." );
+            }
+        }
+
+        // 2) create the new products, one after another
+        let toCreate = plans.filter( ( pl ) => pl.create );
+        let createNext = function ( n ) {
+            if ( n >= toCreate.length ) return finish();
+            let pl = toCreate[n];
+            Inventory.createGrnProduct( pl.source, pl.cost, pl.price, Object.assign( {}, info, { barcode: pl.barcode } ), function ( err, product ) {
+                if ( err ) return callback( err );
+                pl.target = product;
+                createNext( n + 1 );
+            } );
+        };
+
+        // 3) point every line at its product
+        let finish = function () {
+            plans.forEach( ( pl, i ) => {
+                let target = pl.sameAs ? pl.sameAs.target : pl.target;
+                let item = items[i];
+                if ( target._id !== item.product_id ) item.requested_product_id = item.product_id;
+                item.product_id = target._id;
+                item.product_name = target.name;
+                let barcode = target.barcode == null ? "" : String( target.barcode );
+                item.barcode = barcode === "NaN" ? "" : barcode;
+                item.selling_price = priceOf( target );
+                item.new_product = !!( pl.create || pl.sameAs );
+            } );
+            callback( null, null );
+        };
+        createNext( 0 );
+    } );
+}
+
 app.get( "/grns", function ( req, res ) {
     grnsDB.find( {} ).sort( { received_date: -1, _id: -1 } ).exec( function ( err, grns ) {
         if ( err ) return res.status( 500 ).send( "Could not load the GRNs." );
@@ -257,11 +371,9 @@ app.get( "/grn/:id", function ( req, res ) {
 // Body: { supplier_id (0 = walk-in seller), walk_in_name, received_date,
 //         payment_method, items: [{ product_id, quantity, unit_cost, selling_price }],
 //         note, created_by, created_by_id }
-// Each line of a stock-tracked product becomes a stock batch with its own
-// unit cost and selling price, sold oldest batch first; the product's price
-// and cost price are those of the batch being sold now (inventory.js:
-// receiveGoods). selling_price left out = the product's price now. A supplier's
-// advance pays for the GRN first (advance_used); payment_method covers the
+// Each line goes to the product with that cost price, or to a new product
+// created for it (resolveGrnProducts); selling_price is only needed then.
+// A supplier's advance pays for the GRN first (advance_used); payment_method covers the
 // rest (amount_due), or is "Advance" when the advance paid for all of it.
 app.post( "/grn", function ( req, res ) {
     let body = req.body || {};
@@ -305,7 +417,12 @@ app.post( "/grn", function ( req, res ) {
             }
             sellingPrice = round2( sellingPrice );
         }
-        items.push( { product_id: productId, quantity: quantity, unit_cost: round2( unitCost ), selling_price: sellingPrice } );
+        // the barcode for a new product (typed or scanned; empty = one is made)
+        let newBarcode = String( r.new_barcode == null ? "" : r.new_barcode ).trim().slice( 0, 64 );
+        if ( /\s/.test( newBarcode ) ) {
+            return res.status( 400 ).send( "Line " + ( i + 1 ) + ": a barcode can't contain spaces." );
+        }
+        items.push( { product_id: productId, quantity: quantity, unit_cost: round2( unitCost ), selling_price: sellingPrice, new_barcode: newBarcode } );
     }
 
     let note = String( body.note || "" ).trim().slice( 0, MAX_NOTE );
@@ -316,21 +433,6 @@ app.post( "/grn", function ( req, res ) {
         for ( let i = 0; i < items.length; i++ ) {
             let p = products.find( ( x ) => x._id === items[i].product_id );
             if ( !p ) return res.status( 400 ).send( "Line " + ( i + 1 ) + ": that product no longer exists." );
-            items[i].product_name = p.name;
-            let barcode = p.barcode == null ? "" : String( p.barcode );
-            items[i].barcode = barcode === "NaN" ? "" : barcode;
-            if ( items[i].selling_price === null ) items[i].selling_price = round2( parseFloat( p.price ) || 0 );
-            // goods at a different cost are a new set with their own selling price
-            let costNow = parseFloat( p.cost_price );
-            let priceNow = round2( parseFloat( p.price ) || 0 );
-            if ( isFinite( costNow ) && round2( costNow ) !== items[i].unit_cost && items[i].selling_price === priceNow ) {
-                let suggested = costNow > 0 ? round2( items[i].unit_cost * priceNow / costNow ) : null;
-                return res.status( 400 ).send(
-                    "Line " + ( i + 1 ) + " (" + p.name + "): the unit cost changed from " + round2( costNow ).toFixed( 2 ) +
-                    " to " + items[i].unit_cost.toFixed( 2 ) + ", so these goods need their own selling price (not " +
-                    priceNow.toFixed( 2 ) + ")" + ( suggested !== null ? ". Same margin: " + suggested.toFixed( 2 ) + "." : "." )
-                );
-            }
             items[i].total = round2( items[i].quantity * items[i].unit_cost );
         }
 
@@ -354,6 +456,13 @@ app.post( "/grn", function ( req, res ) {
                 grnsDB.find( {} ).sort( { seq: -1 } ).limit( 1 ).exec( function ( err, last ) {
                     if ( err ) { done(); return res.status( 500 ).send( "Could not save the GRN." ); }
                     let seq = ( last.length ? Number( last[0].seq ) || 0 : 0 ) + 1;
+                    let grnNo = "GRN-" + String( seq ).padStart( 5, "0" );
+
+                    // which product each line goes to (new products for new cost prices)
+                    resolveGrnProducts( items, { reference: grnNo, user: createdBy, user_id: body.created_by_id || "" }, function ( err, problem ) {
+                    if ( err ) { done(); console.error( "GRN products:", err ); return res.status( 500 ).send( "Could not prepare the products of the GRN." ); }
+                    if ( problem ) { done(); return res.status( 400 ).send( problem ); }
+
                     let total = round2( items.reduce( ( s, i ) => s + i.total, 0 ) );
                     let advance = supplier ? Math.max( -position, 0 ) : 0;
                     let advanceUsed = round2( Math.min( advance, total ) );
@@ -367,7 +476,7 @@ app.post( "/grn", function ( req, res ) {
                     let grn = {
                         _id: newId(),
                         seq: seq,
-                        grn_no: "GRN-" + String( seq ).padStart( 5, "0" ),
+                        grn_no: grnNo,
                         supplier_id: supplier ? supplier._id : 0,
                         supplier_name: supplier ? supplier.name : ( cleanText( body.walk_in_name, 100 ) || "Walk-in seller" ),
                         walk_in: !supplier,
@@ -413,6 +522,7 @@ app.post( "/grn", function ( req, res ) {
                                 res.send( Object.assign( {}, saved, { items: coded, advance_after: round2( advance - advanceUsed ) } ) );
                             } );
                         } );
+                    } );
                     } );
                 } );
             } );
