@@ -346,24 +346,27 @@ app.get("/product-history/:productId", function(req, res) {
     if (err) return res.status(500).send(err);
 
     (transactions || []).forEach(function(t) {
-      let lines = (t.items || []).filter(isThisProduct);
-      let qty = lines.reduce(function(s, i) { return s + (parseInt(i.quantity) || 0); }, 0);
-      if (!qty) return;
-      let price = parseFloat(lines[0].price) || 0;
       let type = t.payment_type === "Credit" ? "credit_sale" : (t.status == 1 ? "sale" : "held");
-
-      events.push({
-        type: type,
-        date: t.date,
-        reference: t.order,
-        transaction_id: t._id,
-        qty_change: -qty,
-        price: price,
-        amount: Math.round(price * qty * 100) / 100,
-        payment_type: t.payment_type,
-        customer: t.customer && t.customer != 0 ? t.customer.name : "Walk in customer",
-        user: t.user || "",
-        return_status: t.return_status || ""
+      // one row per line: a product sold from batches at different prices is
+      // on several lines of the same sale
+      (t.items || []).filter(isThisProduct).forEach(function(line) {
+        let qty = parseInt(line.quantity) || 0;
+        if (!qty) return;
+        let price = parseFloat(line.price) || 0;
+        events.push({
+          type: type,
+          date: t.date,
+          reference: t.order,
+          transaction_id: t._id,
+          qty_change: -qty,
+          price: price,
+          amount: Math.round(price * qty * 100) / 100,
+          batches: (line.batches || []).map(function(b) { return { reference: b.reference, qty: b.qty }; }),
+          payment_type: t.payment_type,
+          customer: t.customer && t.customer != 0 ? t.customer.name : "Walk in customer",
+          user: t.user || "",
+          return_status: t.return_status || ""
+        });
       });
     });
 
@@ -371,10 +374,10 @@ app.get("/product-history/:productId", function(req, res) {
       if (err) return res.status(500).send(err);
 
       (returns || []).forEach(function(r) {
-        let lines = (r.items || []).filter(isThisProduct);
-        let qty = lines.reduce(function(s, i) { return s + (parseInt(i.quantity) || 0); }, 0);
+        (r.items || []).filter(isThisProduct).forEach(function(line) {
+        let qty = parseInt(line.quantity) || 0;
         if (!qty) return;
-        let price = parseFloat(lines[0].price) || 0;
+        let price = parseFloat(line.price) || 0;
 
         events.push({
           type: r.type === "exchange" ? "exchange" : "return",
@@ -389,6 +392,7 @@ app.get("/product-history/:productId", function(req, res) {
           refund_method: r.refund_method || "",
           reason: r.reason || "",
           user: r.user || ""
+        });
         });
       });
 
@@ -508,6 +512,56 @@ app.get("/customer-advance/:customerId", function(req, res) {
 });
 
 
+// Stock batches (inventory.js): which batches each sold line was taken from,
+// saved on the line (items[].batches), and the line's cost price becomes the
+// real cost of those batches (used by the profit figures). Returns put the
+// units back into the same batches.
+function saveBatchAllocations(transaction, allocations) {
+  if (!transaction || !Array.isArray(allocations) || !allocations.some(function(a) { return a && a.length; })) return;
+  let items = (transaction.items || []).map(function(item, i) {
+    let a = allocations[i];
+    if (!a || !a.length) return item;
+    let qty = a.reduce(function(s, x) { return s + x.qty; }, 0);
+    let withCost = a.filter(function(x) { return x.unit_cost !== null && x.unit_cost !== undefined; });
+    let line = Object.assign({}, item, { batches: a });
+    if (qty > 0 && withCost.length === a.length) {
+      let cost = a.reduce(function(s, x) { return s + x.qty * Number(x.unit_cost); }, 0) / qty;
+      line.cost_price = (Math.round(cost * 10000) / 10000).toString();
+    }
+    return line;
+  });
+  transactionsDB.update({ _id: transaction._id }, { $set: { items: items } }, {}, function(err) {
+    if (err) console.error("Failed to save the batches of a sale:", err);
+  });
+}
+
+// how many of each order line were already returned. Returns saved with a
+// line number count for that line; older returns (by product only) fill the
+// product's lines in order.
+function returnedPerLine(order, returns) {
+  let perLine = (order.items || []).map(function() { return 0; });
+  let byProduct = {};
+  (returns || []).forEach(function(ret) {
+    (ret.items || []).forEach(function(item) {
+      let qty = parseInt(item.quantity) || 0;
+      let line = parseInt(item.line);
+      if (!isNaN(line) && perLine[line] !== undefined) perLine[line] += qty;
+      else byProduct[item.id] = (byProduct[item.id] || 0) + qty;
+    });
+  });
+  Object.keys(byProduct).forEach(function(id) {
+    let left = byProduct[id];
+    (order.items || []).forEach(function(item, i) {
+      if (left <= 0 || String(item.id) !== String(id)) return;
+      let room = Math.max((parseInt(item.quantity) || 0) - perLine[i], 0);
+      let n = Math.min(room, left);
+      perLine[i] += n;
+      left -= n;
+    });
+  });
+  return perLine;
+}
+
 app.post("/new", function(req, res) {
   let newTransaction = req.body;
   checkSaleAdvance(newTransaction, function(advanceError) {
@@ -523,12 +577,12 @@ app.post("/new", function(req, res) {
     res.status(200).send("Transaction created successfully.");
 
     // Call app.decrementInventory regardless of paid amount
-    Inventory.decrementInventory(newTransaction.items, function(err, result) {
+    Inventory.decrementInventory(newTransaction.items, function(err, allocations) {
       if (err) {
         console.error("Error decrementing inventory:", err);
-      } else {
-        console.log("Inventory updated successfully.");
+        return;
       }
+      saveBatchAllocations(transaction, allocations);
     });
   });
   });
@@ -605,27 +659,33 @@ app.post("/returns", function(req, res) {
     returnsDB.find({ order_id: orderId }, function(err, existingReturns) {
       if (err) return res.status(500).send(err);
 
-      let alreadyReturned = {};
-      existingReturns.forEach(function(ret) {
-        ret.items.forEach(function(item) {
-          alreadyReturned[item.id] = (alreadyReturned[item.id] || 0) + parseInt(item.quantity);
-        });
-      });
-
+      // a product can be on several lines of one sale (sold from batches at
+      // different prices), so returns are checked per line (items[].line);
+      // a return without line numbers is checked per product
+      let perLine = returnedPerLine(order, existingReturns);
+      let asked = {};
       for (let i = 0; i < body.items.length; i++) {
         let requestedItem = body.items[i];
-        let originalItem = order.items.find(function(item) { return item.id == requestedItem.id; });
+        let qty = parseInt(requestedItem.quantity);
+        let line = parseInt(requestedItem.line);
+        let lines = !isNaN(line)
+          ? (order.items[line] && String(order.items[line].id) === String(requestedItem.id) ? [line] : [])
+          : order.items.map(function(item, n) { return String(item.id) === String(requestedItem.id) ? n : -1; })
+              .filter(function(n) { return n >= 0; });
 
-        if (!originalItem) {
+        if (!lines.length) {
           return res.status(400).send("Item " + requestedItem.product_name + " was not part of the original order.");
         }
 
-        let alreadyReturnedQty = alreadyReturned[requestedItem.id] || 0;
-        let remaining = parseInt(originalItem.quantity) - alreadyReturnedQty;
+        let key = lines.join(",");
+        let remaining = lines.reduce(function(s, n) {
+          return s + (parseInt(order.items[n].quantity) || 0) - perLine[n];
+        }, 0) - (asked[key] || 0);
 
-        if (parseInt(requestedItem.quantity) <= 0 || parseInt(requestedItem.quantity) > remaining) {
+        if (!(qty > 0) || qty > remaining) {
           return res.status(400).send("Cannot return " + requestedItem.quantity + " of " + requestedItem.product_name + ". Only " + remaining + " remaining.");
         }
+        asked[key] = (asked[key] || 0) + qty;
       }
 
       let refundAmount = body.items.reduce(function(sum, item) {
@@ -654,18 +714,13 @@ app.post("/returns", function(req, res) {
 
         function finish() {
           returnsDB.find({ order_id: orderId }, function(err, allReturns) {
-            let returnedQty = {};
-            allReturns.forEach(function(ret) {
-              ret.items.forEach(function(item) {
-                returnedQty[item.id] = (returnedQty[item.id] || 0) + parseInt(item.quantity);
-              });
-            });
+            let returnedQty = returnedPerLine(order, allReturns || []);
 
-            let fullyReturned = order.items.every(function(item) {
-              return (returnedQty[item.id] || 0) >= parseInt(item.quantity);
+            let fullyReturned = order.items.every(function(item, n) {
+              return returnedQty[n] >= parseInt(item.quantity);
             });
-            let anyReturned = order.items.some(function(item) {
-              return (returnedQty[item.id] || 0) > 0;
+            let anyReturned = order.items.some(function(item, n) {
+              return returnedQty[n] > 0;
             });
 
             let returnStatus = fullyReturned ? "full" : (anyReturned ? "partial" : "none");
@@ -683,7 +738,12 @@ app.post("/returns", function(req, res) {
         }
 
         if (body.restock) {
-          Inventory.incrementInventory(body.items, function(err) {
+          // back into the batches the units were sold from
+          let restockItems = body.items.map(function(item) {
+            let line = order.items[parseInt(item.line)];
+            return line && Array.isArray(line.batches) ? Object.assign({}, item, { batches: line.batches }) : item;
+          });
+          Inventory.incrementInventory(restockItems, function(err) {
             if (err) console.error("Error incrementing inventory:", err);
             finish();
           });

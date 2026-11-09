@@ -1137,6 +1137,11 @@
                                     <label for="grnUnitCost">Unit Cost <span class="text-muted grn-currency"></span></label>
                                     <input type="number" id="grnUnitCost" class="form-control" min="0" step="0.01" placeholder="0.00">
                                 </div>
+                                <!-- this batch sells at its own price, after the earlier stock (pos.js: addGrnLine) -->
+                                <div class="grn-add-cost">
+                                    <label for="grnSellPrice" title="The price this batch is sold at. Earlier stock keeps its own price until it runs out.">Selling Price <span class="text-muted grn-currency"></span></label>
+                                    <input type="number" id="grnSellPrice" class="form-control" min="0" step="0.01" placeholder="0.00">
+                                </div>
                                 <div class="grn-add-btn">
                                     <button type="button" class="btn btn-success" id="grnAddLine"><i class="fa fa-plus"></i> Add</button>
                                 </div>
@@ -1151,6 +1156,7 @@
                                         <th class="txn-num">In Stock</th>
                                         <th class="txn-num" style="width: 110px;">Quantity</th>
                                         <th class="txn-num" style="width: 130px;">Unit Cost</th>
+                                        <th class="txn-num" style="width: 130px;" title="The price this batch is sold at">Selling Price</th>
                                         <th class="txn-num">Line Total</th>
                                         <th style="width: 44px;"></th>
                                     </tr>
@@ -1160,6 +1166,7 @@
                                     <tr>
                                         <th colspan="2" class="text-right">Total</th>
                                         <th class="text-right" id="grnTotalQty">0</th>
+                                        <th></th>
                                         <th></th>
                                         <th class="text-right" id="grnTotal">0.00</th>
                                         <th></th>
@@ -1303,6 +1310,7 @@
                     <div class="modal-header">
                         <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
                         <button type="button" class="btn btn-default btn-sm pull-right" id="grnViewPrint" style="margin-right: 12px;" title="Print the GRN bill"><i class="fa fa-print"></i> Print Bill</button>
+                        <button type="button" class="btn btn-default btn-sm pull-right" id="grnViewLabels" style="margin-right: 8px;" title="Print barcode labels with the selling price of each product"><i class="fa fa-barcode"></i> Print Labels</button>
                         <h4 class="modal-title" id="grnViewTitle">GRN</h4>
                     </div>
                     <div class="modal-body" id="grnViewBody"></div>
@@ -1976,6 +1984,8 @@
             </div>
             <div class="modal-body" style="padding: 20px;">
                 <p id="productHistoryInfo" class="text-muted" style="margin-bottom: 10px;"></p>
+                <!-- stock batches: a selling price per GRN, sold oldest first (pos.js: loadProductBatches) -->
+                <div id="productBatches" class="product-batches" style="display: none;"></div>
                 <div class="bannerDisplay">
                     <div class="btn-success transactions-banner">
                         <h5>UNITS SOLD</h5>

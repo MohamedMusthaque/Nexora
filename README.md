@@ -119,7 +119,10 @@ Whether operating on a standalone checkout computer or configured across multipl
 - **🚚 Suppliers & Goods Received (GRN)**:
   - Supplier register with contact details, total purchases and the amount owed to each supplier.
   - Good Receive Notes: supplier or walk-in seller, products with quantity and unit cost, received date, and paid by Cash, Bank Transfer, Card or Credit.
-  - Saving a GRN adds the quantities to stock and sets each product's cost price to the unit cost received; it shows in each product's history.
+  - Saving a GRN adds the quantities to stock; it shows in each product's history with the exact unit cost and selling price of that GRN.
+  - **One product, several prices — each with its own barcode**: each GRN line has its own unit cost and **selling price** and becomes a stock batch. Goods received at a different cost must get a different selling price: the GRN form suggests one that keeps the product's margin (cost 6 → 7, price 10 → 11.67) and won't save the old price with a new cost (the server checks this too).
+  - Each selling price has its **own barcode**: the first price keeps the product's barcode, each new price gets `<barcode>-2`, `-3`, … (a GRN at a price that already has a code reuses it). Print the labels from the GRN details (**Print Labels**) or from Product History. Scanning a price's barcode at the till rings up that exact price; clicking a product with several prices asks which one (showing each price, its code and units left). The cart keeps one line per price, and a line can't take more than is left at its price.
+  - Each sale takes its stock from the batches of the price it was rung up at and records them with their real cost (used for profit); returns put the units back into the same batches. The product's own price is that of its oldest stock (used when no price code is given). Stock on hand before a product's first GRN becomes an "Opening stock" batch with the product's barcode. Product History lists the batches (unit cost, selling price, price barcode, received, left), and the product list shows the other prices in stock.
   - Per-supplier transactions (GRNs and payments) with **Pay Supplier** to settle credit purchases.
   - Paying a supplier more than is owed keeps the extra as the supplier's **advance**; the next GRNs from that supplier use it up automatically before the chosen payment method.
   - **Bills** like the POS bill: a GRN bill (GRN-00001, …) and a supplier / advance payment bill (PAY-00001, …) come up after saving, ready to print, and can be reprinted from the GRN list, the supplier's transactions and the GRN details. They show the supplier's balance before / after (owed or advance) and signature lines.
@@ -298,7 +301,7 @@ Nexora/
 
 By default, NEXORA stores databases and media uploads locally under:
 - **Default Path**: `<UserHome>/Nexora/POS/` (or `%APPDATA%/POS` on Windows)
-  - `server/databases/*.db`: Lightweight NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`, `returns.db`, `credit_payments.db`, `customer_advances.db`, `product_history.db`, `expenses.db`, `expense_types.db`, `suppliers.db`, `grns.db`, `supplier_payments.db`).
+  - `server/databases/*.db`: Lightweight NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`, `returns.db`, `credit_payments.db`, `customer_advances.db`, `product_history.db`, `expenses.db`, `expense_types.db`, `suppliers.db`, `grns.db`, `supplier_payments.db`, `batches.db`).
   - `uploads/`: Uploaded product pictures and company receipt logos.
 - **Application Logs**: Saved under `<userData>/nexora.log`.
 

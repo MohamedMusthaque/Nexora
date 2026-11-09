@@ -892,6 +892,7 @@ if (!authedThisSession) {
         });
 
         allProducts = [...data];
+        cartBatchInfo = {}; // the fresh products carry the current stock batches
         loadProductList();
         const capitalizeFirstLetter = (word) =>
           `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
@@ -968,7 +969,15 @@ if (!authedThisSession) {
 
         posProductGroups.forEach((group, groupIndex) => {
           let representative = group.variants[0];
-          let prices = group.variants.map((v) => parseFloat(v.price));
+          // a product with stock at several selling prices shows them all
+          let prices = [];
+          let priceCount = 0;
+          group.variants.forEach((v) => {
+            let sets = priceSetsOf(v);
+            if (sets.length) sets.forEach((set) => prices.push(parseFloat(set.price)));
+            else prices.push(parseFloat(v.price));
+            priceCount += Math.max(sets.length, 1);
+          });
           let minPrice = Math.min(...prices);
           let maxPrice = Math.max(...prices);
           let priceLabel =
@@ -998,8 +1007,8 @@ if (!authedThisSession) {
                                     group.name
                                   }</div>
                                   <span class="sku">${
-                                    group.variants.length > 1
-                                      ? group.variants.length + " prices"
+                                    priceCount > 1
+                                      ? priceCount + " prices"
                                       : representative.sku || ""
                                   }</span>
                                   <span class="stock">STOCK </span><span class="count">${stockLabel}</span></div>
@@ -1066,70 +1075,70 @@ if (!authedThisSession) {
       });
     }
 
-    // called when a POS tile is clicked; tiles that group several
-    // same-name/different-price products show a popup so the user can pick
-    // which price to ring up, otherwise the single variant is added directly
+    // called when a POS tile is clicked. Products with the same name share a
+    // tile, and a product can have several selling prices (stock batches,
+    // each with its own barcode): with more than one choice a popup asks
+    // which to ring up, otherwise it is added directly
     $.fn.selectVariant = function (groupIndex) {
       let group = posProductGroups[groupIndex];
       if (!group || group.variants.length === 0) return;
 
-      if (group.variants.length === 1) {
-        let v = group.variants[0];
-        $(this).addToCart(v._id, v.quantity, v.stock);
+      let choices = [];
+      group.variants.forEach((v) => {
+        let sets = priceSetsOf(v);
+        if (sets.length > 1) sets.forEach((set) => choices.push({ v: v, set: set }));
+        else choices.push({ v: v, set: sets[0] || null });
+      });
+
+      if (choices.length === 1) {
+        let c = choices[0];
+        $(this).addToCart(c.v._id, c.v.quantity, c.v.stock, c.set ? c.set.code : null);
         return;
       }
 
-      let optionsHtml = group.variants
-        .map(
-          (v) =>
-            `<button type="button" class="btn btn-white btn-block variant-option" data-id="${
-              v._id
-            }" data-quantity="${v.quantity}" data-stock="${
-              v.stock
-            }" style="display:flex; justify-content:space-between; margin-bottom:6px;">
-              <span>${v.barcode ? "Barcode: " + v.barcode : ""}</span>
-              <span>${settings.symbol}${v.price}</span>
-            </button>`
-        )
+      let optionsHtml = choices
+        .map((c, i) => {
+          let code = c.set ? c.set.code : c.v.barcode;
+          let price = c.set ? c.set.price : c.v.price;
+          let left = c.set ? c.set.qty_left : c.v.stock == 1 ? c.v.quantity : null;
+          return `<button type="button" class="btn btn-white btn-block variant-option" data-choice="${i}"
+              style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <span style="text-align:left;">${code ? "<b>" + txnHtml(code) + "</b>" : ""}${
+                c.set || left !== null
+                  ? `<br><small class="text-muted">${c.set ? txnHtml(c.set.references.join(", ")) + " · " : ""}${left !== null ? left + " left" : ""}</small>`
+                  : ""
+              }</span>
+              <span style="font-size: 16px;"><b>${settings.symbol}${(parseFloat(price) || 0).toFixed(2)}</b></span>
+            </button>`;
+        })
         .join("");
 
       Swal.fire({
-        title: `Select price for ${group.name}`,
-        html: `<div class="variant-list">${optionsHtml}</div>`,
+        title: `Select price for ${txnHtml(group.name)}`,
+        html: `<p class="text-muted" style="font-size: 13px;">Check the barcode / price label on the item.</p><div class="variant-list">${optionsHtml}</div>`,
         showConfirmButton: false,
         showCloseButton: true,
         didOpen: (popup) => {
           $(popup)
             .find(".variant-option")
             .on("click", function () {
-              let id = $(this).data("id");
-              let quantity = $(this).data("quantity");
-              let stock = $(this).data("stock");
+              let c = choices[parseInt($(this).data("choice"))];
               Swal.close();
-              $(document).addToCart(id, quantity, stock);
+              if (c) $(document).addToCart(c.v._id, c.v.quantity, c.v.stock, c.set ? c.set.code : null);
             });
         },
       });
     };
 
-    $.fn.addToCart = function (id, count, stock) {
-      if (stock == 1) {
-        if (count > 0) {
-          $.get(api + "inventory/product/" + id, function (data) {
-            $(this).addProductToCart(data);
-          });
-        } else {
-          Swal.fire(
-            "Out of stock!",
-            "This item is currently unavailable",
-            "info"
-          );
-        }
-      } else {
-        $.get(api + "inventory/product/" + id, function (data) {
-          $(this).addProductToCart(data);
-        });
+    // code: the selling price picked (a price barcode), if any
+    $.fn.addToCart = function (id, count, stock, code) {
+      if (stock == 1 && !(count > 0)) {
+        Swal.fire("Out of stock!", "This item is currently unavailable", "info");
+        return;
       }
+      $.get(api + "inventory/product/" + id, function (data) {
+        addLookedUpProduct(data, code);
+      });
     };
 
     function barcodeSearch(e) {
@@ -1150,7 +1159,8 @@ if (!authedThisSession) {
         processData: false,
         success: function (data) {
           if (data.barcode != undefined && data.quantity >= 1) {
-            $(this).addProductToCart(data);
+            // a price barcode rings up that price (stock batches)
+            addLookedUpProduct(data, data.scanned_code);
             $("#searchBarCode").get(0).reset();
             $("#basic-addon2").empty();
             $("#basic-addon2").append(
@@ -1209,17 +1219,118 @@ if (!authedThisSession) {
       }
     });
 
-    $.fn.addProductToCart = function (data) {
+    // ---- one product, several selling prices (stock batches, api/inventory.js) ----
+    // Goods received at a different cost have their own selling price and
+    // their own barcode ("<product barcode>-2", ...). Scanning a price's
+    // barcode rings up that price; clicking a product with several prices asks
+    // which one. The cart keeps one line per price (batch_code) and the sale
+    // takes its stock from that price's batches.
+    let cartBatchInfo = {}; // product id -> open batches, from the latest product lookup
+
+    function cartBatches(id) {
+      let list = cartBatchInfo[id];
+      if (!list) {
+        let p = allProducts.find((x) => x._id == id);
+        list = (p && p.batches) || [];
+      }
+      return list.filter((b) => b.qty_left > 0);
+    }
+
+    // a product's selling prices with stock, one per barcode, oldest first:
+    // [{ code, price, cost, qty_left, batch_id, references }]
+    function priceSetsOf(product) {
+      let sets = [];
+      ((product && product.batches) || [])
+        .filter((b) => b.qty_left > 0)
+        .forEach((b) => {
+          let code = b.barcode || "";
+          let set = sets.find((x) => x.code === code);
+          if (set) {
+            set.qty_left += b.qty_left;
+            set.references.push(b.reference);
+          } else {
+            sets.push({
+              code: code,
+              price: b.selling_price,
+              cost: b.unit_cost,
+              qty_left: b.qty_left,
+              batch_id: b._id,
+              references: [b.reference],
+            });
+          }
+        });
+      return sets;
+    }
+
+    function cartQtyOf(id) {
+      return cart.reduce((s, l) => s + (l.id == id ? parseInt(l.quantity) || 0 : 0), 0);
+    }
+
+    function noMoreStock() {
+      Swal.fire("No more stock!", "You have already added all the available stock.", "info");
+    }
+
+    // asks which selling price to ring up (note: shown above the list)
+    function pickPriceSet(product, sets, note, done) {
+      let options = sets
+        .map(
+          (set, i) => `<button type="button" class="btn btn-white btn-block variant-option" data-set="${i}"
+              style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <span style="text-align:left;"><b>${txnHtml(set.code)}</b><br><small class="text-muted">${txnHtml(set.references.join(", "))} · ${set.qty_left} left</small></span>
+              <span style="font-size: 16px;"><b>${settings.symbol}${(parseFloat(set.price) || 0).toFixed(2)}</b></span>
+            </button>`
+        )
+        .join("");
+      Swal.fire({
+        title: `Select price for ${txnHtml(product.name)}`,
+        html: `<p class="text-muted" style="font-size: 13px;">${note || "Check the barcode / price label on the item."}</p><div class="variant-list">${options}</div>`,
+        showConfirmButton: false,
+        showCloseButton: true,
+        didOpen: (popup) => {
+          $(popup)
+            .find(".variant-option")
+            .on("click", function () {
+              let set = sets[parseInt($(this).data("set"))];
+              Swal.close();
+              if (set) done(set);
+            });
+        },
+      });
+    }
+
+    // Adds a looked-up product at the price of the code scanned / picked;
+    // a product with several prices and no code asks which one.
+    function addLookedUpProduct(data, code) {
+      let sets = priceSetsOf(data);
+      let chosen = code ? sets.find((set) => set.code === String(code)) : null;
+      if (chosen) return $(document).addProductToCart(data, chosen);
+      if (sets.length > 1) {
+        let note = code
+          ? `Nothing is left at the price of <b>${txnHtml(code)}</b>. Check the label and pick the price to charge.`
+          : "";
+        return pickPriceSet(data, sets, note, (set) => $(document).addProductToCart(data, set));
+      }
+      $(document).addProductToCart(data, sets[0] || null);
+    }
+
+    // set: the selling price to ring up (from priceSetsOf); none for a
+    // product without stock batches
+    $.fn.addProductToCart = function (data, set) {
+      cartBatchInfo[data._id] = data.batches || [];
       item = {
         id: data._id,
         product_name: data.name,
         sku: data.sku,
-        price: data.price,
+        price: set ? set.price : data.price,
         // cost at the time of sale, saved with the transaction for profit
-        cost_price: data.cost_price ?? "",
+        cost_price: set ? set.cost ?? "" : data.cost_price ?? "",
         img: data.img,
         quantity: 1,
       };
+      if (set) {
+        item.batch_code = set.code; // which price (barcode) this line is
+        item.batch_id = set.batch_id;
+      }
 
       if ($(this).isExist(item)) {
         $(this).qtIncrement(index);
@@ -1229,10 +1340,11 @@ if (!authedThisSession) {
       }
     };
 
+    // the same product at the same price is already in the cart
     $.fn.isExist = function (data) {
       let toReturn = false;
       $.each(cart, function (index, value) {
-        if (value.id == data.id) {
+        if (value.id == data.id && String(value.batch_code || "") === String(data.batch_code || "")) {
           $(this).setIndex(index);
           toReturn = true;
         }
@@ -1285,7 +1397,10 @@ if (!authedThisSession) {
         $("#cartTable > tbody").append(
           $("<tr>").append(
             $("<td>", { text: index + 1 }),
-            $("<td>", { text: data.product_name }),
+            $("<td>").append(
+              $("<span>", { text: data.product_name }),
+              data.batch_code ? [$("<br>"), $("<small>", { class: "text-muted", text: data.batch_code })] : []
+            ),
             $("<td>").append(
               $("<div>", { id: "image", class: "cart-image-wrapper" }).append(
                 $("<img>", {
@@ -1343,30 +1458,40 @@ if (!authedThisSession) {
     $.fn.qtIncrement = function (i) {
       item = cart[i];
 
+      // a line at one price can't have more than is left at that price
+      if (item.batch_code) {
+        let set = priceSetsOf({ batches: cartBatches(item.id) }).find((x) => x.code === item.batch_code);
+        if (set && (parseInt(item.quantity) || 0) >= set.qty_left) {
+          Swal.fire(
+            "No more stock at this price!",
+            `Only ${set.qty_left} left at ${settings.symbol}${(parseFloat(set.price) || 0).toFixed(2)} (${txnHtml(set.code)}). Ring up the rest at their own price.`,
+            "info"
+          );
+          return;
+        }
+      }
+
       let product = allProducts.filter(function (selected) {
         return selected._id == parseInt(item.id);
       });
 
-      if (product[0].stock == 1) {
-        if (item.quantity < product[0].quantity) {
-          item.quantity += 1;
+      if (product[0] && product[0].stock == 1) {
+        // all lines of the product together (one line per price)
+        if (cartQtyOf(item.id) < product[0].quantity) {
+          item.quantity = (parseInt(item.quantity) || 0) + 1;
           $(this).renderTable(cart);
         } else {
-          Swal.fire(
-            "No more stock!",
-            "You have already added all the available stock.",
-            "info"
-          );
+          noMoreStock();
         }
       } else {
-        item.quantity += 1;
+        item.quantity = (parseInt(item.quantity) || 0) + 1;
         $(this).renderTable(cart);
       }
     };
 
     $.fn.qtDecrement = function (i) {
-      if (item.quantity > 1) {
-        item = cart[i];
+      item = cart[i];
+      if (item && item.quantity > 1) {
         item.quantity -= 1;
         $(this).renderTable(cart);
       }
@@ -2102,6 +2227,10 @@ if (!authedThisSession) {
             cost_price: product.cost_price ?? "",
             quantity: product.quantity,
           };
+          // the stock batches the held line was taken from (kept with the sale)
+          if (product.batch_id != null) item.batch_id = product.batch_id;
+          if (product.batch_code) item.batch_code = product.batch_code;
+          if (product.batches) item.batches = product.batches;
           cart.push(item);
         });
       } else if (orderType == 2) {
@@ -2127,6 +2256,9 @@ if (!authedThisSession) {
             cost_price: product.cost_price ?? "",
             quantity: product.quantity,
           };
+          if (product.batch_id != null) item.batch_id = product.batch_id;
+          if (product.batch_code) item.batch_code = product.batch_code;
+          if (product.batches) item.batches = product.batches;
           cart.push(item);
         });
       }
@@ -3708,7 +3840,10 @@ if (!authedThisSession) {
               : e.return_status == "partial"
               ? ' <span class="label label-warning">Partial return</span>'
               : "";
-          return escapeHtml(e.payment_type) + " · " + escapeHtml(e.customer) + badge;
+          let from = (e.batches || []).length
+            ? " · from " + e.batches.map((b) => escapeHtml(b.reference) + " ×" + b.qty).join(", ")
+            : "";
+          return escapeHtml(e.payment_type) + " · " + escapeHtml(e.customer) + from + badge;
         }
         case "return":
         case "exchange":
@@ -3724,9 +3859,11 @@ if (!authedThisSession) {
           let cost = (v) => (v === "" || v == null ? "not set" : sym + (parseFloat(v) || 0).toFixed(2));
           return [
             "From " + escapeHtml(e.supplier || ""),
+            e.selling_price != null ? `<b>sells at ${sym}${(parseFloat(e.selling_price) || 0).toFixed(2)}</b>` : "",
             e.payment_method ? "paid by " + escapeHtml(e.payment_method) : "",
             e.received_date ? "received " + moment(e.received_date, "YYYY-MM-DD").format("DD MMM YYYY") : "",
             `stock ${e.qty_before} → ${e.qty_after}`,
+            e.price_after != null ? `price ${cost(e.price_before)} → ${cost(e.price_after)}` : "",
             e.cost_after != null ? `cost price ${cost(e.cost_before)} → ${cost(e.cost_after)}` : "",
           ].filter(Boolean).join(" · ");
         }
@@ -3790,7 +3927,9 @@ if (!authedThisSession) {
             <td><span class="label ${meta.css}">${meta.label}</span></td>
             <td>${e.reference != null ? escapeHtml(e.reference) : ""}</td>
             <td class="text-right">${qty}</td>
-            <td class="text-right nobr">${e.price != null && meta.group !== "changes" ? sym + parseFloat(e.price).toFixed(2) : ""}</td>
+            <td class="text-right nobr" data-export="${e.price != null && meta.group !== "changes" ? sym + parseFloat(e.price).toFixed(2) : ""}">${
+              e.price != null && meta.group !== "changes" ? sym + parseFloat(e.price).toFixed(2) : ""
+            }${e.type === "grn" ? '<br><small class="text-muted">unit cost</small>' : ""}</td>
             <td class="text-right nobr">${e.amount != null ? sym + parseFloat(e.amount).toFixed(2) : ""}</td>
             <td>${productHistoryDetails(e)}</td>
             <td>${escapeHtml(e.user)}</td>
@@ -3872,6 +4011,77 @@ if (!authedThisSession) {
     $("#productHistoryModal").on("shown.bs.modal", adjustProductHistoryColumns);
     $(window).on("resize", adjustProductHistoryColumns);
 
+    // The product's stock batches (one per GRN, each with its own unit cost
+    // and selling price), in selling order: the first with units left is
+    // being sold now; the next takes over when it runs out.
+    function loadProductBatches(product) {
+      $("#productBatches").hide().empty();
+      if (product.stock != 1) return;
+      $.get(api + "inventory/batches/" + product._id).done(function (batches) {
+        if (productHistoryProduct !== product || !(batches || []).length) return;
+        let sym = settings.symbol;
+        let money = (v) => (v === null || v === undefined || v === "" ? "-" : sym + (parseFloat(v) || 0).toFixed(2));
+        let current = batches.find((b) => b.qty_left > 0);
+        let rows = batches
+          .map((b) => {
+            let state =
+              b === current
+                ? '<span class="label label-success" title="The product\'s price in the list and when no price barcode is scanned">Default price</span>'
+                : b.qty_left > 0
+                ? '<span class="label label-info">In stock</span>'
+                : '<span class="text-muted">Sold out</span>';
+            return `<tr class="${b.qty_left > 0 ? "" : "text-muted"}">
+              <td>${escapeHtml(b.reference)}${b.supplier ? `<br><small>${escapeHtml(b.supplier)}</small>` : ""}</td>
+              <td class="nobr">${b.received_date ? moment(b.received_date, "YYYY-MM-DD").format("DD MMM YYYY") : "-"}</td>
+              <td class="text-right nobr">${money(b.unit_cost)}</td>
+              <td class="text-right nobr"><b>${money(b.selling_price)}</b></td>
+              <td class="nobr">${b.barcode ? escapeHtml(b.barcode) : "-"}${
+                b.barcode
+                  ? ` <button type="button" class="btn btn-default btn-xs batch-label-btn" title="Print price labels"
+                      data-code="${escapeHtml(b.barcode)}" data-price="${escapeHtml(b.selling_price)}" data-left="${b.qty_left}"><i class="fa fa-barcode"></i></button>`
+                  : ""
+              }</td>
+              <td class="text-right">${b.qty_received}</td>
+              <td class="text-right"><b>${b.qty_left}</b></td>
+              <td>${state}</td>
+            </tr>`;
+          })
+          .join("");
+        $("#productBatches")
+          .html(
+            `<div class="product-batches-title"><i class="fa fa-cubes"></i> Stock batches <small class="text-muted">each selling price has its own barcode; scanning it charges that price</small></div>
+            <div class="product-batches-scroll"><table class="table table-condensed">
+              <thead><tr><th>Batch</th><th>Received</th><th class="text-right">Unit Cost</th><th class="text-right">Selling Price</th><th>Price Barcode</th><th class="text-right">Received</th><th class="text-right">Left</th><th></th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table></div>`
+          )
+          .show();
+        adjustProductHistoryColumns(); // less room for the history list now
+      });
+    }
+
+    // labels for one selling price (its barcode), from the batches table
+    $("#productBatches").on("click", ".batch-label-btn", function () {
+      let product = productHistoryProduct;
+      if (!product) return;
+      let code = String($(this).data("code"));
+      let price = $(this).data("price");
+      let left = parseInt($(this).data("left")) || 1;
+      Swal.fire({
+        title: "Print price labels",
+        html: `<b>${escapeHtml(product.name)}</b> · ${settings.symbol}${(parseFloat(price) || 0).toFixed(2)} · ${escapeHtml(code)}`,
+        input: "number",
+        inputLabel: "How many labels?",
+        inputValue: Math.max(left, 1),
+        inputAttributes: { min: 1, max: 1000, step: 1 },
+        showCancelButton: true,
+        confirmButtonText: '<i class="fa fa-print"></i> Print',
+      }).then(function (result) {
+        if (!result.value) return;
+        printPriceLabels([{ name: product.name, code: code, price: price, copies: parseInt(result.value) || 1 }]);
+      });
+    });
+
     $.fn.viewProductHistory = function (productId) {
       let product = allProducts.find((p) => p._id == productId);
       if (!product) return;
@@ -3882,9 +4092,10 @@ if (!authedThisSession) {
       $("#productHistoryInfo").html(
         `Barcode: <b>${escapeHtml(product.barcode)}</b> &nbsp;·&nbsp; ` +
           `Category: <b>${escapeHtml(historyCategoryName(product.category))}</b> &nbsp;·&nbsp; ` +
-          `Price: <b>${settings.symbol}${(parseFloat(product.price) || 0).toFixed(2)}</b> &nbsp;·&nbsp; ` +
+          `Price now: <b>${settings.symbol}${(parseFloat(product.price) || 0).toFixed(2)}</b> &nbsp;·&nbsp; ` +
           `Stock tracking: <b>${product.stock == 1 ? "On" : "Off"}</b>`
       );
+      loadProductBatches(product);
       $("#productHistoryFilter").val("all");
       productHistoryDateFilter.reset();
       if ($.fn.DataTable.isDataTable("#productHistoryTable")) {
@@ -3937,6 +4148,17 @@ if (!authedThisSession) {
       $("#Products").modal("show");
     });
 
+    // under the price in the product list: the product's other selling prices
+    // with stock (each has its own barcode)
+    function productNextPriceHint(product) {
+      let sets = priceSetsOf(product);
+      if (sets.length < 2) return "";
+      let others = sets.slice(1);
+      return `<br><small class="text-muted" title="${escapeHtml(
+        sets.map((s) => s.code + ": " + settings.symbol + parseFloat(s.price).toFixed(2) + " (" + s.qty_left + " left)").join("\n")
+      )}">also ${others.map((s) => settings.symbol + parseFloat(s.price).toFixed(2)).join(", ")}</small>`;
+    }
+
     // builds the row markup for one product inside a category's detail table
     function buildProductRowHtml(product) {
       let index = allProducts.indexOf(product);
@@ -3950,7 +4172,7 @@ if (!authedThisSession) {
           }" id="product_img"></td>
           <td>${product.name}</td>
           <td>${product.cost_price !== undefined && product.cost_price !== "" ? settings.symbol + parseFloat(product.cost_price).toFixed(2) : '<span class="text-muted" title="No cost price yet">&mdash;</span>'}</td>
-          <td>${settings.symbol}${product.price}</td>
+          <td>${settings.symbol}${product.price}${productNextPriceHint(product)}</td>
           <td>${product.stock == 1 ? product.quantity : "N/A"}</td>
           <td class="nobr">
           <span class="btn-group" style="display: flex;">
@@ -4876,7 +5098,9 @@ function computeProfit(transactions, returns, products) {
     (r.items || []).forEach((i) => {
       let qty = parseInt(i.quantity) || 0;
       let refund = (parseFloat(i.price) || 0) * qty; // what was paid back
-      let original = order.items.find((o) => o.id == i.id);
+      // the sale line it came from (a product can be on several lines, one per batch price)
+      let byLine = i.line != null ? order.items[parseInt(i.line)] : null;
+      let original = byLine && byLine.id == i.id ? byLine : order.items.find((o) => o.id == i.id);
       let e = entry(i.id, i.product_name);
       let c = unitCostFor(i, original);
       e.returned += qty;
@@ -5829,6 +6053,8 @@ function grnProduct(id) {
   return grnProducts.find((p) => String(p._id) === String(id));
 }
 
+let grnSellTyped = false; // the add bar's selling price was typed (not suggested)
+
 function openGrnForm(supplierId) {
   // fresh stock figures and cost prices for the product list
   $.get(api + "inventory/products")
@@ -5925,7 +6151,52 @@ function updateGrnAdvanceInfo() {
 }
 
 function grnLineValid(line) {
-  return Number.isInteger(Number(line.quantity)) && Number(line.quantity) >= 1 && Number(line.unit_cost) >= 0 && line.unit_cost !== "";
+  return (
+    Number.isInteger(Number(line.quantity)) &&
+    Number(line.quantity) >= 1 &&
+    Number(line.unit_cost) >= 0 &&
+    line.unit_cost !== "" &&
+    Number(line.selling_price) >= 0 &&
+    line.selling_price !== ""
+  );
+}
+
+// Goods at a different cost are a new set with their own selling price (and
+// barcode): a selling price that keeps the product's margin now. Same cost =
+// the price now.
+function grnSuggestedPrice(costNow, priceNow, cost) {
+  let c = parseFloat(costNow), p = parseFloat(priceNow);
+  if (isNaN(p)) return "";
+  if (isNaN(c) || supRound(c) === supRound(cost) || !(c > 0)) return supRound(p);
+  return supRound((Number(cost) * p) / c);
+}
+
+// The cost changed but the selling price didn't: not allowed (the server
+// refuses it too). Returns the message, or "" when the line is fine.
+function grnPriceRuleProblem(l) {
+  let costNow = parseFloat(l.current_cost);
+  if (isNaN(costNow) || l.unit_cost === "" || l.selling_price === "") return "";
+  if (supRound(costNow) === supRound(l.unit_cost)) return "";
+  if (supRound(l.selling_price) !== supRound(l.current_price)) return "";
+  let suggested = grnSuggestedPrice(l.current_cost, l.current_price, l.unit_cost);
+  return `The unit cost of "${l.name}" changed from ${supMoney(costNow)} to ${supMoney(l.unit_cost)}, so these goods need their own selling price (not ${supMoney(l.current_price)})${
+    suggested !== "" ? ". Same margin: " + supMoney(suggested) : ""
+  }.`;
+}
+
+// under a line's selling price: the price now, and warnings
+function grnSellHint(l) {
+  let sell = Number(l.selling_price), cost = Number(l.unit_cost);
+  if (grnPriceRuleProblem(l)) {
+    return `<span class="text-danger">cost changed: needs a new price</span>`;
+  }
+  if (l.selling_price !== "" && l.unit_cost !== "" && sell < cost) {
+    return `<span class="text-danger">below the unit cost</span>`;
+  }
+  if (l.current_price !== "" && l.current_price != null && parseFloat(l.current_price) !== sell) {
+    return `<span class="text-muted">now ${supMoney(l.current_price)}</span>`;
+  }
+  return "";
 }
 
 function updateGrnTotals() {
@@ -5940,6 +6211,7 @@ function updateGrnTotals() {
     $(`#grn_lines tr[data-index="${i}"] .grn-line-after`).text(
       l.tracked && grnLineValid(l) ? "→ " + (l.stock + Number(l.quantity)) : ""
     );
+    $(`#grn_lines tr[data-index="${i}"] .grn-line-sell-hint`).html(grnSellHint(l));
   });
   $("#grnTotalQty").text(qty);
   $("#grnTotal").text(supMoney(total));
@@ -5949,7 +6221,7 @@ function updateGrnTotals() {
 function renderGrnLines() {
   if (!grnLines.length) {
     $("#grn_lines").html(
-      `<tr class="grn-empty"><td colspan="6">No products yet. Choose a product above, enter the quantity and unit cost, then click Add.</td></tr>`
+      `<tr class="grn-empty"><td colspan="7">No products yet. Choose a product above, enter the quantity, unit cost and selling price, then click Add.</td></tr>`
     );
   } else {
     $("#grn_lines").html(
@@ -5961,6 +6233,8 @@ function renderGrnLines() {
               <br><small class="text-success grn-line-after"></small></td>
             <td><input type="number" class="form-control grn-line-qty" min="1" step="1" value="${txnHtml(l.quantity)}"></td>
             <td><input type="number" class="form-control grn-line-cost" min="0" step="0.01" value="${txnHtml(l.unit_cost)}"></td>
+            <td><input type="number" class="form-control grn-line-sell" min="0" step="0.01" value="${txnHtml(l.selling_price)}">
+              <small class="grn-line-sell-hint"></small></td>
             <td class="text-right nobr grn-line-total"></td>
             <td><button type="button" class="btn btn-danger btn-sm grn-line-remove" title="Remove"><i class="fa fa-times"></i></button></td>
           </tr>`
@@ -5976,6 +6250,8 @@ function addGrnLine() {
   let qty = Number($("#grnQty").val());
   let costText = $.trim($("#grnUnitCost").val());
   let cost = Number(costText);
+  let sellText = $.trim($("#grnSellPrice").val());
+  let sell = Number(sellText);
 
   if (!p) {
     Swal.fire("Oops!", "Please choose a product.", "warning");
@@ -5989,12 +6265,29 @@ function addGrnLine() {
     Swal.fire("Oops!", "Please enter the unit cost (0 or more).", "warning");
     return;
   }
+  if (sellText === "" || !(sell >= 0)) {
+    Swal.fire("Oops!", "Please enter the selling price for this stock (0 or more).", "warning");
+    return;
+  }
+  let ruleProblem = grnPriceRuleProblem({
+    name: p.name,
+    unit_cost: supRound(cost),
+    selling_price: supRound(sell),
+    current_cost: p.cost_price,
+    current_price: p.price,
+  });
+  if (ruleProblem) {
+    Swal.fire("New selling price needed", ruleProblem, "warning");
+    $("#grnSellPrice").trigger("focus").trigger("select");
+    return;
+  }
 
   let existing = grnLines.find((l) => String(l.product_id) === String(p._id));
   if (existing) {
     // the same product again: add to its line
     existing.quantity = (Number(existing.quantity) || 0) + qty;
     existing.unit_cost = supRound(cost);
+    existing.selling_price = supRound(sell);
   } else {
     let barcode = p.barcode != null && String(p.barcode) !== "NaN" ? String(p.barcode) : "";
     grnLines.push({
@@ -6005,11 +6298,16 @@ function addGrnLine() {
       tracked: p.stock == 1,
       quantity: qty,
       unit_cost: supRound(cost),
+      selling_price: supRound(sell),
+      sell_typed: grnSellTyped, // typed by hand: a cost change doesn't re-suggest it
+      current_price: p.price, // the price the product sells at now
+      current_cost: p.cost_price, // and its cost now (a different cost needs a new price)
     });
   }
 
   $("#grnProduct").val("").trigger("chosen:updated");
-  $("#grnQty, #grnUnitCost").val("");
+  $("#grnQty, #grnUnitCost, #grnSellPrice").val("");
+  grnSellTyped = false;
   renderGrnLines();
   $("#grnProduct").trigger("chosen:activate");
 }
@@ -6022,6 +6320,9 @@ function grnDetailsHtml(g) {
         <td>${txnHtml(i.product_name)}${i.barcode ? `<br><small class="text-muted">${txnHtml(i.barcode)}</small>` : ""}</td>
         <td class="text-right">${i.quantity}</td>
         <td class="text-right nobr">${supMoney(i.unit_cost)}</td>
+        <td class="text-right nobr">${i.selling_price != null ? supMoney(i.selling_price) : '<span class="text-muted">-</span>'}${
+          i.batch_code ? `<br><small class="text-muted" title="The barcode of this price: label the goods with it">${txnHtml(i.batch_code)}</small>` : ""
+        }</td>
         <td class="text-right nobr">${supMoney(i.total)}</td>
       </tr>`
     )
@@ -6042,11 +6343,12 @@ function grnDetailsHtml(g) {
       .join("")}</div>
     <div class="modal-fit-scroll grn-view-scroll">
     <table class="table table-bordered">
-      <thead><tr><th>Product</th><th class="txn-num">Quantity</th><th class="txn-num">Unit Cost</th><th class="txn-num">Line Total</th></tr></thead>
+      <thead><tr><th>Product</th><th class="txn-num">Quantity</th><th class="txn-num">Unit Cost</th><th class="txn-num" title="The price this batch is sold at">Selling Price</th><th class="txn-num">Line Total</th></tr></thead>
       <tbody>${items}</tbody>
       <tfoot><tr>
         <th class="text-right">Total</th>
         <th class="text-right">${g.total_quantity || 0}</th>
+        <th></th>
         <th></th>
         <th class="text-right nobr">${supMoney(g.total)}</th>
       </tr></tfoot>
@@ -6055,6 +6357,44 @@ function grnDetailsHtml(g) {
 }
 
 let grnViewing = null; // the GRN open in the GRN details window (its Print Bill button)
+
+// Price labels for the goods: product name, the barcode of its selling price
+// (each price has its own, see api/inventory.js) and the price, printed as a
+// sheet. labels: [{ name, code, price, copies }]
+function printPriceLabels(labels) {
+  let cells = [];
+  (labels || []).forEach((l) => {
+    if (!l.code) return;
+    let canvas = document.createElement("canvas");
+    try {
+      JsBarcode(canvas, String(l.code), { format: "CODE128", displayValue: true, height: 40, margin: 0, fontSize: 14 });
+    } catch (e) {
+      console.error("Barcode label failed for " + l.code, e);
+      return;
+    }
+    let cell = `<div class="lbl">
+        <div class="nm">${txnHtml(l.name)}</div>
+        <img src="${canvas.toDataURL("image/png")}">
+        <div class="pr">${l.price != null && l.price !== "" ? supMoney(l.price) : ""}</div>
+      </div>`;
+    let copies = Math.min(Math.max(parseInt(l.copies) || 1, 1), 1000);
+    for (let i = 0; i < copies; i++) cells.push(cell);
+  });
+  if (!cells.length) {
+    Swal.fire("Nothing to print", "There are no barcodes to print.", "info");
+    return;
+  }
+  printJS({
+    printable: `<div class="sheet">${cells.join("")}</div>`,
+    type: "raw-html",
+    style:
+      ".sheet{display:flex;flex-wrap:wrap;gap:6px}" +
+      ".lbl{width:48mm;border:1px dashed #999;padding:4px;text-align:center;font-family:Arial,sans-serif;page-break-inside:avoid}" +
+      ".lbl img{max-width:100%;height:auto}" +
+      ".nm{font-size:11px;font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}" +
+      ".pr{font-size:15px;font-weight:bold}",
+  });
+}
 
 function showGrn(grn) {
   grnViewing = grn;
@@ -6112,7 +6452,7 @@ function grnBillHtml(g) {
   let items = (g.items || [])
     .map(
       (i) => `<tr>
-        <td>${txnHtml(i.product_name)}</td>
+        <td>${txnHtml(i.product_name)}${i.selling_price != null ? `<br><small>sell @ ${supMoney(i.selling_price)}${i.batch_code ? " · " + txnHtml(i.batch_code) : ""}</small>` : ""}</td>
         <td>${i.quantity}</td>
         <td>${supMoney(i.unit_cost)}</td>
         <td style="text-align: right;">${supMoney(i.total)}</td>
@@ -6387,6 +6727,31 @@ $(function () {
     receipt = grnBillHtml(grnViewing);
     $(this).print();
   });
+  // GRN details window: price labels for the goods received (each price has its own barcode)
+  $("#grnViewLabels").on("click", function () {
+    if (!grnViewing) return;
+    let lines = (grnViewing.items || []).map((i) => ({
+      name: i.product_name,
+      code: i.batch_code || i.barcode || String(i.product_id),
+      price: i.selling_price != null ? i.selling_price : null,
+      units: parseInt(i.quantity) || 1,
+    }));
+    let units = lines.reduce((s, l) => s + l.units, 0);
+    Swal.fire({
+      title: "Print price labels",
+      input: "radio",
+      inputOptions: {
+        unit: "One label per unit received (" + units + " labels)",
+        line: "One label per product (" + lines.length + " labels)",
+      },
+      inputValue: units > 200 ? "line" : "unit",
+      showCancelButton: true,
+      confirmButtonText: '<i class="fa fa-print"></i> Print',
+    }).then(function (result) {
+      if (!result.value) return;
+      printPriceLabels(lines.map((l) => Object.assign({}, l, { copies: result.value === "unit" ? l.units : 1 })));
+    });
+  });
   $("#supPayAmount").on("input", updateSupplierPaymentHint);
 
   // tables measured while hidden (other tab / closed window) need re-measuring
@@ -6457,11 +6822,28 @@ $(function () {
     let line = grnLines.find((l) => String(l.product_id) === String(p._id));
     let cost = line ? line.unit_cost : p.cost_price;
     $("#grnUnitCost").val(cost !== "" && cost != null && !isNaN(parseFloat(cost)) ? parseFloat(cost).toFixed(2) : "");
+    // suggested selling price: the price now at the same cost, else one that
+    // keeps the margin (goods at a new cost get their own price)
+    let sell = line ? line.selling_price : grnSuggestedPrice(p.cost_price, p.price, $("#grnUnitCost").val());
+    $("#grnSellPrice").val(sell !== "" && sell != null && !isNaN(parseFloat(sell)) ? parseFloat(sell).toFixed(2) : "");
+    grnSellTyped = !!(line && line.sell_typed);
     setTimeout(() => $("#grnQty").trigger("focus"), 0);
   });
 
   $("#grnAddLine").on("click", addGrnLine);
-  $("#grnQty, #grnUnitCost").on("keydown", function (e) {
+  // a new unit cost re-suggests the selling price (same margin) until a price is typed
+  $("#grnUnitCost").on("input", function () {
+    let p = grnProduct($("#grnProduct").val());
+    let cost = $.trim($(this).val());
+    if (!p || grnSellTyped || cost === "" || isNaN(Number(cost))) return;
+    let sell = grnSuggestedPrice(p.cost_price, p.price, Number(cost));
+    if (sell !== "") $("#grnSellPrice").val(Number(sell).toFixed(2));
+  });
+  $("#grnSellPrice").on("input", function () {
+    grnSellTyped = true;
+  });
+
+  $("#grnQty, #grnUnitCost, #grnSellPrice").on("keydown", function (e) {
     if (e.key === "Enter") {
       e.preventDefault(); // add the line, don't save the GRN
       addGrnLine();
@@ -6469,13 +6851,26 @@ $(function () {
   });
 
   $("#grn_lines")
-    .on("input", ".grn-line-qty, .grn-line-cost", function () {
+    .on("input", ".grn-line-qty, .grn-line-cost, .grn-line-sell", function () {
       let i = parseInt($(this).closest("tr").data("index"));
       let line = grnLines[i];
       if (!line) return;
       let val = $.trim($(this).val());
       if ($(this).hasClass("grn-line-qty")) line.quantity = val === "" ? "" : Number(val);
-      else line.unit_cost = val === "" ? "" : Number(val);
+      else if ($(this).hasClass("grn-line-sell")) {
+        line.selling_price = val === "" ? "" : Number(val);
+        line.sell_typed = true;
+      } else {
+        line.unit_cost = val === "" ? "" : Number(val);
+        // a new cost re-suggests the selling price (same margin) until one is typed
+        if (!line.sell_typed && line.unit_cost !== "" && !isNaN(line.unit_cost)) {
+          let sell = grnSuggestedPrice(line.current_cost, line.current_price, line.unit_cost);
+          if (sell !== "") {
+            line.selling_price = sell;
+            $(this).closest("tr").find(".grn-line-sell").val(Number(sell).toFixed(2));
+          }
+        }
+      }
       updateGrnTotals();
     })
     .on("keydown", "input", function (e) {
@@ -6502,7 +6897,12 @@ $(function () {
     }
     let bad = grnLines.find((l) => !grnLineValid(l));
     if (bad) {
-      Swal.fire("Oops!", `Please check "${bad.name}": the quantity must be a whole number of at least 1 and the unit cost 0 or more.`, "warning");
+      Swal.fire("Oops!", `Please check "${bad.name}": the quantity must be a whole number of at least 1, and the unit cost and selling price 0 or more.`, "warning");
+      return;
+    }
+    let needsPrice = grnLines.map(grnPriceRuleProblem).find(Boolean);
+    if (needsPrice) {
+      Swal.fire("New selling price needed", needsPrice, "warning");
       return;
     }
     if (paidBy === "Credit" && !supplierId) {
@@ -6530,7 +6930,12 @@ $(function () {
       note: $.trim($("#grnNote").val()),
       created_by: user?.fullname || "",
       created_by_id: user?._id || "",
-      items: grnLines.map((l) => ({ product_id: l.product_id, quantity: Number(l.quantity), unit_cost: Number(l.unit_cost) })),
+      items: grnLines.map((l) => ({
+        product_id: l.product_id,
+        quantity: Number(l.quantity),
+        unit_cost: Number(l.unit_cost),
+        selling_price: Number(l.selling_price),
+      })),
     };
 
     Swal.fire({
@@ -6539,7 +6944,7 @@ $(function () {
       html: `<p><b>${txnHtml(supplierName)}</b> · ${supDate(date)}</p>
         <p>${grnLines.length} ${grnLines.length === 1 ? "product" : "products"}, ${units} units · <b>${supMoney(total)}</b></p>
         <p>${txnHtml(paymentText)}</p>
-        <p class="text-muted" style="font-size: 13px;">The stock of these products goes up by the quantities received. A saved GRN can't be changed.</p>`,
+        <p class="text-muted" style="font-size: 13px;">The stock of these products goes up by the quantities received. Stock already on hand is sold first at its own price; then this stock sells at the selling price entered here. A saved GRN can't be changed.</p>`,
       showCancelButton: true,
       confirmButtonText: "Save GRN",
     }).then(function (result) {
@@ -7796,22 +8201,38 @@ $.fn.openReturnModal = function (mode) {
   $("#returnReason").val("");
 
   $.get(api + "returns/order/" + order._id, function (returns) {
-    let alreadyReturned = {};
+    // per line of the sale: a product sold from stock batches at different
+    // prices is on several lines. Returns saved with a line number count for
+    // that line; older ones (by product) fill the product's lines in order.
+    let returnedPerLine = order.items.map(() => 0);
+    let byProduct = {};
     (returns || []).forEach((ret) => {
       ret.items.forEach((item) => {
-        alreadyReturned[item.id] =
-          (alreadyReturned[item.id] || 0) + parseInt(item.quantity);
+        let qty = parseInt(item.quantity) || 0;
+        let line = parseInt(item.line);
+        if (!isNaN(line) && returnedPerLine[line] !== undefined) returnedPerLine[line] += qty;
+        else byProduct[item.id] = (byProduct[item.id] || 0) + qty;
+      });
+    });
+    Object.keys(byProduct).forEach((id) => {
+      let left = byProduct[id];
+      order.items.forEach((item, n) => {
+        if (left <= 0 || String(item.id) !== String(id)) return;
+        let take = Math.min(Math.max((parseInt(item.quantity) || 0) - returnedPerLine[n], 0), left);
+        returnedPerLine[n] += take;
+        left -= take;
       });
     });
 
     returnableItems = [];
     let rows = "";
 
-    order.items.forEach((item) => {
-      let returnedQty = alreadyReturned[item.id] || 0;
+    order.items.forEach((item, line) => {
+      let returnedQty = returnedPerLine[line];
       let remaining = parseInt(item.quantity) - returnedQty;
 
       returnableItems.push({
+        line: line,
         id: item.id,
         product_name: item.product_name,
         sku: item.sku,
@@ -7821,11 +8242,11 @@ $.fn.openReturnModal = function (mode) {
       });
 
       rows += `<tr>
-                    <td><input type="checkbox" class="return-item-check" data-id="${item.id}" ${remaining <= 0 ? "disabled" : ""}></td>
+                    <td><input type="checkbox" class="return-item-check" data-line="${line}" ${remaining <= 0 ? "disabled" : ""}></td>
                     <td>${item.product_name}</td>
                     <td>${item.quantity}</td>
                     <td>${returnedQty}</td>
-                    <td><input type="number" class="form-control return-item-qty" data-id="${item.id}" min="0" max="${remaining}" value="0" ${remaining <= 0 ? "disabled" : ""}></td>
+                    <td><input type="number" class="form-control return-item-qty" data-line="${line}" min="0" max="${remaining}" value="0" ${remaining <= 0 ? "disabled" : ""}></td>
                     <td>${settings.symbol}${parseFloat(item.price).toFixed(2)}</td>
                 </tr>`;
     });
@@ -7842,11 +8263,11 @@ $.fn.submitReturn = function () {
 
   $("#returnItemsList tr").each(function () {
     let checked = $(this).find(".return-item-check").is(":checked");
-    let id = $(this).find(".return-item-check").data("id");
+    let line = parseInt($(this).find(".return-item-check").data("line"));
     let qty = parseInt($(this).find(".return-item-qty").val()) || 0;
 
     if (checked && qty > 0) {
-      let match = returnableItems.find((i) => i.id == id);
+      let match = returnableItems.find((i) => i.line === line);
 
       if (!match) return;
 
@@ -7861,6 +8282,7 @@ $.fn.submitReturn = function () {
       }
 
       items.push({
+        line: match.line, // which line of the sale (its price and stock batches)
         id: match.id,
         product_name: match.product_name,
         sku: match.sku,

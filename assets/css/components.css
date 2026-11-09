@@ -2714,6 +2714,45 @@ ul.ColVis_collection li {
   letter-spacing: 0.4px;
 }
 
+/* ---- Stock batches (a selling price per GRN) ---- */
+/* product history: the batches table above the history list */
+.product-batches{
+  margin-bottom: 12px;
+  border: 1px solid #e3e3e3;
+  border-radius: 5px;
+  background: #fafbfc;
+}
+.product-batches-title{
+  padding: 6px 10px;
+  font-weight: 600;
+  color: #4c5667;
+  border-bottom: 1px solid #e3e3e3;
+}
+.product-batches-scroll{
+  max-height: 150px;
+  overflow-y: auto;
+}
+.product-batches .table{
+  margin-bottom: 0;
+  font-size: 12.5px;
+}
+.product-batches .table > thead > tr > th{
+  position: sticky;
+  top: 0;
+  background: #f6f8fa;
+  z-index: 1;
+}
+.product-batches .nobr{
+  white-space: nowrap;
+}
+/* GRN form: the hint under a line's selling price */
+#grnModal .grn-line-sell-hint{
+  display: block;
+  text-align: right;
+  font-size: 11px;
+  min-height: 0;
+}
+
 /* ---- Quick Journal (#journalModal, .modal-fit) ----
    [< date >] [Today]  Saturday 8 Nov 2026 ........ [All entries v] [reload]
    [ six totals ]  [ money in / out by method ]

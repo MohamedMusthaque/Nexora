@@ -255,9 +255,12 @@ app.get( "/grn/:id", function ( req, res ) {
 } );
 
 // Body: { supplier_id (0 = walk-in seller), walk_in_name, received_date,
-//         payment_method, items: [{ product_id, quantity, unit_cost }],
+//         payment_method, items: [{ product_id, quantity, unit_cost, selling_price }],
 //         note, created_by, created_by_id }
-// Each product's cost price becomes the unit cost received. A supplier's
+// Each line of a stock-tracked product becomes a stock batch with its own
+// unit cost and selling price, sold oldest batch first; the product's price
+// and cost price are those of the batch being sold now (inventory.js:
+// receiveGoods). selling_price left out = the product's price now. A supplier's
 // advance pays for the GRN first (advance_used); payment_method covers the
 // rest (amount_due), or is "Advance" when the advance paid for all of it.
 app.post( "/grn", function ( req, res ) {
@@ -293,7 +296,16 @@ app.post( "/grn", function ( req, res ) {
         if ( !isFinite( unitCost ) || unitCost < 0 ) {
             return res.status( 400 ).send( "Line " + ( i + 1 ) + ": the unit cost must be zero or more." );
         }
-        items.push( { product_id: productId, quantity: quantity, unit_cost: round2( unitCost ) } );
+        // the selling price of this batch (left out: the product's price now)
+        let sellingPrice = null;
+        if ( r.selling_price !== undefined && r.selling_price !== null && r.selling_price !== "" ) {
+            sellingPrice = Number( r.selling_price );
+            if ( !isFinite( sellingPrice ) || sellingPrice < 0 ) {
+                return res.status( 400 ).send( "Line " + ( i + 1 ) + ": the selling price must be zero or more." );
+            }
+            sellingPrice = round2( sellingPrice );
+        }
+        items.push( { product_id: productId, quantity: quantity, unit_cost: round2( unitCost ), selling_price: sellingPrice } );
     }
 
     let note = String( body.note || "" ).trim().slice( 0, MAX_NOTE );
@@ -307,6 +319,18 @@ app.post( "/grn", function ( req, res ) {
             items[i].product_name = p.name;
             let barcode = p.barcode == null ? "" : String( p.barcode );
             items[i].barcode = barcode === "NaN" ? "" : barcode;
+            if ( items[i].selling_price === null ) items[i].selling_price = round2( parseFloat( p.price ) || 0 );
+            // goods at a different cost are a new set with their own selling price
+            let costNow = parseFloat( p.cost_price );
+            let priceNow = round2( parseFloat( p.price ) || 0 );
+            if ( isFinite( costNow ) && round2( costNow ) !== items[i].unit_cost && items[i].selling_price === priceNow ) {
+                let suggested = costNow > 0 ? round2( items[i].unit_cost * priceNow / costNow ) : null;
+                return res.status( 400 ).send(
+                    "Line " + ( i + 1 ) + " (" + p.name + "): the unit cost changed from " + round2( costNow ).toFixed( 2 ) +
+                    " to " + items[i].unit_cost.toFixed( 2 ) + ", so these goods need their own selling price (not " +
+                    priceNow.toFixed( 2 ) + ")" + ( suggested !== null ? ". Same margin: " + suggested.toFixed( 2 ) + "." : "." )
+                );
+            }
             items[i].total = round2( items[i].quantity * items[i].unit_cost );
         }
 
@@ -373,13 +397,21 @@ app.post( "/grn", function ( req, res ) {
                             received_date: saved.received_date,
                             user: createdBy,
                             user_id: body.created_by_id || ""
-                        }, function ( err ) {
-                            done();
+                        }, function ( err, results ) {
                             if ( err ) {
+                                done();
                                 console.error( "GRN " + saved.grn_no + ": stock update failed:", err );
                                 return res.status( 500 ).send( "The GRN " + saved.grn_no + " was saved, but the stock could not be updated for every product. Please check the product quantities." );
                             }
-                            res.send( Object.assign( {}, saved, { advance_after: round2( advance - advanceUsed ) } ) );
+                            // each line's price barcode (to label the goods) is kept on the GRN
+                            let coded = saved.items.map( ( item, i ) =>
+                                results && results[i] ? Object.assign( {}, item, { batch_id: results[i].batch_id, batch_code: results[i].batch_code } ) : item
+                            );
+                            grnsDB.update( { _id: saved._id }, { $set: { items: coded } }, {}, function ( err ) {
+                                done();
+                                if ( err ) console.error( "GRN " + saved.grn_no + ": could not save the price barcodes:", err );
+                                res.send( Object.assign( {}, saved, { items: coded, advance_after: round2( advance - advanceUsed ) } ) );
+                            } );
                         } );
                     } );
                 } );
