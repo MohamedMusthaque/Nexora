@@ -3361,13 +3361,13 @@ if (!authedThisSession) {
 
         rows += `<tr>
             <td>${trans.order}${returnBadge}</td>
-            <td class="nobr" data-order="${moment(trans.date).valueOf()}">${moment(trans.date).format("DD MMM YYYY, hh:mm A")}</td>
-            <td>${itemCount}</td>
-            <td class="nobr">${sym + amount.toFixed(2)}</td>
-            <td class="nobr">${trans.paid === "" || trans.paid == null ? "" : sym + parseFloat(trans.paid).toFixed(2)}</td>
-            <td>${typeLabel}</td>
+            <td class="nobr" data-order="${moment(trans.date).valueOf()}" data-export="${moment(trans.date).format("DD MMM YYYY, hh:mm A")}">${moment(trans.date).format("DD MMM YYYY")}<span class="ctxn-sub">${moment(trans.date).format("hh:mm A")}</span></td>
+            <td class="text-right">${itemCount}</td>
+            <td class="nobr text-right">${sym + amount.toFixed(2)}</td>
+            <td class="nobr text-right">${trans.paid === "" || trans.paid == null ? "" : sym + parseFloat(trans.paid).toFixed(2)}</td>
+            <td class="ctxn-method">${typeLabel}</td>
             <td>${trans.user || ""}</td>
-            <td><button onClick="$(this).viewCustomerTransaction(${index})" class="btn btn-info"><i class="fa fa-search-plus"></i></button></td>
+            <td><button onClick="$(this).viewCustomerTransaction(${index})" class="btn btn-info btn-sm" title="View the bill"><i class="fa fa-search-plus"></i></button></td>
           </tr>`;
       });
 
@@ -3393,10 +3393,13 @@ if (!authedThisSession) {
         lengthMenu: [10, 25, 50, 100],
         // same toolbar layout as Product History:
         // export buttons + "Show N transactions" | search, then info | pages
+        // the table sits in its own box: never wider than the window, and
+        // it scrolls up and down inside the popup (.modal-fit)
         dom:
           "<'ph-toolbar'<'ph-toolbar-left'Bl><'ph-toolbar-right'f>>" +
-          "rt" +
+          "r<'ph-table-scroll ctxn-table-box't>" +
           "<'ph-footer'<'ph-footer-left'i><'ph-footer-right'p>>",
+        columnDefs: [{ targets: [7], orderable: false, searchable: false }],
         // same export buttons as the other tables
         buttons: tableExportButtons(customerTxnExportTitle(), {
           exportOptions: { columns: [0, 1, 2, 3, 4, 5, 6] }, // not the View button
@@ -7995,41 +7998,41 @@ $.fn.viewTransaction = function (index, source) {
     );
   }
 
+  // the returns of this bill, added below it when they arrive (only if the
+  // same bill is still shown)
+  let shownOrder = String(trans?._id);
+  $("#viewTransaction").attr("data-order", shownOrder);
   $.get(
     api + "returns/order/" + trans?._id,
     function (returns) {
+      if ($("#viewTransaction").attr("data-order") !== shownOrder) return;
       if (returns && returns.length > 0) {
-        let historyRows = "";
-        returns.forEach((ret) => {
-          let itemsSummary = ret.items
-            .map((i) => i.product_name + " x" + i.quantity)
-            .join(", ");
-          historyRows += `<tr>
-                        <td>${moment(ret.date).format("DD MMM YYYY, hh:mm A")}</td>
-                        <td>${ret.type == "exchange" ? "Exchange" : "Return"}</td>
-                        <td>${itemsSummary}</td>
-                        <td>${settings.symbol}${parseFloat(ret.refund_amount).toFixed(2)}</td>
-                        <td>${ret.reason || ""}</td>
-                        <td>${ret.user || ""}</td>
-                    </tr>`;
-        });
+        // one block per return (the bill window is narrow: no wide table)
+        let entries = returns
+          .slice()
+          .sort((a, b) => new Date(a.date) - new Date(b.date))
+          .map((ret) => {
+            let items = (ret.items || [])
+              .map((i) => txnHtml(i.product_name) + " ×" + (parseInt(i.quantity) || 0))
+              .join(", ");
+            return `<div class="bill-return">
+                <div class="bill-return-head">
+                  <b>${ret.type == "exchange" ? "Exchange" : "Return"}</b>
+                  <span>${settings.symbol}${(parseFloat(ret.refund_amount) || 0).toFixed(2)}</span>
+                </div>
+                <div>${moment(ret.date).format("DD MMM YYYY, hh:mm A")}${ret.user ? " · " + txnHtml(ret.user) : ""}</div>
+                <div>${items}</div>
+                ${ret.reason ? `<div>Reason: ${txnHtml(ret.reason)}</div>` : ""}
+              </div>`;
+          })
+          .join("");
 
         $("#viewTransaction").append(`
-                    <hr>
-                    <p style="text-align:center;"><b>Return / Exchange History</b></p>
-                    <table width="100%" style="font-size: 9px;">
-                        <thead style="text-align: left;">
-                        <tr>
-                            <th>Date</th>
-                            <th>Type</th>
-                            <th>Items</th>
-                            <th>Amount</th>
-                            <th>Reason</th>
-                            <th>Cashier</th>
-                        </tr>
-                        </thead>
-                        <tbody>${historyRows}</tbody>
-                    </table>
+                    <div class="bill-returns">
+                      <hr>
+                      <p style="text-align:center; margin-bottom: 6px;"><b>Return / Exchange History</b></p>
+                      ${entries}
+                    </div>
                 `);
       }
     }
@@ -8037,6 +8040,14 @@ $.fn.viewTransaction = function (index, source) {
 
   $("#orderModal").modal("show");
 };
+
+// the bill window is shared by several kinds of bill: a sale's return history
+// still on its way must not land on the next one
+$(function () {
+  $("#orderModal").on("hidden.bs.modal", function () {
+    $("#viewTransaction").removeAttr("data-order");
+  });
+});
 
 let currentReturnMode = "return";
 let returnableItems = [];

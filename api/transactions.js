@@ -641,7 +641,10 @@ app.post("/returns/for-orders", function(req, res) {
 
 
 app.get("/returns/order/:orderId", function(req, res) {
-  returnsDB.find({ order_id: req.params.orderId }, function(err, docs) {
+  // order ids are usually saved as numbers (the URL gives text): match both
+  let raw = req.params.orderId;
+  let ids = isNaN(Number(raw)) ? [raw] : [Number(raw), String(raw)];
+  returnsDB.find({ order_id: { $in: ids } }, function(err, docs) {
     if (err) return res.status(500).send(err);
     res.send(docs);
   });

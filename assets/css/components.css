@@ -691,6 +691,146 @@ body.transactions-mode.totals-compact #totals #counter{
 #transactionList > thead > tr > th.txn-num{
   text-align: right;
 }
+/* the sort arrows sit in the heading's right padding, clear of the label
+   (DataTables puts them 10px in, over the end of right-aligned labels) */
+#transactionList > thead > tr > th::before,
+#transactionList > thead > tr > th::after{
+  right: 4px !important;
+}
+
+/* ---- Customer -> Transactions popup: the invoice table fits the window ---- */
+#customerTransactionsModal .ctxn-table-box{
+  overflow-x: auto; /* only if a very narrow window still can't fit it */
+}
+/* The popup (.modal-fit) never grows past the window: the totals, credit
+   line, tabs, filters, toolbar and pagination stay in place and only the open
+   tab's list scrolls up and down, with its column headings pinned. */
+#customerTransactionsModal .modal-body > .tab-content{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#customerTransactionsModal .tab-content > .tab-pane{
+  min-height: 0;
+}
+#customerTransactionsModal .tab-content > .tab-pane.active{
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+#customerTransactionsModal .tab-pane > *{
+  flex: 0 0 auto;
+}
+/* the list part of a tab: the DataTable, or the box around it */
+#customerTransactionsModal .tab-pane > .dataTables_wrapper,
+#customerTransactionsModal .tab-pane > div:not(.filter-bar){
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#customerTransactionsModal .tab-pane > div > .dataTables_wrapper{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#customerTransactionsModal .dataTables_wrapper > .ph-toolbar,
+#customerTransactionsModal .dataTables_wrapper > .ph-footer{
+  flex: 0 0 auto;
+}
+#customerTransactionsModal .dataTables_wrapper > .ph-table-scroll{
+  flex: 1 1 auto;
+  min-height: 140px;
+  overflow-y: auto;
+}
+/* short windows: smaller totals so the list keeps room */
+@media (max-height: 820px){
+  #customerTransactionsModal .bannerDisplay{
+    margin-bottom: 6px;
+  }
+  #customerTransactionsModal .transactions-banner{
+    padding: 4px 10px;
+  }
+  #customerTransactionsModal .transactions-banner h5{
+    margin: 2px 0;
+    font-size: 12px;
+  }
+  #customerTransactionsModal .transactions-banner > div{
+    font-size: 18px;
+  }
+  #customerTransactionsModal .customer-tabs{
+    margin-top: 8px;
+  }
+  #customerTransactionsModal .customer-tabs > li > a{
+    padding-top: 4px;
+    padding-bottom: 4px;
+    line-height: 30px; /* the theme's tabs are 50px tall */
+  }
+  #customerTransactionsModal .customer-tab-content{
+    padding-top: 10px !important;
+  }
+  #customerTransactionsModal .credit-summary{
+    margin-bottom: 0;
+  }
+}
+#customerTransactionsTable{
+  width: 100% !important;
+  margin-top: 0 !important;
+}
+#customerTransactionsTable > thead > tr > th,
+#customerTransactionsTable > tbody > tr > td{
+  padding: 8px 6px;
+  font-size: 13px;
+  vertical-align: top;
+}
+/* !important: dataTables.bootstrap pads sortable headings by 30px for the arrows */
+#customerTransactionsTable > thead > tr > th{
+  padding-right: 18px !important;
+  white-space: nowrap;
+}
+#customerTransactionsTable > thead > tr > th::before,
+#customerTransactionsTable > thead > tr > th::after{
+  right: 4px !important;
+}
+#customerTransactionsTable .ctxn-sub{
+  display: block;
+  font-size: 11px;
+  color: #98a6ad;
+}
+#customerTransactionsTable .ctxn-method .label{
+  display: inline-block;
+  margin: 0 2px 3px 0;
+}
+#customerTransactionsTable td > .label{
+  display: inline-block;
+  margin-top: 3px;
+}
+
+/* ---- Bill window (#orderModal): Print | x on one line, returns that fit ---- */
+#orderModal .bill-modal-header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+#orderModal .bill-modal-header .close{
+  margin-top: 0;
+}
+#viewTransaction .bill-return{
+  font-size: 10px;
+  padding: 5px 0;
+  border-top: 1px dashed #ccc;
+  word-break: break-word;
+}
+#viewTransaction .bill-return:first-of-type{
+  border-top: none;
+}
+#viewTransaction .bill-return-head{
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
 /* "(Rs.)" on a second line under the amount headings */
 #transactionList > thead .txn-cur{
   display: block;
