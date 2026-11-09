@@ -884,6 +884,10 @@ if (!authedThisSession) {
     applySuppliersPermission();
     applyJournalPermission();
 
+    // product id -> open stock batches, from the latest product lookup (the
+    // till's price codes). Declared before loadProducts, which resets it.
+    let cartBatchInfo = {};
+
     // function to load products
     function loadProducts() {
       $.get(api + "inventory/products", function (data) {
@@ -1224,8 +1228,7 @@ if (!authedThisSession) {
     // their own barcode ("<product barcode>-2", ...). Scanning a price's
     // barcode rings up that price; clicking a product with several prices asks
     // which one. The cart keeps one line per price (batch_code) and the sale
-    // takes its stock from that price's batches.
-    let cartBatchInfo = {}; // product id -> open batches, from the latest product lookup
+    // takes its stock from that price's batches. (cartBatchInfo: see loadProducts)
 
     function cartBatches(id) {
       let list = cartBatchInfo[id];
@@ -4151,12 +4154,18 @@ if (!authedThisSession) {
     // under the price in the product list: the product's other selling prices
     // with stock (each has its own barcode)
     function productNextPriceHint(product) {
-      let sets = priceSetsOf(product);
-      if (sets.length < 2) return "";
-      let others = sets.slice(1);
-      return `<br><small class="text-muted" title="${escapeHtml(
-        sets.map((s) => s.code + ": " + settings.symbol + parseFloat(s.price).toFixed(2) + " (" + s.qty_left + " left)").join("\n")
-      )}">also ${others.map((s) => settings.symbol + parseFloat(s.price).toFixed(2)).join(", ")}</small>`;
+      // only a hint: it must never stop the product list from showing
+      try {
+        let sets = priceSetsOf(product);
+        if (sets.length < 2) return "";
+        let others = sets.slice(1);
+        return `<br><small class="text-muted" title="${escapeHtml(
+          sets.map((s) => s.code + ": " + settings.symbol + parseFloat(s.price).toFixed(2) + " (" + s.qty_left + " left)").join("\n")
+        )}">also ${others.map((s) => settings.symbol + parseFloat(s.price).toFixed(2)).join(", ")}</small>`;
+      } catch (e) {
+        console.error("Price hint failed for product " + (product && product._id), e);
+        return "";
+      }
     }
 
     // builds the row markup for one product inside a category's detail table

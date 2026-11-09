@@ -2496,6 +2496,40 @@ ul.ColVis_collection li {
 #Products .products-tabs{
   margin-top: 0;
 }
+/* Products window (.modal-fit) with tabs: the open tab fills the window and
+   only its list scrolls (up and down), with the toolbar, column headings and
+   pagination staying in place - also with every category expanded */
+#Products .modal-body > .tab-content{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#Products .tab-content > .tab-pane{
+  min-height: 0;
+}
+#Products .tab-content > .tab-pane.active{
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+#Products .tab-pane > .ph-toolbar,
+#Products .tab-pane > .ph-footer,
+#Products .tab-pane > .filter-bar{
+  flex: 0 0 auto;
+}
+#Products #productsTabProducts > .ph-table-scroll{
+  flex: 1 1 auto;
+  min-height: 140px;
+  overflow-y: auto;
+}
+/* Categories tab: its DataTable's list area scrolls the same way */
+#Products #productsTabCategories > .dataTables_wrapper{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 
 /* the navigation button of the page that is open is hidden (pos.js: showPage) */
 .top-toolbar .nav-current{
