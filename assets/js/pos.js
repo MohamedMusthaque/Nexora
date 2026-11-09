@@ -7422,14 +7422,25 @@ function openPrnForm(supplierId) {
         Swal.fire("Nothing to return", "No product has stock to send back.", "info");
         return;
       }
-      loadSuppliers(function () {
-        preparePrnForm(supplierId);
-        if ($("#supplierTransactionsModal").hasClass("in")) {
-          supSwapModal("#supplierTransactionsModal", "#prnModal", refreshSupplierTransactions);
-        } else {
-          $("#prnModal").modal("show");
-        }
-      });
+      // the GRNs for the optional "GRN No" (fresh, newest first; the ones
+      // already loaded if that fails)
+      $.get(api + "suppliers/grns")
+        .done(function (grns) {
+          prnGrns = Array.isArray(grns) ? grns : [];
+        })
+        .fail(function () {
+          prnGrns = allGrns.slice();
+        })
+        .always(function () {
+          loadSuppliers(function () {
+            preparePrnForm(supplierId);
+            if ($("#supplierTransactionsModal").hasClass("in")) {
+              supSwapModal("#supplierTransactionsModal", "#prnModal", refreshSupplierTransactions);
+            } else {
+              $("#prnModal").modal("show");
+            }
+          });
+        });
     })
     .fail(function () {
       Swal.fire("Oops!", "Could not load the products.", "warning");
@@ -7469,7 +7480,51 @@ function updatePrnSupplierUi() {
   $('#prnRefund option[value="Credit"]').prop("disabled", walkIn);
   if (walkIn && $("#prnRefund").val() === "Credit") $("#prnRefund").val("Cash");
   $(".prn-credit-hint").toggle(walkIn);
+  fillPrnGrnOptions();
   updatePrnBalanceInfo();
+}
+
+// The optional GRN the goods came with: a searchable list of the chosen
+// supplier's GRNs (walk-in sellers' GRNs for a walk-in seller), newest first.
+// Keeps the GRN picked if it still belongs to the supplier.
+let prnGrns = [];
+
+// The GRN list sits low in the form (below the lines): it opens upwards when
+// there isn't room for it below, so no GRN is cut off at the bottom.
+function placePrnGrnDrop() {
+  let $box = $("#prnGrnRef_chosen");
+  if (!$box.length) return;
+  $box.removeClass("chosen-dropup");
+  let rect = $box[0].getBoundingClientRect();
+  let dropHeight = ($box.find(".chosen-drop").outerHeight() || 0) + 8;
+  let below = window.innerHeight - rect.bottom;
+  let above = rect.top;
+  if (dropHeight > below && above > below) $box.addClass("chosen-dropup");
+}
+
+function fillPrnGrnOptions() {
+  let supplier = String($("#prnSupplier").val() || "0");
+  let $select = $("#prnGrnRef");
+  let picked = $select.val();
+  let list = prnGrns.filter((g) => String(g.supplier_id || 0) === supplier);
+  $select.html(
+    `<option value=""></option>` +
+      list
+        .map((g) => {
+          let parts = [supDate(g.received_date), supMoney(g.total), journalCount(g.item_count || (g.items || []).length, "product", "products")];
+          if (g.walk_in) parts.splice(1, 0, g.supplier_name || "Walk-in seller");
+          return `<option value="${txnHtml(g.grn_no)}">${txnHtml(g.grn_no)} — ${txnHtml(parts.join(" · "))}</option>`;
+        })
+        .join("")
+  );
+  if (picked && list.some((g) => g.grn_no === picked)) $select.val(picked);
+  else $select.val("");
+  $select.attr("data-placeholder", list.length ? "Search a GRN (optional)" : "No GRNs from this supplier");
+  if ($select.data("chosen")) {
+    $select.trigger("chosen:updated");
+    // the placeholder text follows the supplier
+    $select.next(".chosen-container").find(".chosen-single > span").text(list.length ? "Search a GRN (optional)" : "No GRNs from this supplier");
+  }
 }
 
 function prnFormTotal() {
@@ -7676,6 +7731,13 @@ $(function () {
     if (!$("#prnProduct").data("chosen")) {
       $("#prnProduct").chosen({ width: "100%", search_contains: true, no_results_text: "No product matches" });
     }
+    // the optional GRN: searchable, and can be cleared (x)
+    if (!$("#prnGrnRef").data("chosen")) {
+      $("#prnGrnRef")
+        .chosen({ width: "100%", search_contains: true, allow_single_deselect: true, no_results_text: "No GRN matches" })
+        .on("chosen:showing_dropdown", placePrnGrnDrop);
+    }
+    fillPrnGrnOptions();
     $("#prnProduct").trigger("chosen:updated").trigger("chosen:activate");
   });
 
@@ -7748,7 +7810,7 @@ $(function () {
       walk_in_name: supplierId ? "" : $.trim($("#prnWalkInName").val()),
       return_date: date,
       refund_method: refund,
-      grn_ref: $.trim($("#prnGrnRef").val()),
+      grn_ref: $.trim($("#prnGrnRef").val() || ""), // optional
       note: $.trim($("#prnNote").val()),
       created_by: user?.fullname || "",
       created_by_id: user?._id || "",

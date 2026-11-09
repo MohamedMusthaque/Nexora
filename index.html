@@ -1408,7 +1408,8 @@
                                 </div>
                                 <div class="col-sm-3 form-group">
                                     <label for="prnGrnRef">GRN No <small class="text-muted">(optional)</small></label>
-                                    <input type="text" id="prnGrnRef" class="form-control" maxlength="50" placeholder="e.g. GRN-00012">
+                                    <!-- searchable: the chosen supplier's GRNs (pos.js: fillPrnGrnOptions) -->
+                                    <select id="prnGrnRef" data-placeholder="Search a GRN (optional)"></select>
                                 </div>
                                 <div class="col-sm-5 form-group">
                                     <label for="prnNote">Reason <small class="text-muted">(optional)</small></label>

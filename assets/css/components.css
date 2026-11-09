@@ -2929,6 +2929,29 @@ ul.ColVis_collection li {
 .product-batches .nobr{
   white-space: nowrap;
 }
+/* PRN form: the optional GRN list - wide enough for a GRN on one line, and
+   opening upwards when there's no room below (pos.js: placePrnGrnDrop) */
+#prnModal #prnGrnRef_chosen .chosen-drop{
+  width: 400px;
+  max-width: calc(100vw - 40px);
+}
+#prnModal #prnGrnRef_chosen .chosen-results li{
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#prnModal #prnGrnRef_chosen.chosen-dropup .chosen-drop{
+  top: auto;
+  bottom: 100%;
+  border-top: 1px solid #aaa;
+  border-bottom: 0;
+  border-radius: 4px 4px 0 0;
+  box-shadow: 0 -4px 5px rgba(0, 0, 0, 0.15);
+}
+#prnModal #prnGrnRef_chosen .chosen-results{
+  max-height: 220px;
+}
+
 /* GRN form: the new product's barcode (add bar and lines) */
 #grnModal .grn-add-barcode,
 #prnModal .grn-add-barcode{
