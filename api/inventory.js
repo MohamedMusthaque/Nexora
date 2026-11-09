@@ -778,6 +778,67 @@ app.receiveGoods = function (items, info, callback) {
   });
 };
 
+// ---- Purchase returns (PRN, see suppliers.js): goods sent back to a supplier ----
+// Each line comes out of its product's stock and is logged in the product
+// history as a "prn" event. items: [{ product_id, quantity, unit_cost }]
+// info: { prn_id, reference, supplier, refund_method, return_date, user, user_id }
+app.returnGoods = function (items, info, callback) {
+  let who = { user: info.user, user_id: info.user_id };
+  let touched = {};
+  inStockSeries(function (done) {
+    async.eachSeries(
+      items,
+      function (item, next) {
+        inventoryDB.findOne({ _id: parseInt(item.product_id) }, function (err, product) {
+          if (err) return next(err);
+          if (!product) return next();
+          let qtyBefore = parseInt(product.quantity) || 0;
+          let qtyAfter = qtyBefore - item.quantity;
+          inventoryDB.update({ _id: product._id }, { $set: { quantity: qtyAfter } }, {}, function (err) {
+            if (err) return next(err);
+            logHistory([
+              historyEntry(product, "prn", {
+                qty_change: -item.quantity,
+                qty_before: qtyBefore,
+                qty_after: qtyAfter,
+                price: item.unit_cost, // the cost per unit sent back
+                amount: Math.round(item.quantity * item.unit_cost * 100) / 100,
+                reference: info.reference,
+                prn_id: info.prn_id,
+                supplier: info.supplier,
+                refund_method: info.refund_method,
+                return_date: info.return_date,
+              }, who),
+            ]);
+            // products that still have stock batches from before
+            if (product.stock == 1) touched[product._id] = true;
+            next();
+          });
+        });
+      },
+      function (err) {
+        if (err) {
+          done();
+          return callback(err);
+        }
+        async.eachSeries(
+          Object.keys(touched),
+          function (id, next) {
+            reconcileProduct(id, who, function (err) {
+              if (err) console.error("Batch update after PRN failed:", err);
+              next();
+            });
+          },
+          function () {
+            done();
+            callback(null);
+          }
+        );
+      }
+    );
+  });
+};
+
 // A return puts stock back: into the batches the sold units came from
 // (items[].batches, from the sale) where known, otherwise into the batch
 // being sold now. items: [{ id, quantity, batches? }]

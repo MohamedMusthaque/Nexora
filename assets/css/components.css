@@ -2831,7 +2831,8 @@ ul.ColVis_collection li {
 }
 
 /* GRN form: [product ......][qty][unit cost][Add] */
-#grnModal .grn-add-bar{
+#grnModal .grn-add-bar,
+#prnModal .grn-add-bar{
   display: flex;
   align-items: flex-end;
   gap: 10px;
@@ -2841,36 +2842,45 @@ ul.ColVis_collection li {
   border-radius: 5px;
   background: #fafbfc;
 }
-#grnModal .grn-add-bar label{
+#grnModal .grn-add-bar label,
+#prnModal .grn-add-bar label{
   display: block;
   margin-bottom: 4px;
 }
-#grnModal .grn-add-product{
+#grnModal .grn-add-product,
+#prnModal .grn-add-product{
   flex: 1 1 auto;
   min-width: 0;
 }
-#grnModal .grn-add-qty{
+#grnModal .grn-add-qty,
+#prnModal .grn-add-qty{
   flex: 0 0 110px;
 }
-#grnModal .grn-add-cost{
+#grnModal .grn-add-cost,
+#prnModal .grn-add-cost{
   flex: 0 0 140px;
 }
-#grnModal .grn-add-btn{
+#grnModal .grn-add-btn,
+#prnModal .grn-add-btn{
   flex: 0 0 auto;
 }
-#grnModal .chosen-container-single .chosen-single{
+#grnModal .chosen-container-single .chosen-single,
+#prnModal .chosen-container-single .chosen-single{
   height: 34px;
   line-height: 32px;
 }
-#grnModal .grn-lines input.form-control{
+#grnModal .grn-lines input.form-control,
+#prnModal .grn-lines input.form-control{
   text-align: right;
   height: 30px;
   padding: 4px 8px;
 }
-#grnModal .grn-lines td{
+#grnModal .grn-lines td,
+#prnModal .grn-lines td{
   vertical-align: middle;
 }
-#grnModal .grn-lines .grn-empty td{
+#grnModal .grn-lines .grn-empty td,
+#prnModal .grn-lines .grn-empty td{
   text-align: center;
   color: #98a6ad;
   padding: 18px;
@@ -2920,15 +2930,18 @@ ul.ColVis_collection li {
   white-space: nowrap;
 }
 /* GRN form: the new product's barcode (add bar and lines) */
-#grnModal .grn-add-barcode{
+#grnModal .grn-add-barcode,
+#prnModal .grn-add-barcode{
   flex: 0 0 260px;
 }
 /* with the New Barcode field shown, the bar wraps: the product search keeps
    its room and the barcode + Add move to a second row */
-#grnModal .grn-add-bar{
+#grnModal .grn-add-bar,
+#prnModal .grn-add-bar{
   flex-wrap: wrap;
 }
-#grnModal .grn-add-product{
+#grnModal .grn-add-product,
+#prnModal .grn-add-product{
   min-width: 240px;
 }
 #grnModal .grn-line-barcode-box .btn{
@@ -2938,7 +2951,8 @@ ul.ColVis_collection li {
 #grnModal .grn-line-barcode-box{
   max-width: 260px !important;
 }
-#grnModal .grn-add-barcode .input-group-addon{
+#grnModal .grn-add-barcode .input-group-addon,
+#prnModal .grn-add-barcode .input-group-addon{
   padding: 6px 8px;
 }
 #grnModal .grn-line-barcode-box{
@@ -3114,7 +3128,8 @@ ul.ColVis_collection li {
 
 /* GRN form: the product lines scroll in their own box, so the payment fields
    and Save button stay in reach; headings and the Total row stay visible */
-#grnModal .grn-lines-scroll{
+#grnModal .grn-lines-scroll,
+#prnModal .grn-lines-scroll{
   max-height: max(220px, calc(100vh - 560px));
   overflow-y: auto;
   overflow-x: auto;
@@ -3122,29 +3137,34 @@ ul.ColVis_collection li {
   border: 1px solid #e3e3e3;
   border-radius: 4px;
 }
-#grnModal .grn-lines-scroll > .grn-lines{
+#grnModal .grn-lines-scroll > .grn-lines,
+#prnModal .grn-lines-scroll > .grn-lines{
   margin-bottom: 0;
   border: none;
 }
-#grnModal .grn-lines-scroll > .grn-lines > thead > tr > th{
+#grnModal .grn-lines-scroll > .grn-lines > thead > tr > th,
+#prnModal .grn-lines-scroll > .grn-lines > thead > tr > th{
   position: sticky;
   top: 0;
   z-index: 2;
   background: #f6f8fa;
   box-shadow: inset 0 -1px 0 #dfe3e8;
 }
-#grnModal .grn-lines-scroll > .grn-lines > tfoot > tr > th{
+#grnModal .grn-lines-scroll > .grn-lines > tfoot > tr > th,
+#prnModal .grn-lines-scroll > .grn-lines > tfoot > tr > th{
   position: sticky;
   bottom: 0;
   z-index: 2;
   background: #f6f8fa;
   box-shadow: inset 0 1px 0 #dfe3e8;
 }
-#grnModal .grn-lines-scroll::-webkit-scrollbar{
+#grnModal .grn-lines-scroll::-webkit-scrollbar,
+#prnModal .grn-lines-scroll::-webkit-scrollbar{
   width: 8px;
   height: 8px;
 }
-#grnModal .grn-lines-scroll::-webkit-scrollbar-thumb{
+#grnModal .grn-lines-scroll::-webkit-scrollbar-thumb,
+#prnModal .grn-lines-scroll::-webkit-scrollbar-thumb{
   background: #cfd6dc;
   border-radius: 4px;
 }

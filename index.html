@@ -512,6 +512,10 @@
                             <button type="button" class="btn btn-warning waves-effect waves-light" id="newGrnBtn">
                                 <i class="fa fa-truck"></i> New GRN
                             </button>
+                            <!-- Purchase Return Note: goods sent back to a supplier (pos.js: openPrnForm) -->
+                            <button type="button" class="btn btn-danger waves-effect waves-light" id="newPrnBtn">
+                                <i class="fa fa-reply"></i> New PRN
+                            </button>
                         </div>
                     </div>
 
@@ -524,6 +528,11 @@
                         <li role="presentation">
                             <a href="#suppliersTabGrns" aria-controls="suppliersTabGrns" role="tab" data-toggle="tab">
                                 <i class="fa fa-truck"></i> Goods Received (GRN) <span class="badge" id="grnsTabCount">0</span>
+                            </a>
+                        </li>
+                        <li role="presentation">
+                            <a href="#suppliersTabPrns" aria-controls="suppliersTabPrns" role="tab" data-toggle="tab">
+                                <i class="fa fa-reply"></i> Purchase Returns (PRN) <span class="badge" id="prnsTabCount">0</span>
                             </a>
                         </li>
                     </ul>
@@ -628,6 +637,71 @@
                                     </tr>
                                 </thead>
                                 <tbody id="grn_list"></tbody>
+                            </table>
+                        </div>
+
+                        <!-- Purchase Return Notes (pos.js: renderPrns) -->
+                        <div role="tabpanel" class="tab-pane" id="suppliersTabPrns">
+                            <div class="filter-bar sup-filters">
+                                <label>Returned</label>
+                                <div class="date-range-filter" id="prnDateRange">
+                                    <div class="date-range-input" title="Filter PRNs by return date">
+                                        <i class="fa fa-calendar"></i>&nbsp;
+                                        <span class="date-range-label">All dates</span>
+                                        <i class="fa fa-caret-down"></i>
+                                    </div>
+                                    <button type="button" class="btn btn-default date-range-clear" title="Clear date filter (show all dates)" style="display: none;"><i class="fa fa-times"></i> Clear</button>
+                                </div>
+                                <label for="prnSupplierFilter">Supplier</label>
+                                <select id="prnSupplierFilter" class="form-control">
+                                    <option value="">All</option>
+                                    <option value="0">Walk-in sellers</option>
+                                </select>
+                                <label for="prnRefundFilter">Settled By</label>
+                                <select id="prnRefundFilter" class="form-control">
+                                    <option value="">All</option>
+                                    <option value="Cash">Cash refund</option>
+                                    <option value="Bank Transfer">Bank Transfer refund</option>
+                                    <option value="Card">Card refund</option>
+                                    <option value="Credit">Deducted from supplier balance</option>
+                                </select>
+                            </div>
+                            <div class="sup-tiles">
+                                <div class="sup-tile sup-tile-main">
+                                    <h5>GOODS RETURNED</h5>
+                                    <div class="sup-value" id="prnsTotal">0.00</div>
+                                    <small id="prnsTotalNote">0 PRNs</small>
+                                </div>
+                                <div class="sup-tile">
+                                    <h5>REFUNDED</h5>
+                                    <div class="sup-value" id="prnsRefunded">0.00</div>
+                                    <small>cash, card &amp; bank transfer</small>
+                                </div>
+                                <div class="sup-tile">
+                                    <h5>DEDUCTED FROM BALANCES</h5>
+                                    <div class="sup-value" id="prnsCredited">0.00</div>
+                                    <small>less owed / supplier advance</small>
+                                </div>
+                                <div class="sup-tile">
+                                    <h5>UNITS RETURNED</h5>
+                                    <div class="sup-value" id="prnsUnits">0</div>
+                                </div>
+                            </div>
+                            <table class="table table-bordered" id="prnList" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th>PRN No</th>
+                                        <th>Returned</th>
+                                        <th>Supplier</th>
+                                        <th class="txn-num">Products</th>
+                                        <th class="txn-num">Units</th>
+                                        <th class="txn-num">Total</th>
+                                        <th>Settled By</th>
+                                        <th>Added By</th>
+                                        <th>Bill</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="prn_list"></tbody>
                             </table>
                         </div>
                     </div>
@@ -1249,6 +1323,105 @@
           </div>
      </div>
 
+     <!-- New Purchase Return Note (pos.js: openPrnForm). Saving it takes the quantities out of stock. -->
+     <div id="prnModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="prnModalTitle" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                        <h4 class="modal-title" id="prnModalTitle"><i class="fa fa-reply"></i> New Purchase Return Note (PRN)</h4>
+                    </div>
+                    <div class="modal-body">
+                        <form id="savePrn" autocomplete="off">
+                            <div class="row">
+                                <div class="col-sm-5 form-group">
+                                    <label for="prnSupplier">Return To</label>
+                                    <select id="prnSupplier" class="form-control"></select>
+                                </div>
+                                <div class="col-sm-4 form-group prn-walkin-group">
+                                    <label for="prnWalkInName">Seller Name <small class="text-muted">(optional)</small></label>
+                                    <input type="text" id="prnWalkInName" class="form-control" maxlength="100" placeholder="Walk-in seller">
+                                </div>
+                                <div class="col-sm-3 form-group">
+                                    <label for="prnDate">Return Date</label>
+                                    <input type="date" id="prnDate" class="form-control" required>
+                                </div>
+                            </div>
+
+                            <div class="grn-add-bar">
+                                <div class="grn-add-product">
+                                    <label for="prnProduct">Product</label>
+                                    <select id="prnProduct" data-placeholder="Search a product by name or barcode..."></select>
+                                </div>
+                                <div class="grn-add-qty">
+                                    <label for="prnQty">Quantity</label>
+                                    <input type="number" id="prnQty" class="form-control" min="1" step="1" placeholder="0">
+                                </div>
+                                <div class="grn-add-cost">
+                                    <label for="prnUnitCost" title="What the supplier gives back per unit (the product's cost price)">Unit Cost <span class="text-muted grn-currency"></span></label>
+                                    <input type="number" id="prnUnitCost" class="form-control" min="0" step="0.01" placeholder="0.00">
+                                </div>
+                                <div class="grn-add-btn">
+                                    <button type="button" class="btn btn-danger" id="prnAddLine"><i class="fa fa-plus"></i> Add</button>
+                                </div>
+                            </div>
+
+                            <!-- the lines scroll inside this box; headings and the Total row stay visible -->
+                            <div class="grn-lines-scroll">
+                            <table class="table table-bordered grn-lines" id="prnLines">
+                                <thead>
+                                    <tr>
+                                        <th>Product</th>
+                                        <th class="txn-num">In Stock</th>
+                                        <th class="txn-num" style="width: 110px;">Quantity</th>
+                                        <th class="txn-num" style="width: 130px;">Unit Cost</th>
+                                        <th class="txn-num">Line Total</th>
+                                        <th style="width: 44px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="prn_lines"></tbody>
+                                <tfoot>
+                                    <tr>
+                                        <th colspan="2" class="text-right">Total</th>
+                                        <th class="text-right" id="prnTotalQty">0</th>
+                                        <th></th>
+                                        <th class="text-right" id="prnTotal">0.00</th>
+                                        <th></th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                            </div>
+
+                            <!-- what the return does to the supplier's balance (pos.js: updatePrnBalanceInfo) -->
+                            <div class="alert alert-info prn-balance-info" style="display: none;"></div>
+
+                            <div class="row">
+                                <div class="col-sm-4 form-group">
+                                    <label for="prnRefund">Settled By</label>
+                                    <select id="prnRefund" class="form-control">
+                                        <option value="Cash">Cash refund</option>
+                                        <option value="Bank Transfer">Bank Transfer refund</option>
+                                        <option value="Card">Card refund</option>
+                                        <option value="Credit">Deduct from supplier's balance</option>
+                                    </select>
+                                    <span class="help-block prn-credit-hint" style="display: none;">Deducting needs a registered supplier.</span>
+                                </div>
+                                <div class="col-sm-3 form-group">
+                                    <label for="prnGrnRef">GRN No <small class="text-muted">(optional)</small></label>
+                                    <input type="text" id="prnGrnRef" class="form-control" maxlength="50" placeholder="e.g. GRN-00012">
+                                </div>
+                                <div class="col-sm-5 form-group">
+                                    <label for="prnNote">Reason <small class="text-muted">(optional)</small></label>
+                                    <input type="text" id="prnNote" class="form-control" maxlength="500" placeholder="e.g. damaged, expired, wrong item">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-danger btn-block waves-effect waves-light" id="submitPrn"><i class="fa fa-check"></i> Save PRN &amp; Update Stock</button>
+                        </form>
+                    </div>
+               </div>
+          </div>
+     </div>
+
      <!-- Quick Journal: a day's sales, returns, payments, expenses and GRNs (pos.js: openJournal) -->
      <div id="journalModal" class="modal fade modal-fit" tabindex="-1" role="dialog" aria-labelledby="journalTitle" aria-hidden="true" style="display: none;">
             <div class="modal-dialog modal-lg">
@@ -1274,7 +1447,7 @@
                                 <option value="credit">Credit payments</option>
                                 <option value="advance">Advance payments</option>
                                 <option value="expense">Expenses</option>
-                                <option value="grn">GRNs</option>
+                                <option value="grn">GRNs &amp; purchase returns</option>
                             </select>
                             <button type="button" class="btn btn-default" id="journalRefresh" title="Reload"><i class="fa fa-refresh"></i></button>
                         </div>
@@ -1404,6 +1577,7 @@
                         <div class="filter-bar" style="margin-bottom: 10px;">
                             <button type="button" class="btn btn-success" id="supTxnPayBtn"><i class="fa fa-money"></i> Pay Supplier</button>
                             <button type="button" class="btn btn-warning" id="supTxnGrnBtn"><i class="fa fa-truck"></i> New GRN</button>
+                            <button type="button" class="btn btn-danger" id="supTxnPrnBtn" title="Send goods back to this supplier"><i class="fa fa-reply"></i> New PRN</button>
                         </div>
                         <table class="table table-bordered" id="supplierTxnList" style="width: 100%;">
                             <thead>
@@ -2058,7 +2232,7 @@
                         <option value="all">All activity</option>
                         <option value="sales">Sales (incl. credit &amp; held)</option>
                         <option value="returns">Returns &amp; exchanges</option>
-                        <option value="purchases">Goods received (GRN)</option>
+                        <option value="purchases">Goods received &amp; returned (GRN / PRN)</option>
                         <option value="changes">Stock adjustments &amp; product changes</option>
                     </select>
                     <label style="margin: 0 0 0 8px;">Date</label>

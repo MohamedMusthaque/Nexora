@@ -35,12 +35,19 @@ let supplierPaymentsDB = new Datastore( {
     filename: process.env.APPDATA + "/POS/server/databases/supplier_payments.db",
     autoload: true
 } );
+// Purchase Return Notes: goods sent back to a supplier (see the PRN section)
+let prnsDB = new Datastore( {
+    filename: process.env.APPDATA + "/POS/server/databases/prns.db",
+    autoload: true
+} );
 
 suppliersDB.ensureIndex( { fieldName: "_id", unique: true } );
 grnsDB.ensureIndex( { fieldName: "_id", unique: true } );
 grnsDB.ensureIndex( { fieldName: "supplier_id" } );
 supplierPaymentsDB.ensureIndex( { fieldName: "_id", unique: true } );
 supplierPaymentsDB.ensureIndex( { fieldName: "supplier_id" } );
+prnsDB.ensureIndex( { fieldName: "_id", unique: true } );
+prnsDB.ensureIndex( { fieldName: "supplier_id" } );
 
 // unique, increasing numeric ids (two saves in the same millisecond still differ)
 let lastId = 0;
@@ -79,13 +86,21 @@ function validDate( value ) {
     return text;
 }
 
-// Totals for one supplier from its GRNs and payments. Each supplier has one
-// running position:
+// Totals for one supplier from its GRNs, payments and purchase returns. Each
+// supplier has one running position:
 //   position = credit left to pay on GRNs + advance used by GRNs - payments
+//              - PRNs deducted from the supplier's balance
 // above zero the shop owes the supplier (balance); below zero the supplier
 // holds an advance. Owing and an advance never exist at the same time:
-// payments clear what is owed first, and GRNs use the advance first.
-function supplierSummary( grns, payments ) {
+// payments and returns clear what is owed first, and GRNs use the advance first.
+function supplierSummary( grns, payments, prns ) {
+    prns = prns || [];
+    let returns = 0, returnsCredit = 0;
+    prns.forEach( ( r ) => {
+        let total = Number( r.total ) || 0;
+        returns += total;
+        if ( r.refund_method === "Credit" ) returnsCredit += total;
+    } );
     let purchases = 0, creditPurchases = 0, advanceUsed = 0, paid = 0;
     grns.forEach( ( g ) => {
         let total = Number( g.total ) || 0;
@@ -95,9 +110,12 @@ function supplierSummary( grns, payments ) {
         if ( g.payment_method === "Credit" ) creditPurchases += total - used;
     } );
     payments.forEach( ( p ) => { paid += Number( p.amount ) || 0; } );
-    let position = round2( creditPurchases + advanceUsed - paid );
+    let position = round2( creditPurchases + advanceUsed - paid - returnsCredit );
     return {
         grn_count: grns.length,
+        prn_count: prns.length,
+        returns: round2( returns ), // goods sent back (all PRNs)
+        returns_credit: round2( returnsCredit ), // of which deducted from the balance
         purchases: round2( purchases ),
         credit_purchases: round2( creditPurchases ),
         advance_used: round2( advanceUsed ),
@@ -113,7 +131,10 @@ function supplierPosition( supplierId, callback ) {
         if ( err ) return callback( err );
         supplierPaymentsDB.find( { supplier_id: supplierId }, function ( err, payments ) {
             if ( err ) return callback( err );
-            callback( null, supplierSummary( grns, payments ).position );
+            prnsDB.find( { supplier_id: supplierId }, function ( err, prns ) {
+                if ( err ) return callback( err );
+                callback( null, supplierSummary( grns, payments, prns ).position );
+            } );
         } );
     } );
 }
@@ -153,10 +174,14 @@ app.get( "/all", function ( req, res ) {
             if ( err ) return res.status( 500 ).send( "Could not load the suppliers." );
             supplierPaymentsDB.find( {}, { supplier_id: 1, amount: 1 }, function ( err, payments ) {
                 if ( err ) return res.status( 500 ).send( "Could not load the suppliers." );
-                res.send( suppliers.map( ( s ) => Object.assign( {}, s, supplierSummary(
-                    grns.filter( ( g ) => g.supplier_id === s._id ),
-                    payments.filter( ( p ) => p.supplier_id === s._id )
-                ) ) ) );
+                prnsDB.find( { supplier_id: { $gt: 0 } }, { supplier_id: 1, total: 1, refund_method: 1 }, function ( err, prns ) {
+                    if ( err ) return res.status( 500 ).send( "Could not load the suppliers." );
+                    res.send( suppliers.map( ( s ) => Object.assign( {}, s, supplierSummary(
+                        grns.filter( ( g ) => g.supplier_id === s._id ),
+                        payments.filter( ( p ) => p.supplier_id === s._id ),
+                        prns.filter( ( r ) => r.supplier_id === s._id )
+                    ) ) ) );
+                } );
             } );
         } );
     } );
@@ -188,7 +213,9 @@ app.put( "/supplier/:id", function ( req, res ) {
             if ( !n ) return res.status( 404 ).send( "That supplier no longer exists." );
             // GRNs keep the name they were saved with; keep them in step with a rename
             grnsDB.update( { supplier_id: id }, { $set: { supplier_name: v.supplier.name } }, { multi: true }, function () {
-                res.sendStatus( 200 );
+                prnsDB.update( { supplier_id: id }, { $set: { supplier_name: v.supplier.name } }, { multi: true }, function () {
+                    res.sendStatus( 200 );
+                } );
             } );
         } );
     } );
@@ -201,16 +228,19 @@ app.delete( "/supplier/:id", function ( req, res ) {
         if ( err ) return res.status( 500 ).send( "Could not delete the supplier." );
         supplierPaymentsDB.count( { supplier_id: id }, function ( err, payCount ) {
             if ( err ) return res.status( 500 ).send( "Could not delete the supplier." );
-            if ( grnCount || payCount ) {
-                return res.status( 409 ).send(
-                    "This supplier has " + grnCount + ( grnCount === 1 ? " GRN" : " GRNs" ) +
-                    ( payCount ? " and " + payCount + ( payCount === 1 ? " payment" : " payments" ) : "" ) +
-                    ", so it can't be deleted."
-                );
-            }
-            suppliersDB.remove( { _id: id }, {}, function ( err ) {
+            prnsDB.count( { supplier_id: id }, function ( err, prnCount ) {
                 if ( err ) return res.status( 500 ).send( "Could not delete the supplier." );
-                res.sendStatus( 200 );
+                if ( grnCount || payCount || prnCount ) {
+                    let parts = [];
+                    if ( grnCount ) parts.push( grnCount + ( grnCount === 1 ? " GRN" : " GRNs" ) );
+                    if ( prnCount ) parts.push( prnCount + ( prnCount === 1 ? " PRN" : " PRNs" ) );
+                    if ( payCount ) parts.push( payCount + ( payCount === 1 ? " payment" : " payments" ) );
+                    return res.status( 409 ).send( "This supplier has " + parts.join( ", " ) + ", so it can't be deleted." );
+                }
+                suppliersDB.remove( { _id: id }, {}, function ( err ) {
+                    if ( err ) return res.status( 500 ).send( "Could not delete the supplier." );
+                    res.sendStatus( 200 );
+                } );
             } );
         } );
     } );
@@ -226,10 +256,14 @@ app.get( "/transactions/:id", function ( req, res ) {
             if ( err ) return res.status( 500 ).send( "Could not load the supplier's GRNs." );
             supplierPaymentsDB.find( { supplier_id: id } ).sort( { date: -1, _id: -1 } ).exec( function ( err, payments ) {
                 if ( err ) return res.status( 500 ).send( "Could not load the supplier's payments." );
-                res.send( {
-                    supplier: Object.assign( {}, supplier, supplierSummary( grns, payments ) ),
-                    grns: grns,
-                    payments: payments
+                prnsDB.find( { supplier_id: id } ).sort( { return_date: -1, _id: -1 } ).exec( function ( err, prns ) {
+                    if ( err ) return res.status( 500 ).send( "Could not load the supplier's returns." );
+                    res.send( {
+                        supplier: Object.assign( {}, supplier, supplierSummary( grns, payments, prns ) ),
+                        grns: grns,
+                        payments: payments,
+                        prns: prns
+                    } );
                 } );
             } );
         } );
@@ -531,6 +565,163 @@ app.post( "/grn", function ( req, res ) {
 } );
 
 
+// ---- Purchase Return Notes (PRN): goods sent back to a supplier ----
+// The returned quantities come out of stock. The supplier either refunds the
+// money (Cash / Bank Transfer / Card) or it is deducted from what the shop
+// owes them ("Credit"): that lowers the balance, and with nothing owed it
+// becomes the supplier's advance (the next GRNs use it first).
+
+const PRN_REFUND_METHODS = [ "Cash", "Bank Transfer", "Card", "Credit" ];
+
+app.get( "/prns", function ( req, res ) {
+    prnsDB.find( {} ).sort( { return_date: -1, _id: -1 } ).exec( function ( err, prns ) {
+        if ( err ) return res.status( 500 ).send( "Could not load the purchase returns." );
+        res.send( prns );
+    } );
+} );
+
+app.get( "/prn/:id", function ( req, res ) {
+    prnsDB.findOne( { _id: parseInt( req.params.id ) }, function ( err, prn ) {
+        if ( err ) return res.status( 500 ).send( "Could not load the purchase return." );
+        if ( !prn ) return res.status( 404 ).send( "That purchase return no longer exists." );
+        res.send( prn );
+    } );
+} );
+
+// Body: { supplier_id (0 = walk-in seller), walk_in_name, return_date,
+//         refund_method, items: [{ product_id, quantity, unit_cost }],
+//         grn_ref, note, created_by, created_by_id }
+app.post( "/prn", function ( req, res ) {
+    let body = req.body || {};
+    let returnDate = validDate( body.return_date );
+    if ( !returnDate ) return res.status( 400 ).send( "Please enter a valid return date." );
+
+    let refundMethod = String( body.refund_method || "" );
+    if ( !PRN_REFUND_METHODS.includes( refundMethod ) ) {
+        return res.status( 400 ).send( "Please choose how the supplier settles it: Cash, Bank Transfer, Card, or deduct from the supplier's balance." );
+    }
+    let supplierId = parseInt( body.supplier_id ) || 0;
+    if ( refundMethod === "Credit" && !supplierId ) {
+        return res.status( 400 ).send( "Only a registered supplier's balance can be reduced. Choose a supplier, or take the refund by Cash, Bank Transfer or Card." );
+    }
+
+    let rawItems = Array.isArray( body.items ) ? body.items : [];
+    if ( !rawItems.length ) return res.status( 400 ).send( "Please add at least one product to return." );
+    if ( rawItems.length > MAX_ITEMS ) return res.status( 400 ).send( "A PRN can have at most " + MAX_ITEMS + " products." );
+
+    let items = [];
+    for ( let i = 0; i < rawItems.length; i++ ) {
+        let r = rawItems[i] || {};
+        let productId = parseInt( r.product_id );
+        let quantity = Number( r.quantity );
+        let unitCost = Number( r.unit_cost );
+        if ( !productId ) return res.status( 400 ).send( "Line " + ( i + 1 ) + ": please choose a product." );
+        if ( !Number.isInteger( quantity ) || quantity < 1 || quantity > MAX_QTY ) {
+            return res.status( 400 ).send( "Line " + ( i + 1 ) + ": the quantity must be a whole number of at least 1." );
+        }
+        if ( !isFinite( unitCost ) || unitCost < 0 ) {
+            return res.status( 400 ).send( "Line " + ( i + 1 ) + ": the unit cost must be zero or more." );
+        }
+        items.push( { product_id: productId, quantity: quantity, unit_cost: round2( unitCost ) } );
+    }
+
+    let note = String( body.note || "" ).trim().slice( 0, MAX_NOTE );
+    let grnRef = cleanText( body.grn_ref, 50 );
+    let createdBy = cleanText( body.created_by, 100 );
+
+    // numbered and saved one at a time (PRN-00001, ...), with the stock check
+    // inside, so two returns can't send back the same units
+    inSeries( function ( done ) {
+        let fail = function ( status, message ) {
+            done();
+            res.status( status ).send( message );
+        };
+        Inventory.getProductsByIds( items.map( ( i ) => i.product_id ), function ( err, products ) {
+            if ( err ) return fail( 500, "Could not check the products." );
+            let wanted = {};
+            for ( let i = 0; i < items.length; i++ ) {
+                let p = products.find( ( x ) => x._id === items[i].product_id );
+                if ( !p ) return fail( 400, "Line " + ( i + 1 ) + ": that product no longer exists." );
+                items[i].product_name = p.name;
+                let barcode = p.barcode == null ? "" : String( p.barcode );
+                items[i].barcode = barcode === "NaN" ? "" : barcode;
+                items[i].total = round2( items[i].quantity * items[i].unit_cost );
+                wanted[p._id] = ( wanted[p._id] || 0 ) + items[i].quantity;
+                if ( p.stock == 1 && wanted[p._id] > ( parseInt( p.quantity ) || 0 ) ) {
+                    return fail( 400, "Line " + ( i + 1 ) + " (" + p.name + "): only " + ( parseInt( p.quantity ) || 0 ) +
+                        " in stock, so " + wanted[p._id] + " can't be returned." );
+                }
+            }
+
+            let withSupplier = function ( callback ) {
+                if ( !supplierId ) return callback( null, null, 0 );
+                suppliersDB.findOne( { _id: supplierId }, function ( err, supplier ) {
+                    if ( err || !supplier ) return callback( err, supplier, 0 );
+                    supplierPosition( supplierId, function ( err, position ) {
+                        callback( err, supplier, position );
+                    } );
+                } );
+            };
+
+            withSupplier( function ( err, supplier, position ) {
+                if ( err ) return fail( 500, "Could not check the supplier." );
+                if ( supplierId && !supplier ) return fail( 400, "That supplier no longer exists. Please choose another one." );
+
+                prnsDB.find( {} ).sort( { seq: -1 } ).limit( 1 ).exec( function ( err, last ) {
+                    if ( err ) return fail( 500, "Could not save the PRN." );
+                    let seq = ( last.length ? Number( last[0].seq ) || 0 : 0 ) + 1;
+                    let total = round2( items.reduce( ( s, i ) => s + i.total, 0 ) );
+                    // the supplier's position after (+ owed, - advance): a deduction lowers it
+                    let positionAfter = supplier ? round2( position - ( refundMethod === "Credit" ? total : 0 ) ) : 0;
+                    let prn = {
+                        _id: newId(),
+                        seq: seq,
+                        prn_no: "PRN-" + String( seq ).padStart( 5, "0" ),
+                        supplier_id: supplier ? supplier._id : 0,
+                        supplier_name: supplier ? supplier.name : ( cleanText( body.walk_in_name, 100 ) || "Walk-in seller" ),
+                        walk_in: !supplier,
+                        return_date: returnDate,
+                        refund_method: refundMethod,
+                        items: items,
+                        item_count: items.length,
+                        total_quantity: items.reduce( ( s, i ) => s + i.quantity, 0 ),
+                        total: total,
+                        grn_ref: grnRef,
+                        position_before: supplier ? round2( position ) : 0,
+                        position_after: positionAfter,
+                        note: note,
+                        created_by: createdBy,
+                        created_at: new Date().toJSON()
+                    };
+                    prnsDB.insert( prn, function ( err, saved ) {
+                        if ( err ) return fail( 500, "Could not save the PRN." );
+                        // the PRN is saved; now take the goods out of stock
+                        Inventory.returnGoods( items, {
+                            prn_id: saved._id,
+                            reference: saved.prn_no,
+                            supplier: saved.supplier_name,
+                            refund_method: refundMethod,
+                            return_date: returnDate,
+                            user: createdBy,
+                            user_id: body.created_by_id || ""
+                        }, function ( err ) {
+                            done();
+                            if ( err ) {
+                                console.error( "PRN " + saved.prn_no + ": stock update failed:", err );
+                                return res.status( 500 ).send( "The PRN " + saved.prn_no + " was saved, but the stock could not be updated for every product. Please check the product quantities." );
+                            }
+                            res.send( Object.assign( {}, saved, {
+                                balance_after: Math.max( positionAfter, 0 ),
+                                advance_after: Math.max( -positionAfter, 0 )
+                            } ) );
+                        } );
+                    } );
+                } );
+            } );
+        } );
+    } );
+} );
+
 // ---- Supplier payments (settling credit GRNs, or paying in advance) ----
 
 // Body: { supplier_id, amount, date, payment_method, note, created_by }
@@ -601,7 +792,10 @@ app.journalData = function ( fromDay, toDay, callback ) {
         if ( err ) return callback( err );
         supplierPaymentsDB.find( { date: { $gte: fromDay, $lte: toDay } }, function ( err, payments ) {
             if ( err ) return callback( err );
-            callback( null, { grns: grns || [], supplier_payments: payments || [] } );
+            prnsDB.find( { return_date: { $gte: fromDay, $lte: toDay } }, function ( err, prns ) {
+                if ( err ) return callback( err );
+                callback( null, { grns: grns || [], supplier_payments: payments || [], prns: prns || [] } );
+            } );
         } );
     } );
 };

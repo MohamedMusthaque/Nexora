@@ -3817,6 +3817,7 @@ if (!authedThisSession) {
       return: { label: "Return", css: "label-danger", group: "returns" },
       exchange: { label: "Exchange", css: "label-danger", group: "returns" },
       grn: { label: "Goods received", css: "label-success", group: "purchases" },
+      prn: { label: "Returned to supplier", css: "label-danger", group: "purchases" },
       stock_adjustment: { label: "Stock adjustment", css: "label-info", group: "changes" },
       updated: { label: "Product edited", css: "label-primary", group: "changes" },
       created: { label: "Created", css: "label-primary", group: "changes" },
@@ -3873,6 +3874,13 @@ if (!authedThisSession) {
             e.cost_after != null ? `cost price ${cost(e.cost_before)} → ${cost(e.cost_after)}` : "",
           ].filter(Boolean).join(" · ");
         }
+        case "prn":
+          return [
+            "To " + escapeHtml(e.supplier || ""),
+            e.refund_method === "Credit" ? "deducted from the supplier's balance" : e.refund_method ? escapeHtml(e.refund_method) + " refund" : "",
+            e.return_date ? "returned " + moment(e.return_date, "YYYY-MM-DD").format("DD MMM YYYY") : "",
+            `stock ${e.qty_before} → ${e.qty_after}`,
+          ].filter(Boolean).join(" · ");
         case "created":
           return [
             e.qty_after != null ? "Opening stock " + e.qty_after : "Stock not tracked",
@@ -3935,7 +3943,7 @@ if (!authedThisSession) {
             <td class="text-right">${qty}</td>
             <td class="text-right nobr" data-export="${e.price != null && meta.group !== "changes" ? sym + parseFloat(e.price).toFixed(2) : ""}">${
               e.price != null && meta.group !== "changes" ? sym + parseFloat(e.price).toFixed(2) : ""
-            }${e.type === "grn" ? '<br><small class="text-muted">unit cost</small>' : ""}</td>
+            }${e.type === "grn" || e.type === "prn" ? '<br><small class="text-muted">unit cost</small>' : ""}</td>
             <td class="text-right nobr">${e.amount != null ? sym + parseFloat(e.amount).toFixed(2) : ""}</td>
             <td>${productHistoryDetails(e)}</td>
             <td>${escapeHtml(e.user)}</td>
@@ -4756,7 +4764,7 @@ if (!authedThisSession) {
       ["Sales & transactions", "invoices, returns, credit payments and customer advances"],
       ["Customers", "customer list and credit details"],
       ["Expenses", "expenses and expense types"],
-      ["Suppliers & GRNs", "suppliers, goods received notes and supplier payments"],
+      ["Suppliers, GRNs & PRNs", "suppliers, goods received notes, purchase returns and supplier payments"],
       ["Products & categories", "products, stock, categories and product history"],
       ["Store settings", "store name, receipt details, tax and logo"],
       ["Uploaded images", "product pictures and the store logo"],
@@ -5818,7 +5826,7 @@ function fitSuppliersView() {
   if (!el || !$(el).is(":visible")) return;
   let top = el.getBoundingClientRect().top;
   el.style.height = Math.max(window.innerHeight - top - 15, 320) + "px";
-  ["#supplierList", "#grnList"].forEach((sel) => {
+  ["#supplierList", "#grnList", "#prnList"].forEach((sel) => {
     if ($.fn.DataTable.isDataTable(sel)) $(sel).DataTable().columns.adjust();
   });
 }
@@ -5826,6 +5834,7 @@ function fitSuppliersView() {
 function loadSuppliersPage() {
   loadSuppliers();
   loadGrns();
+  loadPrns();
 }
 
 function loadSuppliers(done) {
@@ -5870,6 +5879,16 @@ function fillSupplierSelects() {
   let formChoice = $form.val();
   $form.html(`<option value="0">Walk-in seller (not registered)</option>` + options);
   if (formChoice && allSuppliers.some((s) => String(s._id) === formChoice)) $form.val(formChoice);
+
+  // the PRN filter and form
+  let $prnFilter = $("#prnSupplierFilter");
+  let prnChosen = $prnFilter.val();
+  $prnFilter.html(`<option value="">All</option><option value="0">Walk-in sellers</option>` + options);
+  if (prnChosen === "0" || allSuppliers.some((s) => String(s._id) === prnChosen)) $prnFilter.val(prnChosen);
+  let $prnForm = $("#prnSupplier");
+  let prnFormChoice = $prnForm.val();
+  $prnForm.html(`<option value="0">Walk-in seller (not registered)</option>` + options);
+  if (prnFormChoice && allSuppliers.some((s) => String(s._id) === prnFormChoice)) $prnForm.val(prnFormChoice);
 }
 
 function renderSuppliers() {
@@ -6784,6 +6803,7 @@ function renderSupplierTransactions() {
   let entries = []
     .concat((supplierTxnData.grns || []).map((g) => ({ kind: "grn", at: g.created_at, g: g })))
     .concat((supplierTxnData.payments || []).map((p) => ({ kind: "payment", at: p.created_at, p: p })))
+    .concat((supplierTxnData.prns || []).map((r) => ({ kind: "prn", at: r.created_at, r: r })))
     .sort((a, b) => String(a.at).localeCompare(String(b.at)));
   let position = 0;
   let balanceCell = (pos) =>
@@ -6808,6 +6828,21 @@ function renderSupplierTransactions() {
         ${balanceCell(position)}
         <td class="nobr"><button onClick="$(this).viewGrn(${g._id})" class="btn btn-info btn-sm" title="View GRN"><i class="fa fa-search-plus"></i></button>
           <button onClick="$(this).grnBill(${g._id})" class="btn btn-default btn-sm" title="GRN bill"><i class="fa fa-print"></i></button></td>
+      </tr>`;
+    }
+    if (e.kind === "prn") {
+      // goods sent back: a deduction lowers what is owed (or adds to the advance)
+      let r = e.r;
+      prnCache[r._id] = r;
+      if (r.refund_method === "Credit") position -= Number(r.total) || 0;
+      return `<tr>
+        <td class="nobr" data-order="${i}">${supDate(r.return_date)}</td>
+        <td><span class="label label-danger">PRN</span></td>
+        <td>${txnHtml(r.prn_no)}${r.note ? `<br><small class="text-muted">${txnHtml(r.note)}</small>` : ""}</td>
+        <td data-export="${txnHtml(prnSettledText(r.refund_method))}">${prnSettledHtml(r.refund_method)}</td>
+        <td class="text-right nobr" data-export="-${supMoney(r.total)}">-${supMoney(r.total)}</td>
+        ${balanceCell(position)}
+        <td><button onClick="$(this).viewPrn(${r._id})" class="btn btn-default btn-sm" title="PRN bill"><i class="fa fa-print"></i></button></td>
       </tr>`;
     }
     let p = e.p;
@@ -6947,7 +6982,7 @@ $(function () {
 
   // tables measured while hidden (other tab / closed window) need re-measuring
   $('#suppliers_view .suppliers-tabs a[data-toggle="tab"]').on("shown.bs.tab", function () {
-    ["#supplierList", "#grnList"].forEach((sel) => {
+    ["#supplierList", "#grnList", "#prnList"].forEach((sel) => {
       if ($.fn.DataTable.isDataTable(sel)) $(sel).DataTable().columns.adjust();
     });
   });
@@ -7252,6 +7287,509 @@ $(function () {
   });
 });
 
+// ======================================================================
+// Purchase Return Notes (PRN): goods sent back to a supplier
+// The returned quantities come out of stock (api/suppliers.js POST /prn).
+// The supplier refunds the money (Cash / Bank Transfer / Card), or it is
+// deducted from what is owed to them ("Credit"): less owed, or, with nothing
+// owed, an advance the next GRNs use first.
+// ======================================================================
+let allPrns = [];
+let prnCache = {}; // id -> PRN
+let prnDateFilter = null;
+let prnProducts = []; // products offered in the PRN form
+let prnLines = []; // lines of the PRN being entered
+
+function loadPrns() {
+  $.get(api + "suppliers/prns")
+    .done(function (prns) {
+      allPrns = prns || [];
+      allPrns.forEach((r) => (prnCache[r._id] = r));
+      renderPrns();
+    })
+    .fail(function () {
+      Swal.fire("Oops!", "Could not load the purchase returns.", "warning");
+    });
+}
+
+// "Cash refund" / "Deducted from balance"
+function prnSettledText(method) {
+  return method === "Credit" ? "Deducted from balance" : (method || "") + " refund";
+}
+
+function prnSettledHtml(method) {
+  return method === "Credit"
+    ? `<span class="label label-warning" title="Deducted from what is owed to the supplier">Deducted from balance</span>`
+    : `<span class="label label-success">${txnHtml(method || "")} refund</span>`;
+}
+
+function filteredPrns() {
+  let supplier = $("#prnSupplierFilter").val();
+  let refund = $("#prnRefundFilter").val();
+  return allPrns.filter(
+    (r) =>
+      (!prnDateFilter || prnDateFilter.matches(r.return_date)) &&
+      (supplier === "" || supplier == null || String(r.supplier_id || 0) === supplier) &&
+      (!refund || r.refund_method === refund)
+  );
+}
+
+function prnsExportSubtitle() {
+  let parts = [$("#prnDateRange .date-range-label").text() || "All dates"];
+  if ($("#prnSupplierFilter").val() !== "") parts.push($("#prnSupplierFilter option:selected").text());
+  if ($("#prnRefundFilter").val()) parts.push($("#prnRefundFilter option:selected").text());
+  return parts.join("  ·  ");
+}
+
+function renderPrns() {
+  let list = filteredPrns();
+  let total = 0, refunded = 0, credited = 0, units = 0;
+  list.forEach((r) => {
+    total += Number(r.total) || 0;
+    if (r.refund_method === "Credit") credited += Number(r.total) || 0;
+    else refunded += Number(r.total) || 0;
+    units += Number(r.total_quantity) || 0;
+  });
+  $("#prnsTotal").text(supMoney(total));
+  $("#prnsTotalNote").text(list.length + (list.length === 1 ? " PRN" : " PRNs"));
+  $("#prnsRefunded").text(supMoney(refunded));
+  $("#prnsCredited").text(supMoney(credited));
+  $("#prnsUnits").text(units);
+  $("#prnsTabCount").text(allPrns.length);
+
+  let rows = list
+    .map(
+      (r) => `<tr>
+        <td class="nobr" data-order="${Number(r.seq) || 0}"><b>${txnHtml(r.prn_no)}</b></td>
+        <td class="nobr" data-order="${txnHtml(r.return_date)}">${supDate(r.return_date)}</td>
+        <td data-export="${txnHtml(r.supplier_name)}">${txnHtml(r.supplier_name)}${
+          r.walk_in ? ' <span class="label label-default">Walk-in</span>' : ""
+        }${r.note ? `<br><small class="text-muted">${txnHtml(r.note)}</small>` : ""}</td>
+        <td class="text-right">${r.item_count || (r.items || []).length}</td>
+        <td class="text-right">${r.total_quantity || 0}</td>
+        <td class="text-right nobr" data-order="${Number(r.total) || 0}">${supMoney(r.total)}</td>
+        <td data-export="${txnHtml(prnSettledText(r.refund_method))}">${prnSettledHtml(r.refund_method)}</td>
+        <td>${txnHtml(r.created_by || "")}</td>
+        <td><button onClick="$(this).viewPrn(${r._id})" class="btn btn-info btn-sm" title="PRN bill"><i class="fa fa-print"></i></button></td>
+      </tr>`
+    )
+    .join("");
+
+  if ($.fn.DataTable.isDataTable("#prnList")) $("#prnList").DataTable().destroy();
+  $("#prn_list").html(rows);
+  $("#prnList").DataTable(
+    Object.assign(
+      standardTableOptions({
+        noun: "PRNs",
+        searchPlaceholder: "Search PRNs...",
+        exportTitle: "Purchase Returns",
+        exportColumns: [0, 1, 2, 3, 4, 5, 6, 7],
+        sumColumns: [4, 5],
+        exportSubtitle: prnsExportSubtitle,
+        actionColumns: [8],
+        emptyTable: allPrns.length ? "No PRNs match the filters" : "No purchase returns yet - click New PRN",
+      }),
+      { order: [[1, "desc"], [0, "desc"]] }
+    )
+  );
+}
+
+// ---- the PRN form ----
+function prnProduct(id) {
+  return prnProducts.find((p) => String(p._id) === String(id));
+}
+
+// how many of a product the lines already return (the stock check)
+function prnQtyOf(productId, exceptLine) {
+  return prnLines.reduce(
+    (s, l) => s + (l !== exceptLine && String(l.product_id) === String(productId) ? Number(l.quantity) || 0 : 0),
+    0
+  );
+}
+
+function openPrnForm(supplierId) {
+  $.get(api + "inventory/products")
+    .done(function (products) {
+      // products with stock to send back (and those that don't track stock)
+      prnProducts = (products || [])
+        .filter((p) => p.stock != 1 || (parseInt(p.quantity) || 0) > 0)
+        .sort(
+          (a, b) =>
+            String(a.name || "").localeCompare(String(b.name || "")) ||
+            (parseFloat(a.cost_price) || 0) - (parseFloat(b.cost_price) || 0)
+        );
+      if (!prnProducts.length) {
+        Swal.fire("Nothing to return", "No product has stock to send back.", "info");
+        return;
+      }
+      loadSuppliers(function () {
+        preparePrnForm(supplierId);
+        if ($("#supplierTransactionsModal").hasClass("in")) {
+          supSwapModal("#supplierTransactionsModal", "#prnModal", refreshSupplierTransactions);
+        } else {
+          $("#prnModal").modal("show");
+        }
+      });
+    })
+    .fail(function () {
+      Swal.fire("Oops!", "Could not load the products.", "warning");
+    });
+}
+
+function preparePrnForm(supplierId) {
+  prnLines = [];
+  $("#savePrn").get(0).reset();
+  fillSupplierSelects();
+  $("#prnSupplier").val(String(supplierId || 0));
+  $("#prnDate").val(moment().format("YYYY-MM-DD"));
+  $(".grn-currency").text(settings?.symbol ? "(" + settings.symbol + ")" : "");
+  // name — cost · stock · barcode, like the GRN form
+  $("#prnProduct").html(
+    `<option value=""></option>` +
+      prnProducts
+        .map((p) => {
+          let barcode = p.barcode != null && String(p.barcode) !== "NaN" ? String(p.barcode) : "";
+          let cost = parseFloat(p.cost_price);
+          let parts = [isNaN(cost) ? "no cost yet" : "cost " + supMoney(cost)];
+          if (p.stock == 1) parts.push("stock " + (parseInt(p.quantity) || 0));
+          if (barcode) parts.push(barcode);
+          return `<option value="${p._id}">${txnHtml(p.name)} — ${txnHtml(parts.join(" · "))}</option>`;
+        })
+        .join("")
+  );
+  if ($("#prnProduct").data("chosen")) $("#prnProduct").trigger("chosen:updated");
+  updatePrnSupplierUi();
+  renderPrnLines();
+}
+
+// walk-in seller: a name box, and the money can only be refunded
+function updatePrnSupplierUi() {
+  let walkIn = $("#prnSupplier").val() === "0";
+  $(".prn-walkin-group").toggle(walkIn);
+  $('#prnRefund option[value="Credit"]').prop("disabled", walkIn);
+  if (walkIn && $("#prnRefund").val() === "Credit") $("#prnRefund").val("Cash");
+  $(".prn-credit-hint").toggle(walkIn);
+  updatePrnBalanceInfo();
+}
+
+function prnFormTotal() {
+  return supRound(prnLines.reduce((s, l) => s + (prnLineValid(l) ? Number(l.quantity) * Number(l.unit_cost) : 0), 0));
+}
+
+// what a deduction does to the supplier's balance
+function updatePrnBalanceInfo() {
+  let supplier = allSuppliers.find((s) => String(s._id) === $("#prnSupplier").val());
+  let total = prnFormTotal();
+  if (!supplier || $("#prnRefund").val() !== "Credit" || !(total > 0)) {
+    $(".prn-balance-info").hide();
+    return;
+  }
+  let position = (Number(supplier.balance) || 0) - (Number(supplier.advance) || 0);
+  let after = supRound(position - total);
+  let now = position > 0.004 ? "owed " + supMoney(position) : position < -0.004 ? "advance " + supMoney(-position) : "nothing owed";
+  let then =
+    after > 0.004
+      ? "<b>" + supMoney(after) + "</b> still owed"
+      : after < -0.004
+      ? "the supplier holds an advance of <b>" + supMoney(-after) + "</b>, used by the next GRNs"
+      : "nothing owed";
+  $(".prn-balance-info")
+    .html(`<i class="fa fa-info-circle"></i> ${txnHtml(supplier.name)}: ${now} now. After deducting ${supMoney(total)}: ${then}.`)
+    .show();
+}
+
+function prnLineValid(l) {
+  return Number.isInteger(Number(l.quantity)) && Number(l.quantity) >= 1 && l.unit_cost !== "" && Number(l.unit_cost) >= 0;
+}
+
+// a line returning more than the product has in stock: the message, or ""
+function prnStockProblem(l) {
+  let p = prnProduct(l.product_id);
+  if (!p || p.stock != 1) return "";
+  let stock = parseInt(p.quantity) || 0;
+  let total = prnQtyOf(l.product_id);
+  return total > stock ? `Only ${stock} of "${p.name}" in stock, but the lines return ${total}.` : "";
+}
+
+function updatePrnTotals() {
+  let qty = 0, total = 0;
+  prnLines.forEach((l, i) => {
+    let valid = prnLineValid(l);
+    let lineTotal = valid ? supRound(Number(l.quantity) * Number(l.unit_cost)) : 0;
+    if (valid) {
+      qty += Number(l.quantity);
+      total += lineTotal;
+    }
+    let $row = $(`#prn_lines tr[data-index="${i}"]`);
+    $row.find(".grn-line-total").text(valid ? supMoney(lineTotal) : "-");
+    let p = prnProduct(l.product_id);
+    let problem = prnStockProblem(l);
+    $row.find(".prn-line-after").html(
+      p && p.stock == 1 && valid
+        ? problem
+          ? `<span class="text-danger" title="${txnHtml(problem)}">not enough</span>`
+          : "→ " + ((parseInt(p.quantity) || 0) - prnQtyOf(l.product_id))
+        : ""
+    );
+  });
+  $("#prnTotalQty").text(qty);
+  $("#prnTotal").text(supMoney(total));
+  updatePrnBalanceInfo();
+}
+
+function renderPrnLines() {
+  if (!prnLines.length) {
+    $("#prn_lines").html(
+      `<tr class="grn-empty"><td colspan="6">No products yet. Choose a product above, enter the quantity going back and its unit cost, then click Add.</td></tr>`
+    );
+  } else {
+    $("#prn_lines").html(
+      prnLines
+        .map((l, i) => {
+          let p = prnProduct(l.product_id) || {};
+          let code = p.barcode != null && String(p.barcode) !== "NaN" ? String(p.barcode) : "";
+          return `<tr data-index="${i}">
+            <td><b>${txnHtml(l.name)}</b>${code ? `<br><small class="text-muted">${txnHtml(code)}</small>` : ""}</td>
+            <td class="text-right nobr">${p.stock == 1 ? parseInt(p.quantity) || 0 : '<span class="text-muted">not tracked</span>'}
+              <br><small class="text-danger prn-line-after"></small></td>
+            <td><input type="number" class="form-control prn-line-qty" min="1" step="1" value="${txnHtml(l.quantity)}"></td>
+            <td><input type="number" class="form-control prn-line-cost" min="0" step="0.01" value="${txnHtml(l.unit_cost)}"></td>
+            <td class="text-right nobr grn-line-total"></td>
+            <td><button type="button" class="btn btn-danger btn-sm prn-line-remove" title="Remove"><i class="fa fa-times"></i></button></td>
+          </tr>`;
+        })
+        .join("")
+    );
+  }
+  updatePrnTotals();
+}
+
+function addPrnLine() {
+  let p = prnProduct($("#prnProduct").val());
+  let qty = Number($("#prnQty").val());
+  let costText = $.trim($("#prnUnitCost").val());
+  let cost = Number(costText);
+  if (!p) {
+    Swal.fire("Oops!", "Please choose a product.", "warning");
+    return;
+  }
+  if (!Number.isInteger(qty) || qty < 1) {
+    Swal.fire("Oops!", "Please enter the quantity going back (a whole number of at least 1).", "warning");
+    return;
+  }
+  if (costText === "" || !(cost >= 0)) {
+    Swal.fire("Oops!", "Please enter the unit cost (0 or more).", "warning");
+    return;
+  }
+  if (p.stock == 1) {
+    let stock = parseInt(p.quantity) || 0;
+    if (prnQtyOf(p._id) + qty > stock) {
+      Swal.fire("Not enough stock", `Only ${stock} of "${p.name}" in stock` + (prnQtyOf(p._id) ? ` (${prnQtyOf(p._id)} already on this PRN).` : "."), "warning");
+      return;
+    }
+  }
+  let existing = prnLines.find((l) => String(l.product_id) === String(p._id) && supRound(l.unit_cost) === supRound(cost));
+  if (existing) existing.quantity = (Number(existing.quantity) || 0) + qty;
+  else prnLines.push({ product_id: p._id, name: p.name, quantity: qty, unit_cost: supRound(cost) });
+
+  $("#prnProduct").val("").trigger("chosen:updated");
+  $("#prnQty, #prnUnitCost").val("");
+  renderPrnLines();
+  $("#prnProduct").trigger("chosen:activate");
+}
+
+// ---- the PRN bill (like the GRN bill) ----
+function prnBillHtml(r) {
+  let items = (r.items || [])
+    .map(
+      (i) => `<tr>
+        <td>${txnHtml(i.product_name)}</td>
+        <td style="padding: 0 6px;">${i.quantity}</td>
+        <td style="padding: 0 6px; white-space: nowrap;">${supMoney(i.unit_cost)}</td>
+        <td style="text-align: right; white-space: nowrap;">${supMoney(i.total)}</td>
+      </tr>`
+    )
+    .join("");
+  let settle =
+    r.refund_method === "Credit"
+      ? supBillRow("Deducted from supplier's balance", "<b>" + supMoney(r.total) + "</b>")
+      : supBillRow("Refunded by " + txnHtml(r.refund_method), "<b>" + supMoney(r.total) + "</b>");
+  let balance = !r.walk_in && r.position_after != null ? supBillRow("Supplier balance now", "<b>" + supBillPositionText(r.position_after) + "</b>") : "";
+  return `<div style="font-size: 10px;">
+    ${supBillHeader("PURCHASE RETURN NOTE")}
+    <p>
+      PRN No : <b>${txnHtml(r.prn_no)}</b> <br>
+      Returned to : ${txnHtml(r.supplier_name)}${r.walk_in ? " (Walk-in)" : ""} <br>
+      Return date : ${supDate(r.return_date)} <br>
+      ${r.grn_ref ? "GRN : " + txnHtml(r.grn_ref) + " <br>" : ""}
+      Returned by : ${txnHtml(r.created_by || "-")} <br>
+      Date : ${moment(r.created_at).format("DD MMM YYYY HH:mm:ss")}
+    </p>
+    <hr>
+    <table width="100%">
+      <thead style="text-align: left;">
+        <tr><th>Item</th><th style="padding: 0 6px;">Qty</th><th style="padding: 0 6px;">Cost</th><th style="text-align: right;">Total</th></tr>
+      </thead>
+      <tbody>
+        ${items}
+        <tr><td colspan="4"><hr style="margin: 4px 0;"></td></tr>
+        ${supBillRow("Products / Units", (r.item_count || (r.items || []).length) + " / " + (r.total_quantity || 0))}
+        ${supBillRow("Total", supMoney(r.total), true)}
+        ${settle}
+        ${balance}
+      </tbody>
+    </table>
+    ${r.note ? "<p>Reason : " + txnHtml(r.note) + "</p>" : ""}
+    <hr>
+    ${supBillSignatures("Returned by", "Received by (Supplier)")}
+  </div>`;
+}
+
+// PRN bill: from the PRN list, the supplier window and the Quick Journal
+$.fn.viewPrn = function (id) {
+  if (prnCache[id]) return showSupplierBill(prnBillHtml(prnCache[id]));
+  $.get(api + "suppliers/prn/" + id)
+    .done(function (r) {
+      prnCache[r._id] = r;
+      showSupplierBill(prnBillHtml(r));
+    })
+    .fail(function (xhr) {
+      Swal.fire("Oops!", supError(xhr, "Could not load the PRN."), "warning");
+    });
+};
+
+$(function () {
+  prnDateFilter = initDateRangeFilter("#prnDateRange", renderPrns);
+  $("#prnSupplierFilter, #prnRefundFilter").on("change", renderPrns);
+
+  $("#newPrnBtn").on("click", function () {
+    openPrnForm(0);
+  });
+  // from the supplier window: a return to that supplier
+  $("#supTxnPrnBtn").on("click", function () {
+    if (supplierTxnData) openPrnForm(supplierTxnData.supplier._id);
+  });
+  $("#prnSupplier").on("change", updatePrnSupplierUi);
+  $("#prnRefund").on("change", updatePrnBalanceInfo);
+
+  $("#prnModal").on("shown.bs.modal", function () {
+    if (!$("#prnProduct").data("chosen")) {
+      $("#prnProduct").chosen({ width: "100%", search_contains: true, no_results_text: "No product matches" });
+    }
+    $("#prnProduct").trigger("chosen:updated").trigger("chosen:activate");
+  });
+
+  // a product chosen: its cost price is what the supplier gives back per unit
+  $("#prnProduct").on("change", function () {
+    let p = prnProduct($(this).val());
+    if (!p) return;
+    let cost = parseFloat(p.cost_price);
+    $("#prnUnitCost").val(isNaN(cost) ? "" : cost.toFixed(2));
+    setTimeout(() => $("#prnQty").trigger("focus"), 0);
+  });
+  $("#prnAddLine").on("click", addPrnLine);
+  $("#prnQty, #prnUnitCost").on("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault(); // add the line, don't save the PRN
+      addPrnLine();
+    }
+  });
+
+  $("#prn_lines")
+    .on("input", ".prn-line-qty, .prn-line-cost", function () {
+      let line = prnLines[parseInt($(this).closest("tr").data("index"))];
+      if (!line) return;
+      let val = $.trim($(this).val());
+      if ($(this).hasClass("prn-line-qty")) line.quantity = val === "" ? "" : Number(val);
+      else line.unit_cost = val === "" ? "" : Number(val);
+      updatePrnTotals();
+    })
+    .on("keydown", "input", function (e) {
+      if (e.key === "Enter") e.preventDefault();
+    })
+    .on("click", ".prn-line-remove", function () {
+      prnLines.splice(parseInt($(this).closest("tr").data("index")), 1);
+      renderPrnLines();
+    });
+
+  $("#savePrn").on("submit", function (e) {
+    e.preventDefault();
+    let supplierId = parseInt($("#prnSupplier").val()) || 0;
+    let refund = $("#prnRefund").val();
+    let date = $("#prnDate").val();
+    if (!date) {
+      Swal.fire("Oops!", "Please enter the return date.", "warning");
+      return;
+    }
+    if (!prnLines.length) {
+      Swal.fire("Oops!", "Please add at least one product to return.", "warning");
+      return;
+    }
+    let bad = prnLines.find((l) => !prnLineValid(l));
+    if (bad) {
+      Swal.fire("Oops!", `Please check "${bad.name}": the quantity must be a whole number of at least 1 and the unit cost 0 or more.`, "warning");
+      return;
+    }
+    let stockProblem = prnLines.map(prnStockProblem).find(Boolean);
+    if (stockProblem) {
+      Swal.fire("Not enough stock", stockProblem, "warning");
+      return;
+    }
+    if (refund === "Credit" && !supplierId) {
+      Swal.fire("Oops!", "Only a registered supplier's balance can be reduced.", "warning");
+      return;
+    }
+
+    let total = prnFormTotal();
+    let units = prnLines.reduce((s, l) => s + Number(l.quantity), 0);
+    let supplierName = supplierId ? $("#prnSupplier option:selected").text() : $.trim($("#prnWalkInName").val()) || "Walk-in seller";
+    let payload = {
+      supplier_id: supplierId,
+      walk_in_name: supplierId ? "" : $.trim($("#prnWalkInName").val()),
+      return_date: date,
+      refund_method: refund,
+      grn_ref: $.trim($("#prnGrnRef").val()),
+      note: $.trim($("#prnNote").val()),
+      created_by: user?.fullname || "",
+      created_by_id: user?._id || "",
+      items: prnLines.map((l) => ({ product_id: l.product_id, quantity: Number(l.quantity), unit_cost: Number(l.unit_cost) })),
+    };
+
+    Swal.fire({
+      title: "Save this PRN?",
+      icon: "question",
+      html: `<p>Return to <b>${txnHtml(supplierName)}</b> · ${supDate(date)}</p>
+        <p>${prnLines.length} ${prnLines.length === 1 ? "product" : "products"}, ${units} units · <b>${supMoney(total)}</b></p>
+        <p>${txnHtml(prnSettledText(refund))}</p>
+        <p class="text-muted" style="font-size: 13px;">The stock of these products goes down by the quantities returned. A saved PRN can't be changed.</p>`,
+      showCancelButton: true,
+      confirmButtonText: "Save PRN",
+      confirmButtonColor: "#d33",
+    }).then(function (result) {
+      if (!result.value) return;
+      let $btn = $("#submitPrn").prop("disabled", true);
+      $.ajax({ url: api + "suppliers/prn", type: "POST", contentType: "application/json", data: JSON.stringify(payload) })
+        .done(function (prn) {
+          prnCache[prn._id] = prn;
+          // like a GRN: the bill comes up, ready to print
+          showSupplierBillAfter("#prnModal", prnBillHtml(prn));
+          loadSuppliersPage();
+          $(document).trigger("products:changed"); // less stock on the till and in Products
+        })
+        .fail(function (xhr) {
+          Swal.fire("Oops!", supError(xhr, "Could not save the PRN."), "warning");
+          if (xhr && xhr.status >= 500) {
+            loadSuppliersPage();
+            $(document).trigger("products:changed");
+          }
+        })
+        .always(function () {
+          $btn.prop("disabled", false);
+        });
+    });
+  });
+});
+
 // Pay button in the supplier list: straight to the payment window (paying
 // what is owed, or in advance when nothing is owed)
 $.fn.paySupplier = function (id) {
@@ -7277,12 +7815,11 @@ $.fn.editSupplier = function (id) {
 $.fn.deleteSupplier = function (id) {
   let s = allSuppliers.find((x) => x._id === id);
   if (!s) return;
-  if (s.grn_count > 0) {
-    Swal.fire(
-      "Can't delete this supplier",
-      `"${s.name}" has ${s.grn_count} ${s.grn_count === 1 ? "GRN" : "GRNs"}, which stay linked to it.`,
-      "info"
-    );
+  if (s.grn_count > 0 || s.prn_count > 0) {
+    let parts = [];
+    if (s.grn_count > 0) parts.push(s.grn_count + (s.grn_count === 1 ? " GRN" : " GRNs"));
+    if (s.prn_count > 0) parts.push(s.prn_count + (s.prn_count === 1 ? " PRN" : " PRNs"));
+    Swal.fire("Can't delete this supplier", `"${s.name}" has ${parts.join(" and ")}, which stay linked to it.`, "info");
     return;
   }
   Swal.fire({
@@ -7398,6 +7935,7 @@ const JOURNAL_TYPE_CSS = {
   grn: "label-info",
   supplier_credit_payment: "label-warning",
   supplier_advance: "label-warning",
+  prn: "label-danger",
 };
 
 function canViewJournal() {
@@ -7473,7 +8011,8 @@ function renderJournal() {
   $("#jnGrns").text(supMoney(s.grns.total));
   $("#jnGrnsNote").text(
     journalCount(s.grns.count, "GRN", "GRNs") +
-      (s.grns.on_credit > 0 ? " · " + supMoney(s.grns.on_credit) + " on credit" : "")
+      (s.grns.on_credit > 0 ? " · " + supMoney(s.grns.on_credit) + " on credit" : "") +
+      (s.prns && s.prns.count ? " · " + supMoney(s.prns.total) + " returned" : "")
   );
   $("#jnExpenses").text(supMoney(s.expenses.total));
   $("#jnExpensesNote").text(journalCount(s.expenses.count, "expense", "expenses"));
@@ -7508,6 +8047,7 @@ function journalViewButton(e, index) {
     customer_advance: e.sale_id ? "View the bill" : "Credit payment receipt",
     supplier_credit_payment: "Payment bill",
     supplier_advance: "Payment bill",
+    prn: "PRN bill",
   }[e.kind];
   if (!title) return "";
   return `<button onClick="$(this).viewJournalEntry(${index})" class="btn btn-info btn-sm" title="${title}"><i class="fa fa-search-plus"></i></button>`;
@@ -7599,6 +8139,13 @@ $.fn.viewJournalEntry = function (index) {
       $("#viewTransaction").html(html);
       $("#orderModal").modal("show");
     });
+  } else if (e.kind === "prn") {
+    $.get(api + "suppliers/prn/" + e.id)
+      .done(function (r) {
+        prnCache[r._id] = r;
+        journalShowBill(() => showSupplierBill(prnBillHtml(r)));
+      })
+      .fail(fail);
   } else if (e.kind === "grn") {
     $.get(api + "suppliers/grn/" + e.id)
       .done(function (g) {
@@ -7665,6 +8212,9 @@ function journalPrintHtml() {
         ${row("GRN purchases (" + s.grns.count + ")", supMoney(s.grns.total))}
         ${s.grns.count ? sub("Paid now", supMoney(s.grns.paid)) : ""}
         ${s.grns.on_credit > 0 ? sub("On credit", supMoney(s.grns.on_credit)) : ""}
+        ${s.prns && s.prns.count ? row("Purchase returns (" + s.prns.count + ")", supMoney(s.prns.total)) : ""}
+        ${s.prns && s.prns.refunded > 0 ? sub("Refunded", supMoney(s.prns.refunded)) : ""}
+        ${s.prns && s.prns.credited > 0 ? sub("Deducted from balances", supMoney(s.prns.credited)) : ""}
         ${row("Credit paid to suppliers (" + s.credit_paid.count + ")", supMoney(s.credit_paid.total))}
         ${row("Advance paid to suppliers (" + s.advance_paid.count + ")", supMoney(s.advance_paid.total))}
         ${row("Expenses (" + s.expenses.count + ")", supMoney(s.expenses.total))}

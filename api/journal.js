@@ -310,6 +310,36 @@ function buildEntries( data ) {
         }
     } );
 
+    // purchase returns: goods sent back to a supplier; a refund is money in,
+    // a deduction from the supplier's balance moves no money
+    ( data.prns || [] ).forEach( ( r ) => {
+        let when = dayAt( r.return_date, r.created_at );
+        let credit = r.refund_method === "Credit";
+        let total = round2( r.total );
+        entries.push( {
+            kind: "prn",
+            group: "grn",
+            type: "Purchase Return",
+            id: r._id,
+            at: when.at,
+            time_known: when.time_known,
+            reference: r.prn_no || "",
+            party: ( r.supplier_name || "" ) + ( r.walk_in && r.supplier_name !== "Walk-in seller" ? " (Walk-in)" : "" ),
+            details: [
+                ( r.item_count || ( r.items || [] ).length ) + " products, " + ( r.total_quantity || 0 ) + " units",
+                r.grn_ref ? "GRN " + r.grn_ref : "",
+                r.note || ""
+            ].filter( Boolean ).join( "; " ),
+            method: credit ? "Deducted from supplier" : r.refund_method || "",
+            in_method: credit ? "" : r.refund_method || "Other",
+            amount: total,
+            money_in: credit ? 0 : total,
+            money_out: 0,
+            on_credit: 0,
+            user: r.created_by || ""
+        } );
+    } );
+
     entries.sort( ( a, b ) => String( a.at ).localeCompare( String( b.at ) ) );
     return entries;
 }
@@ -326,6 +356,7 @@ function buildSummary( entries ) {
         grns: Object.assign( group(), { paid: 0, on_credit: 0 } ),
         credit_paid: group(), // settling suppliers' credit
         advance_paid: group(), // paying suppliers in advance
+        prns: Object.assign( group(), { refunded: 0, credited: 0 } ), // goods sent back to suppliers
         advance_used: { customers: 0, suppliers: 0 }, // moves no money that day
         methods: {},
         money_in: 0,
@@ -345,7 +376,8 @@ function buildSummary( entries ) {
             expense: "expenses",
             grn: "grns",
             supplier_credit_payment: "credit_paid",
-            supplier_advance: "advance_paid"
+            supplier_advance: "advance_paid",
+            prn: "prns"
         }[e.kind];
         s[key].count++;
         s[key].total += e.amount;
@@ -355,6 +387,10 @@ function buildSummary( entries ) {
             s.advance_used.customers += e.advance_used || 0;
         }
         if ( e.kind === "return" ) s.returns.refunded += e.money_out;
+        if ( e.kind === "prn" ) {
+            if ( e.money_in > 0 ) s.prns.refunded += e.money_in;
+            else s.prns.credited += e.amount;
+        }
         if ( e.kind === "grn" ) {
             s.grns.paid += e.money_out;
             s.grns.on_credit += e.on_credit;
@@ -402,7 +438,8 @@ app.get( "/", function ( req, res ) {
                     credit_payments: sales.credit_payments,
                     expenses: expenses,
                     grns: purchases.grns,
-                    supplier_payments: purchases.supplier_payments
+                    supplier_payments: purchases.supplier_payments,
+                    prns: purchases.prns
                 } );
                 res.send( { from: fromText, to: toText, entries: entries, summary: buildSummary( entries ) } );
             } );

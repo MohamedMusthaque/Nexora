@@ -123,6 +123,7 @@ Whether operating on a standalone checkout computer or configured across multipl
   - **One product per cost price**: a GRN line goes to the product (same name and category) whose cost price is the unit cost received - its stock goes up and it keeps its selling price. When no product has that cost price, the GRN creates a **new product** for the goods: same name, category, picture and stock tracking, the unit cost as its cost price, its own selling price and its own barcode. A product with no cost price yet simply takes the goods (and the cost).
   - The GRN form shows for each line where the goods go ("adds to its stock" or **New product**). A new product needs a selling price that no product with that name already has; the form suggests one that keeps the margin (cost 150 → 160, price 200 → 213.33). The server decides the same way, and two lines at the same new cost share one new product. A new product's **barcode** can be scanned or typed in the GRN form, or created with its **Fill** button like in the product form (**New Barcode**; left empty, one is created when saving); a barcode another product already has is refused.
   - At the till, products with the same name share one tile and the cashier picks the price (or scans that product's barcode). Stock batches from earlier versions (price barcodes `<barcode>-2`, …) keep working until they are sold.
+  - **Purchase Return Notes (PRN)**: send goods back to a supplier (or walk-in seller) from the Suppliers page (**New PRN**, or from a supplier's window). Each line takes the quantity out of stock (never more than is in stock) at its unit cost. The supplier either refunds the money (Cash, Bank Transfer or Card) or it is **deducted from the supplier's balance** - less owed, or with nothing owed an advance the next GRNs use. PRNs have their own tab (filters, totals, Excel / PDF), a printable bill, rows in the supplier's transactions and product history, and show in the Quick Journal (a refund is money in).
   - Per-supplier transactions (GRNs and payments) with **Pay Supplier** to settle credit purchases.
   - Paying a supplier more than is owed keeps the extra as the supplier's **advance**; the next GRNs from that supplier use it up automatically before the chosen payment method.
   - **Bills** like the POS bill: a GRN bill (GRN-00001, …) and a supplier / advance payment bill (PAY-00001, …) come up after saving, ready to print, and can be reprinted from the GRN list, the supplier's transactions and the GRN details. They show the supplier's balance before / after (owed or advance) and signature lines.
@@ -301,7 +302,7 @@ Nexora/
 
 By default, NEXORA stores databases and media uploads locally under:
 - **Default Path**: `<UserHome>/Nexora/POS/` (or `%APPDATA%/POS` on Windows)
-  - `server/databases/*.db`: Lightweight NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`, `returns.db`, `credit_payments.db`, `customer_advances.db`, `product_history.db`, `expenses.db`, `expense_types.db`, `suppliers.db`, `grns.db`, `supplier_payments.db`, `batches.db`).
+  - `server/databases/*.db`: Lightweight NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`, `returns.db`, `credit_payments.db`, `customer_advances.db`, `product_history.db`, `expenses.db`, `expense_types.db`, `suppliers.db`, `grns.db`, `prns.db`, `supplier_payments.db`, `batches.db`).
   - `uploads/`: Uploaded product pictures and company receipt logos.
 - **Application Logs**: Saved under `<userData>/nexora.log`.
 
@@ -319,7 +320,7 @@ You can access the built-in backup tools directly from the app interface:
 | Sales & transactions (invoices, returns, credit payments, customer advances) | **User accounts** (usernames, passwords and permissions) |
 | Customers | |
 | Expenses and expense types | |
-| Suppliers, goods received notes (GRN) and supplier payments | |
+| Suppliers, goods received notes (GRN), purchase returns (PRN) and supplier payments | |
 | Products, categories, stock and product history | |
 | Store settings (store name, receipt details, tax, logo) | |
 | Uploaded images | |
