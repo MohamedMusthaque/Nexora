@@ -117,6 +117,11 @@
                                 <span class="btn-label"><i class="fa fa-truck"></i> </span>  Suppliers
                             </button>
 
+                            <!-- shown only with the "View Quick Journal" permission (pos.js: applyJournalPermission) -->
+                            <button id="journalNav" type="button" class="btn btn-default waves-effect waves-light" style="display: none;" title="Everything that happened today: sales, returns, payments, expenses and GRNs">
+                                <span class="btn-label"><i class="fa fa-book"></i> </span>  Quick Journal
+                            </button>
+
                             <button id="pointofsale" type="button" class="btn btn-default waves-effect waves-light">
                                 <span class="btn-label"><i class=" 	glyphicon glyphicon-shopping-cart"></i> </span>  Point of Sale
                             </button>
@@ -1189,6 +1194,108 @@
           </div>
      </div>
 
+     <!-- Quick Journal: a day's sales, returns, payments, expenses and GRNs (pos.js: openJournal) -->
+     <div id="journalModal" class="modal fade modal-fit" tabindex="-1" role="dialog" aria-labelledby="journalTitle" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                        <button type="button" class="btn btn-default btn-sm pull-right" id="journalPrint" style="margin-right: 12px;" title="Print the day's summary like a bill"><i class="fa fa-print"></i> Print</button>
+                        <h4 class="modal-title" id="journalTitle"><i class="fa fa-book"></i> Quick Journal</h4>
+                    </div>
+                    <div class="modal-body">
+                        <div class="journal-bar">
+                            <div class="journal-date">
+                                <button type="button" class="btn btn-default" id="journalPrevDay" title="Previous day"><i class="fa fa-chevron-left"></i></button>
+                                <input type="date" class="form-control" id="journalDate">
+                                <button type="button" class="btn btn-default" id="journalNextDay" title="Next day"><i class="fa fa-chevron-right"></i></button>
+                            </div>
+                            <button type="button" class="btn btn-default" id="journalToday">Today</button>
+                            <span class="journal-day" id="journalDayLabel"></span>
+                            <select class="form-control" id="journalKind" title="Show only one kind of entry">
+                                <option value="">All entries</option>
+                                <option value="sale">Sales</option>
+                                <option value="return">Returns &amp; exchanges</option>
+                                <option value="credit">Credit payments</option>
+                                <option value="advance">Advance payments</option>
+                                <option value="expense">Expenses</option>
+                                <option value="grn">GRNs</option>
+                            </select>
+                            <button type="button" class="btn btn-default" id="journalRefresh" title="Reload"><i class="fa fa-refresh"></i></button>
+                        </div>
+                        <div class="journal-top">
+                            <!-- top row: money in; bottom row: money out -->
+                            <div class="sup-tiles journal-tiles">
+                                <div class="sup-tile">
+                                    <h5>SALES</h5>
+                                    <div class="sup-value" id="jnSales">0.00</div>
+                                    <small id="jnSalesNote"></small>
+                                </div>
+                                <div class="sup-tile" title="Customers settling their credit">
+                                    <h5>CREDIT RECEIVED</h5>
+                                    <div class="sup-value" id="jnCreditIn">0.00</div>
+                                    <small id="jnCreditInNote"></small>
+                                </div>
+                                <div class="sup-tile" title="Customers paying in advance for their next bills">
+                                    <h5>ADVANCE RECEIVED</h5>
+                                    <div class="sup-value" id="jnAdvanceIn">0.00</div>
+                                    <small id="jnAdvanceInNote"></small>
+                                </div>
+                                <div class="sup-tile">
+                                    <h5>REFUNDS</h5>
+                                    <div class="sup-value" id="jnRefunds">0.00</div>
+                                    <small id="jnRefundsNote"></small>
+                                </div>
+                                <div class="sup-tile">
+                                    <h5>GRN PURCHASES</h5>
+                                    <div class="sup-value" id="jnGrns">0.00</div>
+                                    <small id="jnGrnsNote"></small>
+                                </div>
+                                <div class="sup-tile" title="Settling what is owed to suppliers">
+                                    <h5>CREDIT PAID</h5>
+                                    <div class="sup-value" id="jnCreditOut">0.00</div>
+                                    <small id="jnCreditOutNote"></small>
+                                </div>
+                                <div class="sup-tile" title="Paid to suppliers in advance for the next GRNs">
+                                    <h5>ADVANCE PAID</h5>
+                                    <div class="sup-value" id="jnAdvanceOut">0.00</div>
+                                    <small id="jnAdvanceOutNote"></small>
+                                </div>
+                                <div class="sup-tile">
+                                    <h5>EXPENSES</h5>
+                                    <div class="sup-value" id="jnExpenses">0.00</div>
+                                    <small id="jnExpensesNote"></small>
+                                </div>
+                            </div>
+                            <table class="table table-condensed journal-methods">
+                                <thead>
+                                    <tr><th>Money</th><th class="text-right">In</th><th class="text-right">Out</th><th class="text-right">Net</th></tr>
+                                </thead>
+                                <tbody id="journalMethods"></tbody>
+                            </table>
+                        </div>
+                        <table class="table table-bordered" id="journalList" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Type</th>
+                                    <th>Reference</th>
+                                    <th>Customer / Supplier</th>
+                                    <th>Details</th>
+                                    <th>Method</th>
+                                    <th class="txn-num">Amount</th>
+                                    <th class="txn-num">In</th>
+                                    <th class="txn-num">Out</th>
+                                    <th>View</th>
+                                </tr>
+                            </thead>
+                            <tbody id="journal_list"></tbody>
+                        </table>
+                    </div>
+               </div>
+          </div>
+     </div>
+
      <!-- One GRN's details (pos.js: showGrn) -->
      <div id="grnViewModal" class="modal fade modal-fit" tabindex="-1" role="dialog" aria-labelledby="grnViewTitle" aria-hidden="true" style="display: none;">
             <div class="modal-dialog modal-lg">
@@ -1562,6 +1669,9 @@
                            </div>
                           <div class="form-group">
                             <span><input type="checkbox" name="perm_suppliers" id="perm_suppliers"> Manage Suppliers &amp; GRN </span>
+                           </div>
+                          <div class="form-group">
+                            <span><input type="checkbox" name="perm_journal" id="perm_journal"> View Quick Journal </span>
                            </div>
                                 <div class="form-group">
                                     <span><input type="checkbox" name="perm_users" id="perm_users"> Manage Users and Permissions </span>

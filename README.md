@@ -124,9 +124,15 @@ Whether operating on a standalone checkout computer or configured across multipl
   - Paying a supplier more than is owed keeps the extra as the supplier's **advance**; the next GRNs from that supplier use it up automatically before the chosen payment method.
   - **Bills** like the POS bill: a GRN bill (GRN-00001, …) and a supplier / advance payment bill (PAY-00001, …) come up after saving, ready to print, and can be reprinted from the GRN list, the supplier's transactions and the GRN details. They show the supplier's balance before / after (owed or advance) and signature lines.
 
+- **📒 Quick Journal**:
+  - One window with everything that happened on a day: sales and credit sales, returns and exchanges, expenses, GRNs, and every **credit payment** and **advance payment** in time order.
+  - Credit payments: customers settling their credit and settling what is owed to suppliers. Advance payments: extra a customer pays at the till or when settling credit (kept for their next bill), and suppliers paid in advance. A payment that is partly credit and partly advance shows as two entries.
+  - Totals for each kind (credit / advance received from customers and paid to suppliers, plus advances used), and the money in, out and net for Cash, Card and Bank Transfer (amounts put on credit and advances used are shown but move no money that day).
+  - Opens on today; step to other days or pick a date, filter by kind, open the bill behind an entry, export to Excel / PDF, or print the day's summary like a bill.
+
 - **👥 User Roles & Permissions**:
   - Multi-staff user accounts.
-  - Granular permissions: control access to Products, Categories, Transactions, Profit, Expenses, Suppliers & GRN, Users, and Settings.
+  - Granular permissions: control access to Products, Categories, Transactions, Profit, Expenses, Suppliers & GRN, Quick Journal, Users, and Settings.
   - Bootstrap Administrator protection to prevent accidental lockouts.
 
 - **🧾 Receipt & Document Printing**:
@@ -267,6 +273,7 @@ Nexora/
 │   ├── customers.js        # Customer registry API
 │   ├── expenses.js         # Expenses & expense types API
 │   ├── inventory.js        # Product catalog & stock API
+│   ├── journal.js          # Quick Journal: a day's sales, returns, payments, expenses & GRNs (read only)
 │   ├── settings.js         # App store info & receipt preferences API
 │   ├── suppliers.js        # Suppliers, goods received notes (GRN) & supplier payments API
 │   ├── transactions.js     # Sales, orders & reporting API

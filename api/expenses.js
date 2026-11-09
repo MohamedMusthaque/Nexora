@@ -216,3 +216,18 @@ app.delete( "/:id", function ( req, res ) {
         res.sendStatus( 200 );
     } );
 } );
+
+
+// ---- Quick Journal (journal.js) ----
+// Expenses dated fromDay..toDay ("YYYY-MM-DD"), each with its type's name. Read only.
+app.journalData = function ( fromDay, toDay, callback ) {
+    expensesDB.find( { date: { $gte: fromDay, $lte: toDay } }, function ( err, expenses ) {
+        if ( err ) return callback( err );
+        expenseTypesDB.find( {}, function ( err, types ) {
+            if ( err ) return callback( err );
+            let names = {};
+            ( types || [] ).forEach( ( t ) => { names[t._id] = t.name; } );
+            callback( null, ( expenses || [] ).map( ( e ) => Object.assign( { type_name: names[e.type_id] || "" }, e ) ) );
+        } );
+    } );
+};

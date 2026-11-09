@@ -2714,6 +2714,116 @@ ul.ColVis_collection li {
   letter-spacing: 0.4px;
 }
 
+/* ---- Quick Journal (#journalModal, .modal-fit) ----
+   [< date >] [Today]  Saturday 8 Nov 2026 ........ [All entries v] [reload]
+   [ six totals ]  [ money in / out by method ]
+   the day's entries (only this list scrolls) */
+#journalModal .journal-bar{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+#journalModal .journal-date{
+  display: flex;
+  align-items: center;
+}
+#journalModal .journal-date .form-control{
+  width: 160px;
+  border-radius: 0;
+  margin: 0 -1px;
+}
+#journalModal .journal-date .btn:first-child{
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+#journalModal .journal-date .btn:last-child{
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+#journalModal .journal-day{
+  font-weight: 600;
+  color: #4c5667;
+  margin-left: 4px;
+}
+#journalModal #journalKind{
+  width: auto;
+  min-width: 180px;
+  margin-left: auto;
+}
+#journalModal .journal-top{
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+#journalModal .journal-tiles{
+  flex: 1 1 auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 0;
+}
+#journalModal .journal-tiles .sup-tile{
+  padding: 6px 10px;
+}
+#journalModal .journal-tiles .sup-value{
+  font-size: 18px;
+}
+#journalModal .journal-tiles h5{
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#journalModal .journal-methods{
+  flex: 0 0 320px;
+  width: 320px;
+  margin-bottom: 0;
+  border: 1px solid #e3e3e3;
+}
+#journalModal .journal-methods > thead > tr > th{
+  background: #f6f8fa;
+  font-size: 12px;
+}
+#journalModal .journal-methods .journal-total > td{
+  font-weight: bold;
+  border-top: 2px solid #dfe3e8;
+}
+#journalModal .journal-in{
+  color: #3e9e8a;
+}
+#journalModal .journal-out{
+  color: #d84340;
+}
+#journalList .nobr{
+  white-space: nowrap;
+}
+#journalList .journal-details{
+  font-size: 12px;
+  color: #6c757d;
+  max-width: 260px;
+}
+@media (max-width: 991px){
+  #journalModal .journal-top{
+    flex-direction: column;
+    align-items: stretch;
+  }
+  #journalModal .journal-methods{
+    flex: 0 0 auto;
+    width: 100%;
+  }
+  #journalModal .journal-tiles{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+/* short screens: keep room for the list */
+@media (max-height: 720px){
+  #journalModal .journal-tiles small{
+    display: none;
+  }
+}
+
 /* GRN details & supplier transactions popups (.modal-fit): the popup never
    grows past the window; the GRN's product lines scroll in their own box
    with the headings and Total row pinned (the supplier's GRNs & payments

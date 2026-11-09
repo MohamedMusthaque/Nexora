@@ -805,6 +805,7 @@ if (!authedThisSession) {
     applyProfitPermission();
     applyExpensesPermission();
     applySuppliersPermission();
+    applyJournalPermission();
     $("#loggedin-user").text(user.fullname);
     $("#cashier").attr("title", user.fullname);
   });
@@ -881,6 +882,7 @@ if (!authedThisSession) {
     applyProfitPermission();
     applyExpensesPermission();
     applySuppliersPermission();
+    applyJournalPermission();
 
     // function to load products
     function loadProducts() {
@@ -2840,6 +2842,7 @@ if (!authedThisSession) {
       $("#perm_profit").prop("checked", allUsers[index].perm_profit == 1);
       $("#perm_expenses").prop("checked", allUsers[index].perm_expenses == 1);
       $("#perm_suppliers").prop("checked", allUsers[index].perm_suppliers == 1);
+      $("#perm_journal").prop("checked", allUsers[index].perm_journal == 1);
 
       $("#userModal").modal("show");
     };
@@ -3522,37 +3525,7 @@ if (!authedThisSession) {
     $.fn.showCreditPaymentReceipt = function (index) {
       let p = creditState.payments[index];
       if (!p) return;
-      let row = (label, value, strong) =>
-        `<tr><td>${label}</td><td>:</td><td style="text-align:right">${strong ? "<b>" + value + "</b>" : value}</td></tr>`;
-      receipt = `<div style="font-size: 10px;">
-        <p style="text-align: center;">
-          ${settings.img ? '<img style="max-width: 100px;" src="' + img_path + settings.img + '" /><br>' : ""}
-          <span style="font-size: 22px;">${settings.store || ""}</span> <br>
-          ${settings.address_one || ""} <br>
-          ${settings.address_two || ""} <br>
-          ${settings.contact ? "Tel: " + settings.contact + "<br>" : ""}
-        </p>
-        <hr>
-        <p style="text-align: center; font-size: 13px;"><b>CREDIT PAYMENT RECEIPT</b></p>
-        <p>
-          Receipt No : ${p.receipt_no || ""} <br>
-          Customer : ${$("<i>").text(p.customer_name || "").html()} <br>
-          Received by : ${$("<i>").text(p.user || "").html()} <br>
-          Date : ${moment(p.date).format("DD MMM YYYY HH:mm:ss")}
-        </p>
-        <hr>
-        <table width="100%">
-          ${row("Balance before", creditMoney(parseFloat(p.balance_before) || 0))}
-          ${row("<h3 style='margin:4px 0'>Amount paid</h3>", "<h3 style='margin:4px 0'>" + creditMoney(parseFloat(p.received ?? p.amount) || 0) + "</h3>")}
-          ${parseFloat(p.advance_added) > 0 ? row("Applied to credit", creditMoney(parseFloat(p.amount) || 0)) + row("Saved as advance", creditMoney(parseFloat(p.advance_added)), true) : ""}
-          ${row("Method", $("<i>").text(p.method || "").html())}
-          ${p.reference ? row("Reference", $("<i>").text(p.reference).html()) : ""}
-          ${row("Balance now", creditMoney(parseFloat(p.balance_after) || 0), true)}
-        </table>
-        ${p.note ? "<p>Note: " + $("<i>").text(p.note).html() + "</p>" : ""}
-        <hr>
-        <p style="text-align: center;">${settings.footer || "Thank you!"}</p>
-      </div>`;
+      receipt = creditPaymentReceiptHtml(p);
       $("#viewTransaction").html(receipt);
       $("#orderModal").modal("show");
     };
@@ -4721,6 +4694,7 @@ if (!authedThisSession) {
       $("#perm_profit").prop("checked", user.perm_profit == 1);
       $("#perm_expenses").prop("checked", user.perm_expenses == 1);
       $("#perm_suppliers").prop("checked", user.perm_suppliers == 1);
+      $("#perm_journal").prop("checked", user.perm_journal == 1);
     });
 
     $("#add-user").click(function () {
@@ -6730,6 +6704,399 @@ $.fn.viewGrn = function (id) {
       Swal.fire("Oops!", supError(xhr, "Could not load the GRN."), "warning");
     });
 };
+
+// ======================================================================
+// Quick Journal: everything that happened on a day in one list - sales,
+// returns & exchanges, customer credit payments, expenses, GRNs and supplier
+// payments - with the money in / out by method (api/journal.js). Opens on
+// today; the arrows / date pick another day. Print gives a bill-style summary.
+// ======================================================================
+// A customer's credit payment receipt (Customers -> Transactions -> Payments,
+// and the Quick Journal), shown in the sales bill window
+function creditPaymentReceiptHtml(p) {
+  let esc = (t) => $("<i>").text(t || "").html();
+  let row = (label, value, strong) =>
+    `<tr><td>${label}</td><td>:</td><td style="text-align:right">${strong ? "<b>" + value + "</b>" : value}</td></tr>`;
+  return `<div style="font-size: 10px;">
+        <p style="text-align: center;">
+          ${settings.img ? '<img style="max-width: 100px;" src="' + img_path + settings.img + '" /><br>' : ""}
+          <span style="font-size: 22px;">${settings.store || ""}</span> <br>
+          ${settings.address_one || ""} <br>
+          ${settings.address_two || ""} <br>
+          ${settings.contact ? "Tel: " + settings.contact + "<br>" : ""}
+        </p>
+        <hr>
+        <p style="text-align: center; font-size: 13px;"><b>CREDIT PAYMENT RECEIPT</b></p>
+        <p>
+          Receipt No : ${p.receipt_no || ""} <br>
+          Customer : ${esc(p.customer_name)} <br>
+          Received by : ${esc(p.user)} <br>
+          Date : ${moment(p.date).format("DD MMM YYYY HH:mm:ss")}
+        </p>
+        <hr>
+        <table width="100%">
+          ${row("Balance before", supMoney(parseFloat(p.balance_before) || 0))}
+          ${row("<h3 style='margin:4px 0'>Amount paid</h3>", "<h3 style='margin:4px 0'>" + supMoney(parseFloat(p.received ?? p.amount) || 0) + "</h3>")}
+          ${parseFloat(p.advance_added) > 0 ? row("Applied to credit", supMoney(parseFloat(p.amount) || 0)) + row("Saved as advance", supMoney(parseFloat(p.advance_added)), true) : ""}
+          ${row("Method", esc(p.method))}
+          ${p.reference ? row("Reference", esc(p.reference)) : ""}
+          ${row("Balance now", supMoney(parseFloat(p.balance_after) || 0), true)}
+        </table>
+        ${p.note ? "<p>Note: " + esc(p.note) + "</p>" : ""}
+        <hr>
+        <p style="text-align: center;">${settings.footer || "Thank you!"}</p>
+      </div>`;
+}
+
+let journalData = null; // { from, to, entries, summary } of the day shown
+let journalRequestId = 0;
+
+const JOURNAL_TYPE_CSS = {
+  sale: "label-primary",
+  return: "label-danger",
+  exchange: "label-warning",
+  customer_credit_payment: "label-success",
+  customer_advance: "label-success",
+  expense: "label-default",
+  grn: "label-info",
+  supplier_credit_payment: "label-warning",
+  supplier_advance: "label-warning",
+};
+
+function canViewJournal() {
+  return !!(user && (user._id === 1 || user.perm_journal == 1));
+}
+
+function applyJournalPermission() {
+  let allowed = canViewJournal();
+  $("#journalNav").toggle(allowed);
+  if (!allowed && $("#journalModal").hasClass("in")) $("#journalModal").modal("hide");
+}
+
+function journalDay() {
+  let d = moment($("#journalDate").val(), "YYYY-MM-DD", true);
+  return d.isValid() ? d : moment().startOf("day");
+}
+
+function journalCount(n, one, many) {
+  return n + " " + (n === 1 ? one : many);
+}
+
+function openJournal() {
+  if (!canViewJournal()) return;
+  $("#journalDate").val(moment().format("YYYY-MM-DD"));
+  $("#journalKind").val("");
+  loadJournal();
+  $("#journalModal").modal("show");
+}
+
+function loadJournal() {
+  let day = journalDay();
+  $("#journalDate").val(day.format("YYYY-MM-DD"));
+  $("#journalDayLabel").text((day.isSame(moment(), "day") ? "Today, " : "") + day.format("dddd D MMM YYYY"));
+  let requestId = ++journalRequestId;
+  $.get(api + "journal", { from: day.format("YYYY-MM-DD") })
+    .done(function (data) {
+      if (requestId !== journalRequestId) return; // another day was asked for meanwhile
+      journalData = data;
+      renderJournal();
+    })
+    .fail(function (xhr) {
+      if (requestId !== journalRequestId) return;
+      Swal.fire("Oops!", supError(xhr, "Could not load the journal."), "warning");
+    });
+}
+
+function renderJournal() {
+  let s = journalData.summary;
+  $("#jnSales").text(supMoney(s.sales.total));
+  $("#jnSalesNote").text(
+    journalCount(s.sales.count, "bill", "bills") +
+      (s.sales.on_credit > 0 ? " · " + supMoney(s.sales.on_credit) + " on credit" : "")
+  );
+  $("#jnCreditIn").text(supMoney(s.credit_received.total));
+  $("#jnCreditInNote").text(journalCount(s.credit_received.count, "payment", "payments") + " from customers");
+  $("#jnAdvanceIn").text(supMoney(s.advance_received.total));
+  $("#jnAdvanceInNote").text(
+    journalCount(s.advance_received.count, "payment", "payments") +
+      (s.advance_used.customers > 0 ? " · " + supMoney(s.advance_used.customers) + " used on bills" : "")
+  );
+  $("#jnCreditOut").text(supMoney(s.credit_paid.total));
+  $("#jnCreditOutNote").text(journalCount(s.credit_paid.count, "payment", "payments") + " to suppliers");
+  $("#jnAdvanceOut").text(supMoney(s.advance_paid.total));
+  $("#jnAdvanceOutNote").text(
+    journalCount(s.advance_paid.count, "payment", "payments") +
+      (s.advance_used.suppliers > 0 ? " · " + supMoney(s.advance_used.suppliers) + " used by GRNs" : "")
+  );
+  $("#jnRefunds").text(supMoney(s.returns.refunded));
+  $("#jnRefundsNote").text(
+    journalCount(s.returns.count, "return", "returns") +
+      (s.exchanges.count ? " · " + journalCount(s.exchanges.count, "exchange", "exchanges") : "")
+  );
+  $("#jnGrns").text(supMoney(s.grns.total));
+  $("#jnGrnsNote").text(
+    journalCount(s.grns.count, "GRN", "GRNs") +
+      (s.grns.on_credit > 0 ? " · " + supMoney(s.grns.on_credit) + " on credit" : "")
+  );
+  $("#jnExpenses").text(supMoney(s.expenses.total));
+  $("#jnExpensesNote").text(journalCount(s.expenses.count, "expense", "expenses"));
+
+  let rows = Object.keys(s.methods).map((m) => {
+    let v = s.methods[m];
+    return `<tr>
+        <td>${txnHtml(m)}</td>
+        <td class="text-right journal-in">${supMoney(v.in)}</td>
+        <td class="text-right journal-out">${supMoney(v.out)}</td>
+        <td class="text-right"><b>${supMoney(v.net)}</b></td>
+      </tr>`;
+  });
+  rows.push(`<tr class="journal-total">
+      <td>Total</td>
+      <td class="text-right">${supMoney(s.money_in)}</td>
+      <td class="text-right">${supMoney(s.money_out)}</td>
+      <td class="text-right ${s.net < 0 ? "text-danger" : ""}">${supMoney(s.net)}</td>
+    </tr>`);
+  $("#journalMethods").html(rows.join(""));
+
+  renderJournalList();
+}
+
+function journalViewButton(e, index) {
+  let title = {
+    sale: "View the bill",
+    return: "View the original bill",
+    exchange: "View the original bill",
+    grn: "GRN bill",
+    customer_credit_payment: "Credit payment receipt",
+    customer_advance: e.sale_id ? "View the bill" : "Credit payment receipt",
+    supplier_credit_payment: "Payment bill",
+    supplier_advance: "Payment bill",
+  }[e.kind];
+  if (!title) return "";
+  return `<button onClick="$(this).viewJournalEntry(${index})" class="btn btn-info btn-sm" title="${title}"><i class="fa fa-search-plus"></i></button>`;
+}
+
+function renderJournalList() {
+  let kind = $("#journalKind").val();
+  let entries = journalData.entries;
+  let money = (v, css) =>
+    v > 0
+      ? `<td class="text-right nobr ${css}" data-order="${v}" data-export="${supMoney(v)}">${supMoney(v)}</td>`
+      : `<td class="text-right" data-order="0" data-export=""><span class="text-muted">-</span></td>`;
+
+  let rows = entries
+    .map((e, index) => ({ e: e, index: index }))
+    .filter(({ e }) => !kind || e.group === kind)
+    .map(({ e, index }) => {
+      let methodText = e.method + (e.on_credit > 0 ? " (" + supMoney(e.on_credit) + " on credit)" : "");
+      return `<tr>
+        <td class="nobr" data-order="${txnHtml(e.at)}">${
+          e.time_known ? moment(e.at).format("hh:mm A") : '<span class="text-muted" title="Entered on another day">-</span>'
+        }</td>
+        <td class="nobr" data-export="${txnHtml(e.type)}"><span class="label ${JOURNAL_TYPE_CSS[e.kind] || "label-default"}">${txnHtml(e.type)}</span></td>
+        <td>${txnHtml(e.reference)}</td>
+        <td>${txnHtml(e.party)}</td>
+        <td class="journal-details" data-export="${txnHtml(e.details)}">${txnHtml(e.details)}${
+          e.user ? `${e.details ? "<br>" : ""}<small class="text-muted">by ${txnHtml(e.user)}</small>` : ""
+        }</td>
+        <td data-export="${txnHtml(methodText)}">${txnHtml(e.method)}${
+          e.on_credit > 0 ? `<br><small class="text-warning">${supMoney(e.on_credit)} on credit</small>` : ""
+        }</td>
+        <td class="text-right nobr" data-order="${e.amount}">${supMoney(e.amount)}</td>
+        ${money(e.money_in, "journal-in")}
+        ${money(e.money_out, "journal-out")}
+        <td>${journalViewButton(e, index)}</td>
+      </tr>`;
+    });
+
+  if ($.fn.DataTable.isDataTable("#journalList")) $("#journalList").DataTable().destroy();
+  $("#journal_list").html(rows.join(""));
+  $("#journalList").DataTable(
+    Object.assign(
+      standardTableOptions({
+        noun: "entries",
+        searchPlaceholder: "Search the journal...",
+        exportTitle: "Quick Journal",
+        exportColumns: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+        sumColumns: [7, 8],
+        exportSubtitle: () =>
+          journalDay().format("dddd D MMM YYYY") +
+          "   ·   In: " + supMoney(journalData.summary.money_in) +
+          "   ·   Out: " + supMoney(journalData.summary.money_out) +
+          "   ·   Net: " + supMoney(journalData.summary.net),
+        actionColumns: [9],
+        pageLength: 50,
+        emptyTable: kind ? "No entries of this kind on this day" : "Nothing was recorded on this day",
+      }),
+      { order: [[0, "asc"]] }
+    )
+  );
+}
+
+// Bootstrap can't stack popups: the journal steps aside while a bill is open
+// and comes back when the bill is closed
+function journalShowBill(show) {
+  $("#orderModal").one("hidden.bs.modal", function () {
+    $("#journalModal").modal("show");
+  });
+  $("#journalModal").one("hidden.bs.modal", show);
+  $("#journalModal").modal("hide");
+}
+
+$.fn.viewJournalEntry = function (index) {
+  let e = journalData && journalData.entries[index];
+  if (!e) return;
+  let fail = (xhr) => Swal.fire("Oops!", supError(xhr, "Could not load it. It may have been deleted."), "warning");
+
+  if (e.kind === "sale" || e.kind === "return" || e.kind === "exchange" || (e.kind === "customer_advance" && e.sale_id)) {
+    let id = e.kind === "return" || e.kind === "exchange" ? e.order_id : e.id;
+    $.get(api + encodeURIComponent(id))
+      .done(function (t) {
+        journalShowBill(() => $(document).viewTransaction(0, [t]));
+      })
+      .fail(fail);
+  } else if ((e.kind === "customer_credit_payment" || e.kind === "customer_advance") && e.receipt) {
+    let html = creditPaymentReceiptHtml(e.receipt);
+    journalShowBill(function () {
+      receipt = html;
+      $("#viewTransaction").html(html);
+      $("#orderModal").modal("show");
+    });
+  } else if (e.kind === "grn") {
+    $.get(api + "suppliers/grn/" + e.id)
+      .done(function (g) {
+        grnCache[g._id] = g;
+        journalShowBill(() => showSupplierBill(grnBillHtml(g)));
+      })
+      .fail(fail);
+  } else if (e.kind === "supplier_credit_payment" || e.kind === "supplier_advance") {
+    $.get(api + "suppliers/transactions/" + e.supplier_id)
+      .done(function (data) {
+        let p = (data.payments || []).find((x) => x._id === e.id);
+        if (!p) return fail(null);
+        journalShowBill(() => showSupplierBill(supplierPaymentBillHtml(p)));
+      })
+      .fail(fail);
+  }
+};
+
+// the day's summary, printed like a bill
+function journalPrintHtml() {
+  let s = journalData.summary;
+  let row = supBillRow;
+  let heading = (t) => `<tr><td colspan="4" style="padding-top: 6px;"><b>${t}</b></td></tr>`;
+  let sub = (label, value) => row("&nbsp;&nbsp;" + label, value);
+
+  let methods = Object.keys(s.methods)
+    .map((m) => {
+      let v = s.methods[m];
+      return `<tr><td>${txnHtml(m)}</td><td style="text-align: right;">${supMoney(v.in)}</td><td style="text-align: right;">${supMoney(v.out)}</td><td style="text-align: right;"><b>${supMoney(v.net)}</b></td></tr>`;
+    })
+    .join("");
+
+  let entries = journalData.entries
+    .map((e) => {
+      let flow = e.money_in > 0 ? "+" + supMoney(e.money_in) : e.money_out > 0 ? "-" + supMoney(e.money_out) : "-";
+      return `<tr>
+        <td style="vertical-align: top;">${e.time_known ? moment(e.at).format("HH:mm") : ""}</td>
+        <td>${txnHtml(e.type)} ${txnHtml(e.reference)}${e.party ? "<br>" + txnHtml(e.party) : ""}</td>
+        <td style="text-align: right; vertical-align: top;">${supMoney(e.amount)}</td>
+        <td style="text-align: right; vertical-align: top;">${flow}</td>
+      </tr>`;
+    })
+    .join("");
+
+  return `<div style="font-size: 10px;">
+    ${supBillHeader("QUICK JOURNAL")}
+    <p>
+      Date : <b>${journalDay().format("dddd D MMM YYYY")}</b> <br>
+      Printed : ${moment().format("DD MMM YYYY HH:mm:ss")} <br>
+      Printed by : ${txnHtml((user && user.fullname) || "")}
+    </p>
+    <hr>
+    <table width="100%">
+      <tbody>
+        ${heading("SALES &amp; RECEIPTS")}
+        ${row("Sales (" + journalCount(s.sales.count, "bill", "bills") + ")", supMoney(s.sales.total))}
+        ${sub("Received now", supMoney(s.sales.received))}
+        ${s.sales.on_credit > 0 ? sub("On credit", supMoney(s.sales.on_credit)) : ""}
+        ${row("Credit received (" + s.credit_received.count + ")", supMoney(s.credit_received.total))}
+        ${row("Advance received (" + s.advance_received.count + ")", supMoney(s.advance_received.total))}
+        ${row("Refunds (" + journalCount(s.returns.count, "return", "returns") + ")", supMoney(s.returns.refunded))}
+        ${s.exchanges.count ? row("Exchanges (" + s.exchanges.count + ")", supMoney(s.exchanges.total)) : ""}
+        ${heading("PURCHASES &amp; PAYMENTS")}
+        ${row("GRN purchases (" + s.grns.count + ")", supMoney(s.grns.total))}
+        ${s.grns.count ? sub("Paid now", supMoney(s.grns.paid)) : ""}
+        ${s.grns.on_credit > 0 ? sub("On credit", supMoney(s.grns.on_credit)) : ""}
+        ${row("Credit paid to suppliers (" + s.credit_paid.count + ")", supMoney(s.credit_paid.total))}
+        ${row("Advance paid to suppliers (" + s.advance_paid.count + ")", supMoney(s.advance_paid.total))}
+        ${row("Expenses (" + s.expenses.count + ")", supMoney(s.expenses.total))}
+        ${
+          s.advance_used.customers > 0 || s.advance_used.suppliers > 0
+            ? heading("ADVANCES USED (no money moved)") +
+              (s.advance_used.customers > 0 ? row("By customers on bills", supMoney(s.advance_used.customers)) : "") +
+              (s.advance_used.suppliers > 0 ? row("From suppliers on GRNs", supMoney(s.advance_used.suppliers)) : "")
+            : ""
+        }
+      </tbody>
+    </table>
+    <hr>
+    <table width="100%">
+      <thead style="text-align: left;">
+        <tr><th>Money</th><th style="text-align: right;">In</th><th style="text-align: right;">Out</th><th style="text-align: right;">Net</th></tr>
+      </thead>
+      <tbody>
+        ${methods}
+        <tr><td><b>Total</b></td><td style="text-align: right;"><b>${supMoney(s.money_in)}</b></td><td style="text-align: right;"><b>${supMoney(s.money_out)}</b></td><td style="text-align: right;"><b>${supMoney(s.net)}</b></td></tr>
+      </tbody>
+    </table>
+    <table width="100%"><tbody>${row("Net", supMoney(s.net), true)}</tbody></table>
+    <hr>
+    ${
+      entries
+        ? `<p style="text-align: center;"><b>ENTRIES (${journalData.entries.length})</b></p>
+    <table width="100%" style="font-size: 9px;">
+      <thead style="text-align: left;">
+        <tr><th>Time</th><th>Entry</th><th style="text-align: right;">Amount</th><th style="text-align: right;">In / Out</th></tr>
+      </thead>
+      <tbody>${entries}</tbody>
+    </table>`
+        : '<p style="text-align: center;">Nothing was recorded on this day.</p>'
+    }
+    <hr>
+    ${supBillSignatures("Prepared by", "Checked by")}
+  </div>`;
+}
+
+$(function () {
+  $("#journalNav").on("click", openJournal);
+  $("#journalDate").on("change", loadJournal);
+  $("#journalPrevDay").on("click", function () {
+    $("#journalDate").val(journalDay().subtract(1, "day").format("YYYY-MM-DD"));
+    loadJournal();
+  });
+  $("#journalNextDay").on("click", function () {
+    $("#journalDate").val(journalDay().add(1, "day").format("YYYY-MM-DD"));
+    loadJournal();
+  });
+  $("#journalToday").on("click", function () {
+    $("#journalDate").val(moment().format("YYYY-MM-DD"));
+    loadJournal();
+  });
+  $("#journalRefresh").on("click", loadJournal);
+  $("#journalKind").on("change", function () {
+    if (journalData) renderJournalList();
+  });
+  $("#journalPrint").on("click", function () {
+    if (!journalData) return;
+    receipt = journalPrintHtml();
+    $(this).print();
+  });
+  // the list was measured while the popup was hidden
+  $("#journalModal").on("shown.bs.modal", function () {
+    if ($.fn.DataTable.isDataTable("#journalList")) $("#journalList").DataTable().columns.adjust();
+  });
+});
 
 function loadTransactions() {
   let users = [];

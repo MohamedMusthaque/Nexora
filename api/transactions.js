@@ -706,3 +706,23 @@ app.get("/:transactionId", function(req, res) {
     res.send(doc[0]);
   });
 });
+
+
+// ---- Quick Journal (journal.js) ----
+// Completed sales (and credit sales), returns / exchanges and customer credit
+// payments between two moments (Date objects). Read only.
+app.journalData = function(from, to, callback) {
+  transactionsDB.find(
+    { $and: [{ date: { $gte: from.toJSON(), $lte: to.toJSON() } }, { $or: [{ status: 1 }, CREDIT_SALES_QUERY] }] },
+    function(err, sales) {
+      if (err) return callback(err);
+      returnsDB.find({ date: { $gte: from, $lte: to } }, function(err, returns) {
+        if (err) return callback(err);
+        creditPaymentsDB.find({ date: { $gte: from, $lte: to } }, function(err, payments) {
+          if (err) return callback(err);
+          callback(null, { sales: sales || [], returns: returns || [], credit_payments: payments || [] });
+        });
+      });
+    }
+  );
+};

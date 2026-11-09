@@ -450,3 +450,16 @@ app.post( "/payments", function ( req, res ) {
         } );
     } );
 } );
+
+
+// ---- Quick Journal (journal.js) ----
+// GRNs received and supplier payments dated fromDay..toDay ("YYYY-MM-DD"). Read only.
+app.journalData = function ( fromDay, toDay, callback ) {
+    grnsDB.find( { received_date: { $gte: fromDay, $lte: toDay } }, function ( err, grns ) {
+        if ( err ) return callback( err );
+        supplierPaymentsDB.find( { date: { $gte: fromDay, $lte: toDay } }, function ( err, payments ) {
+            if ( err ) return callback( err );
+            callback( null, { grns: grns || [], supplier_payments: payments || [] } );
+        } );
+    } );
+};
