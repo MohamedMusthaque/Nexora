@@ -14,40 +14,76 @@
     <link href="assets/plugins/dataTables/dataTables.bootstrap.min.css" rel="stylesheet" type="text/css" />    
     <link href="assets/css/pages.css" rel="stylesheet" type="text/css" />
     <style>
+      /* ---- Top toolbar ----
+         [till actions]  ......  [back office] | [user · log out · quit]
+         Never scrolls sideways: the buttons get more compact as the window
+         narrows (back-office names, then all names, become icons with the
+         name as a tooltip), and as a last resort the groups wrap. */
       .top-toolbar {
         display: flex;
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
+        gap: 8px 16px;
         width: 100%;
-        overflow-x: auto;
-        overflow-y: hidden;
-        -webkit-overflow-scrolling: touch;
-        padding-bottom: 4px;
+        padding-top: 12px;
+        padding-bottom: 6px;
       }
       .top-toolbar .toolbar-group {
         display: flex;
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
         align-items: center;
-        flex: 0 0 auto;
+        gap: 6px;
+        margin: 0 !important;
+      }
+      .top-toolbar .toolbar-group-right {
+        margin-left: auto !important;
+        justify-content: flex-end;
+      }
+      /* spacing comes from the gap, not the theme's .button-list margins */
+      .top-toolbar .button-list .btn,
+      .top-toolbar .btn-group > .btn {
+        margin: 0;
+      }
+      .top-toolbar .btn {
+        font-size: 13px;
+        padding: 6px 12px;
+        line-height: 1.5;
+        white-space: nowrap;
+      }
+      .top-toolbar .btn-label {
+        padding: 6px 10px;
+        margin: -6px 9px -6px -12px;
+      }
+      .top-toolbar .toolbar-sep {
+        width: 1px;
+        height: 26px;
+        background: rgba(0, 0, 0, 0.12);
+        margin: 0 4px;
       }
       .top-toolbar .toolbar-loading {
         flex: 0 0 auto;
-        margin: 0 10px !important;
+        height: 32px;
+        margin: 0 !important;
       }
-      .top-toolbar #log-out {
-        margin-left: 4px !important;
-      }
-      @media (max-width: 1500px) {
-        .top-toolbar .btn {
-          font-size: 12px;
-          padding: 6px 10px;
+      @media (max-width: 1699px) {
+        .top-toolbar .toolbar-group-right .tb-text {
+          display: none;
+        }
+        .top-toolbar .toolbar-group-right .btn-label {
+          background: none;
+          padding: 0;
+          margin: 0;
         }
       }
-      @media (max-width: 1200px) {
-        .top-toolbar .btn {
-          font-size: 11px;
-          padding: 5px 8px;
+      @media (max-width: 1199px) {
+        .top-toolbar .tb-text {
+          display: none;
+        }
+        .top-toolbar .btn-label {
+          background: none;
+          padding: 0;
+          margin: 0;
         }
       }
     </style>
@@ -61,96 +97,92 @@
         <div class="row main-toolbar-row">
                 <div class="col-sm-12 top-toolbar">
 
-                             <div class="button-list toolbar-group m-t-15 m-l-10">
-                        
+                    <!-- till actions -->
+                    <div class="button-list toolbar-group">
                             <!-- Products window holds both Products and Categories (tabs); hidden
                                  only when the user has neither permission (pos.js) -->
                             <div class="btn-group" id="productsToolbarGroup">
-                            <button id="productModal" data-toggle="modal" data-target="#Products" type="button" class="btn btn-default waves-effect waves-light">
-                                    <span class="btn-label"><i class=" 	glyphicon glyphicon-barcode"></i> </span>  Products   
+                            <button id="productModal" data-toggle="modal" data-target="#Products" type="button" class="btn btn-default waves-effect waves-light" title="Products &amp; categories">
+                                    <span class="btn-label"><i class="glyphicon glyphicon-barcode"></i></span><span class="tb-text">Products</span>
                             </button>
-                            <button id="newProductModal" data-toggle="modal" data-target="#newProduct" type="button" class="btn btn-warning waves-effect waves-light p_one">
-                                    <i class="fa fa-plus"></i> 
+                            <button id="newProductModal" data-toggle="modal" data-target="#newProduct" type="button" class="btn btn-warning waves-effect waves-light p_one" title="Add a product">
+                                    <i class="fa fa-plus"></i>
                             </button>
                             </div>
-                   
-                            <button id="viewRefOrders" data-toggle="modal" data-target="#holdOrdersModal" type="button" class="btn btn-info waves-effect waves-light">
-                                    <span class="btn-label"><i class="fa fa-shopping-basket"></i> </span> Open Tabs
-                            </button>
-            
-                            <button id="viewCustomerOrders" data-toggle="modal" data-target="#customerModal" type="button" onclick="$(this).getCustomerOrders()" class="btn btn-info waves-effect waves-light">
-                                    <span class="btn-label"><i class="fa fa-user"></i> </span> Customers
+
+                            <button id="viewRefOrders" data-toggle="modal" data-target="#holdOrdersModal" type="button" class="btn btn-info waves-effect waves-light" title="Open tabs (held orders)">
+                                    <span class="btn-label"><i class="fa fa-shopping-basket"></i></span><span class="tb-text">Open Tabs</span>
                             </button>
 
-                            <button id="returnOrdersBtn" type="button" onclick="$(this).openSelectOrderModal('return')" class="btn btn-warning waves-effect waves-light p_three">
-                                    <span class="btn-label"><i class="fa fa-undo"></i> </span> Return/Refund
+                            <button id="viewCustomerOrders" data-toggle="modal" data-target="#customerModal" type="button" onclick="$(this).getCustomerOrders()" class="btn btn-info waves-effect waves-light" title="Customers">
+                                    <span class="btn-label"><i class="fa fa-user"></i></span><span class="tb-text">Customers</span>
                             </button>
 
-                            <button id="exchangeOrdersBtn" type="button" onclick="$(this).openSelectOrderModal('exchange')" class="btn btn-info waves-effect waves-light p_three">
-                                    <span class="btn-label"><i class="fa fa-exchange"></i> </span> Exchange
+                            <button id="returnOrdersBtn" type="button" onclick="$(this).openSelectOrderModal('return')" class="btn btn-warning waves-effect waves-light p_three" title="Return / refund">
+                                    <span class="btn-label"><i class="fa fa-undo"></i></span><span class="tb-text">Return/Refund</span>
                             </button>
 
+                            <button id="exchangeOrdersBtn" type="button" onclick="$(this).openSelectOrderModal('exchange')" class="btn btn-info waves-effect waves-light p_three" title="Exchange">
+                                    <span class="btn-label"><i class="fa fa-exchange"></i></span><span class="tb-text">Exchange</span>
+                            </button>
                     </div>
 
+                    <img class="loading toolbar-loading" src="assets/images/loading.gif" alt="">
 
+                    <!-- back office, then the signed-in user -->
+                    <div class="button-list toolbar-group toolbar-group-right">
 
-                    
-                    <img  class="loading toolbar-loading m-t-5" height="50px" src="assets/images/loading.gif" alt="">
-
-                    <div class="button-list toolbar-group m-t-15 m-l-10">
-
-                            <button id="settings" data-toggle="modal" data-target="#settingsModal"  type="button"  class="btn btn-default waves-effect waves-light p_five">
+                            <button id="settings" data-toggle="modal" data-target="#settingsModal" type="button" class="btn btn-default waves-effect waves-light p_five" title="Settings">
                                 <i class="glyphicon glyphicon-cog"></i>
-                          </button>
+                            </button>
 
-                            <button id="transactions" type="button" class="btn btn-default waves-effect waves-light p_three">
-                            <span class="btn-label"><i class=" 	glyphicon glyphicon-credit-card"></i> </span>  Transactions 
+                            <button id="transactions" type="button" class="btn btn-default waves-effect waves-light p_three" title="Transactions">
+                                <span class="btn-label"><i class="glyphicon glyphicon-credit-card"></i></span><span class="tb-text">Transactions</span>
                             </button>
 
                             <!-- shown only with the "Manage Expenses" permission (pos.js: applyExpensesPermission) -->
-                            <button id="expensesNav" type="button" class="btn btn-default waves-effect waves-light" style="display: none;">
-                                <span class="btn-label"><i class="fa fa-money"></i> </span>  Expenses
+                            <button id="expensesNav" type="button" class="btn btn-default waves-effect waves-light" style="display: none;" title="Expenses">
+                                <span class="btn-label"><i class="fa fa-money"></i></span><span class="tb-text">Expenses</span>
                             </button>
 
                             <!-- shown only with the "Manage Suppliers & GRN" permission (pos.js: applySuppliersPermission) -->
-                            <button id="suppliersNav" type="button" class="btn btn-default waves-effect waves-light" style="display: none;">
-                                <span class="btn-label"><i class="fa fa-truck"></i> </span>  Suppliers
+                            <button id="suppliersNav" type="button" class="btn btn-default waves-effect waves-light" style="display: none;" title="Suppliers &amp; GRN">
+                                <span class="btn-label"><i class="fa fa-truck"></i></span><span class="tb-text">Suppliers</span>
                             </button>
 
                             <!-- shown only with the "View Quick Journal" permission (pos.js: applyJournalPermission) -->
-                            <button id="journalNav" type="button" class="btn btn-default waves-effect waves-light" style="display: none;" title="Everything that happened today: sales, returns, payments, expenses and GRNs">
-                                <span class="btn-label"><i class="fa fa-book"></i> </span>  Quick Journal
+                            <button id="journalNav" type="button" class="btn btn-default waves-effect waves-light" style="display: none;" title="Quick Journal: everything that happened today - sales, returns, payments, expenses and GRNs">
+                                <span class="btn-label"><i class="fa fa-book"></i></span><span class="tb-text">Quick Journal</span>
                             </button>
 
-                            <button id="pointofsale" type="button" class="btn btn-default waves-effect waves-light">
-                                <span class="btn-label"><i class=" 	glyphicon glyphicon-shopping-cart"></i> </span>  Point of Sale
+                            <button id="pointofsale" type="button" class="btn btn-default waves-effect waves-light" title="Back to the Point of Sale">
+                                <span class="btn-label"><i class="glyphicon glyphicon-shopping-cart"></i></span><span class="tb-text">Point of Sale</span>
                             </button>
 
                             <div class="btn-group p_four" id="usersToolbarGroup">
-                                <button id="usersModal" data-toggle="modal" data-target="#Users" type="button" class="btn btn-default waves-effect waves-light">
-                                        <span class="btn-label"><i class=" 	glyphicon glyphicon-user"></i> </span>  Users  
+                                <button id="usersModal" data-toggle="modal" data-target="#Users" type="button" class="btn btn-default waves-effect waves-light" title="Users">
+                                        <span class="btn-label"><i class="glyphicon glyphicon-user"></i></span><span class="tb-text">Users</span>
                                 </button>
-                                <button id="add-user" data-toggle="modal"   type="button" class="btn btn-dark waves-effect waves-light">
-                                        <i class="fa fa-plus"></i> 
+                                <button id="add-user" data-toggle="modal" type="button" class="btn btn-dark waves-effect waves-light" title="Add a user">
+                                        <i class="fa fa-plus"></i>
                                 </button>
                              </div>
 
+                            <span class="toolbar-sep"></span>
 
-                            <button type="button"  class="btn btn-light waves-effect waves-light" id="cashier" title="">
-                                <span class="btn-label"><i class="glyphicon glyphicon-user"></i> </span><span id="loggedin-user" style="display:none;"></span>
-                         </button>
+                            <button type="button" class="btn btn-light waves-effect waves-light" id="cashier" title="">
+                                <span class="btn-label"><i class="glyphicon glyphicon-user"></i></span><span id="loggedin-user" style="display:none;"></span>
+                            </button>
 
-                            <button id="log-out"  type="button"  class="btn btn-warning waves-effect waves-light">
+                            <button id="log-out" type="button" class="btn btn-warning waves-effect waves-light" title="Log out">
                                     <i class="glyphicon glyphicon-log-out"></i>
                             </button>
-            
-            
-                            <button id="quit"  type="button" class="btn btn-danger waves-effect waves-light">
+
+                            <button id="quit" type="button" class="btn btn-danger waves-effect waves-light" title="Quit">
                                     <i class="glyphicon glyphicon-off"></i>
                             </button>
-                        
                     </div>
-        
+
                 </div>
             </div>
             <br>
