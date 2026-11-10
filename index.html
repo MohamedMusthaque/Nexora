@@ -1333,26 +1333,25 @@
                     </div>
                     <div class="modal-body">
                         <form id="savePrn" autocomplete="off">
-                            <div class="row">
-                                <div class="col-sm-5 form-group">
+                            <!-- one row: supplier, (walk-in name), date, then the GRN filling what's left -->
+                            <div class="prn-top-row">
+                                <div class="form-group prn-supplier-group">
                                     <label for="prnSupplier">Return To</label>
                                     <select id="prnSupplier" class="form-control"></select>
                                 </div>
-                                <div class="col-sm-4 form-group prn-walkin-group">
+                                <div class="form-group prn-walkin-group">
                                     <label for="prnWalkInName">Seller Name <small class="text-muted">(optional)</small></label>
                                     <input type="text" id="prnWalkInName" class="form-control" maxlength="100" placeholder="Walk-in seller">
                                 </div>
-                                <div class="col-sm-3 form-group">
+                                <div class="form-group prn-date-group">
                                     <label for="prnDate">Return Date</label>
                                     <input type="date" id="prnDate" class="form-control" required>
                                 </div>
-                            </div>
-
-                            <!-- the GRN the goods came with: picked before the products, which it limits.
-                                 Full width, so the list and the GRN picked show in full (pos.js: fillPrnGrnOptions) -->
-                            <div class="row">
-                                <div class="col-sm-12 form-group prn-grn-group">
-                                    <label for="prnGrnRef">GRN No <small class="text-muted">(optional - pick it to return goods from that GRN; a credit GRN is then covered by the return)</small></label>
+                                <!-- the GRN the goods came with: picked before the products, which it limits (pos.js: fillPrnGrnOptions) -->
+                                <div class="form-group prn-grn-group">
+                                    <label for="prnGrnRef">GRN No <small class="text-muted">(optional)</small>
+                                        <!-- whose GRNs are listed: the supplier picked (pos.js: fillPrnGrnOptions) -->
+                                        <span class="label label-info prn-grn-for" id="prnGrnFor"></span></label>
                                     <select id="prnGrnRef" data-placeholder="Search a GRN (optional)"></select>
                                 </div>
                             </div>
@@ -1401,16 +1400,23 @@
                             </table>
                             </div>
 
-                            <!-- the GRN the goods go back against (pos.js: onPrnGrnChange) -->
-                            <div class="alert alert-warning prn-grn-info" style="display: none;"></div>
+                            <!-- the notes sit side by side, so they don't push the form past the window -->
+                            <div class="prn-notes">
+                                <!-- the GRN the goods go back against (pos.js: onPrnGrnChange) -->
+                                <div class="alert alert-warning prn-grn-info" style="display: none;"></div>
 
-                            <!-- what the return does to the supplier's balance (pos.js: updatePrnBalanceInfo) -->
-                            <div class="alert alert-info prn-balance-info" style="display: none;"></div>
-
+                                <!-- what the return does to the supplier's balance (pos.js: updatePrnBalanceInfo) -->
+                                <div class="alert alert-info prn-balance-info" style="display: none;"></div>
+                            </div>
+                        </form>
+                    </div>
+                    <!-- settlement + Save: a footer outside the body, so it's always on screen.
+                         form="savePrn" makes the button submit the form above -->
+                    <div class="modal-footer prn-footer">
                             <div class="row">
-                                <div class="col-sm-5 form-group">
+                                <div class="col-sm-4 form-group">
                                     <label for="prnRefund">Settled By</label>
-                                    <select id="prnRefund" class="form-control">
+                                    <select id="prnRefund" form="savePrn" class="form-control">
                                         <option value="Cash">Cash refund</option>
                                         <option value="Bank Transfer">Bank Transfer refund</option>
                                         <option value="Card">Card refund</option>
@@ -1418,13 +1424,14 @@
                                     </select>
                                     <span class="help-block prn-credit-hint" style="display: none;">Deducting needs a registered supplier.</span>
                                 </div>
-                                <div class="col-sm-7 form-group">
+                                <div class="col-sm-4 form-group">
                                     <label for="prnNote">Reason <small class="text-muted">(optional)</small></label>
-                                    <input type="text" id="prnNote" class="form-control" maxlength="500" placeholder="e.g. damaged, expired, wrong item">
+                                    <input type="text" id="prnNote" form="savePrn" class="form-control" maxlength="500" placeholder="e.g. damaged, expired, wrong item">
+                                </div>
+                                <div class="col-sm-4 form-group prn-save-col">
+                                    <button type="submit" form="savePrn" class="btn btn-danger btn-block waves-effect waves-light" id="submitPrn"><i class="fa fa-check"></i> Save PRN &amp; Update Stock</button>
                                 </div>
                             </div>
-                            <button type="submit" class="btn btn-danger btn-block waves-effect waves-light" id="submitPrn"><i class="fa fa-check"></i> Save PRN &amp; Update Stock</button>
-                        </form>
                     </div>
                </div>
           </div>

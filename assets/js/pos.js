@@ -7549,7 +7549,7 @@ function onPrnGrnChange() {
     $refund.val("Credit").prop("disabled", true);
     $info
       .html(
-        `<i class="fa fa-info-circle"></i> <b>${txnHtml(grn.grn_no)}</b> was bought on <b>credit</b>: this return covers it - the goods returned are <b>deducted from what ${txnHtml(grn.supplier_name)} is owed</b>, not refunded.`
+        `<i class="fa fa-info-circle"></i> <b>${txnHtml(grn.grn_no)}</b> was on <b>credit</b>: the goods returned are <b>deducted from what ${txnHtml(grn.supplier_name)} is owed</b>, not refunded.`
       )
       .show();
   } else {
@@ -7559,7 +7559,7 @@ function onPrnGrnChange() {
     if ($refund.find(`option[value="${suggested}"]`).length && !$refund.find(`option[value="${suggested}"]`).prop("disabled")) $refund.val(suggested);
     $info
       .html(
-        `<i class="fa fa-info-circle"></i> Returning goods from <b>${txnHtml(grn.grn_no)}</b> (paid by ${txnHtml(grn.payment_method === "Advance" ? "the supplier's advance" : grn.payment_method)}). Only its products, at the cost paid on it.`
+        `<i class="fa fa-info-circle"></i> Returning against <b>${txnHtml(grn.grn_no)}</b> (paid by ${txnHtml(grn.payment_method === "Advance" ? "the supplier's advance" : grn.payment_method)}): only its products, at the cost paid on it.`
       )
       .show();
   }
@@ -7626,11 +7626,24 @@ function fillPrnGrnOptions() {
   if (picked && list.some((g) => g.grn_no === picked)) $select.val(picked);
   else $select.val("");
   let changed = ($select.val() || "") !== (picked || "");
-  $select.attr("data-placeholder", list.length ? "Search a GRN (optional)" : "No GRNs from this supplier");
+
+  // say whose GRNs are listed: only the supplier picked (short, as the field
+  // shares its row; the full text shows on hover)
+  let who = supplier === "0" ? "walk-in sellers" : $("#prnSupplier option:selected").text();
+  let whose = supplier === "0" ? "walk-in sellers'" : who + "'s";
+  let forText =
+    supplier === "0"
+      ? list.length ? journalCount(list.length, "walk-in GRN", "walk-in GRNs") : "no walk-in GRNs"
+      : list.length ? journalCount(list.length, "GRN", "GRNs") + " from " + who : "no GRNs from " + who;
+  $("#prnGrnFor")
+    .text(forText)
+    .attr("title", list.length ? journalCount(list.length, "GRN", "GRNs") + " from " + who : "No GRNs from " + who);
+  let placeholder = list.length ? "Search " + whose + " GRNs (optional)" : "No GRNs from " + who;
+  $select.attr("data-placeholder", placeholder);
   if ($select.data("chosen")) {
     $select.trigger("chosen:updated");
     // the placeholder text follows the supplier
-    $select.next(".chosen-container").find(".chosen-single > span").text(list.length ? "Search a GRN (optional)" : "No GRNs from this supplier");
+    if (!$select.val()) $select.next(".chosen-container").find(".chosen-single > span").text(placeholder);
   }
   if (changed || !$("#prnProduct option").length) onPrnGrnChange();
 }

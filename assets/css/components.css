@@ -2929,17 +2929,190 @@ ul.ColVis_collection li {
 .product-batches .nobr{
   white-space: nowrap;
 }
-/* PRN form: the optional GRN list - wide enough for a GRN on one line, and
+/* PRN form: the window never grows past the screen - everything stays in
+   place and only the lines table shrinks and scrolls (no scrolling of the
+   whole window). The body isn't clipped, so the product / GRN lists can
+   still open over the table. */
+#prnModal .modal-dialog{
+  margin-top: 24px;
+  margin-bottom: 24px;
+}
+#prnModal .modal-content{
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+}
+#prnModal .modal-content > .modal-header{
+  flex: 0 0 auto;
+}
+#prnModal .modal-content > .modal-body{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#prnModal #savePrn{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#prnModal #savePrn > *{
+  flex: 0 0 auto;
+}
+#prnModal #savePrn > .grn-lines-scroll{
+  flex: 0 1 auto; /* as tall as its lines, shrinking to what is left */
+  min-height: 110px;
+  max-height: none;
+}
+/* slimmer heading and Total rows, so a short window still shows the lines */
+#prnModal .grn-lines-scroll > .grn-lines > thead > tr > th,
+#prnModal .grn-lines-scroll > .grn-lines > tfoot > tr > th{
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+/* the Save button: a footer below the body, never pushed off the window */
+#prnModal .modal-content > .prn-footer{
+  flex: 0 0 auto;
+  padding: 10px 15px 12px;
+  text-align: left;
+  background: #fafbfc;
+  border-radius: 0 0 6px 6px;
+}
+#prnModal .prn-footer .form-group{
+  margin-bottom: 0;
+}
+#prnModal .prn-footer .help-block{
+  margin: 3px 0 0;
+  font-size: 12px;
+}
+/* the button lines up with the fields, below their labels */
+#prnModal .prn-save-col{
+  padding-top: 25px;
+}
+#prnModal .prn-save-col .btn{
+  height: 34px;
+  padding-left: 6px;
+  padding-right: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#prnModal .modal-body #savePrn > :last-child{
+  margin-bottom: 0;
+}
+/* the GRN and balance notes: one compact row, side by side */
+#prnModal .prn-notes{
+  display: flex;
+  gap: 10px;
+}
+#prnModal .prn-notes > .alert{
+  flex: 1 1 0;
+  min-width: 0;
+  margin-bottom: 12px;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+@media (max-height: 700px){
+  #prnModal .modal-dialog{
+    margin-top: 8px;
+    margin-bottom: 8px;
+  }
+  #prnModal .modal-content{
+    max-height: calc(100vh - 16px);
+  }
+  #prnModal .modal-header{
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  #prnModal .form-group{
+    margin-bottom: 10px;
+  }
+  #prnModal #savePrn > .grn-lines-scroll{
+    min-height: 90px;
+  }
+}
+/* a very short window: rather than hide fields, the body scrolls (the Save
+   button stays put in the footer) */
+@media (max-height: 560px){
+  #prnModal .modal-content > .modal-body{
+    overflow-y: auto;
+  }
+}
+
+/* PRN form, top row: Return To, the walk-in seller's name (when shown),
+   Return Date, and the GRN No taking the rest of the row */
+#prnModal .prn-top-row{
+  display: flex;
+  gap: 15px;
+  align-items: flex-start;
+}
+#prnModal .prn-top-row > .form-group{
+  min-width: 0;
+}
+#prnModal .prn-top-row > .prn-supplier-group{
+  flex: 0 0 235px;
+}
+#prnModal .prn-top-row > .prn-walkin-group{
+  flex: 0 0 150px;
+}
+#prnModal .prn-top-row > .prn-date-group{
+  flex: 0 0 150px;
+}
+#prnModal .prn-top-row > .prn-grn-group{
+  flex: 1 1 0;
+}
+#prnModal .prn-top-row label{
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 767px){
+  #prnModal .prn-top-row{
+    flex-wrap: wrap;
+  }
+  #prnModal .prn-top-row > .form-group{
+    flex: 1 1 100%;
+  }
+}
+
+/* PRN form: the optional GRN list - wide enough for a GRN on one line
+   (lined up with the field's right edge, as it's the last in the row), and
    opening upwards when there's no room below (pos.js: placePrnGrnDrop) */
 #prnModal #prnGrnRef_chosen .chosen-drop{
-  width: 100%;
+  width: auto;
+  min-width: 100%;
+  max-width: calc(100vw - 80px);
+  left: auto;
+  right: 0;
+}
+#prnModal #prnGrnRef_chosen .chosen-results li{
+  min-width: 420px;
 }
 #prnModal .prn-grn-group label small{
   font-weight: normal;
 }
+#prnModal .prn-grn-for{
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+#prnModal .prn-grn-for:empty{
+  display: none;
+}
+/* as tall as the Return To / Return Date boxes beside it */
 #prnModal #prnGrnRef_chosen .chosen-single{
-  height: 34px;
-  line-height: 32px;
+  height: 38px;
+  line-height: 36px;
+}
+#prnModal #prnGrnRef_chosen .chosen-single div{
+  top: 4px;
+}
+#prnModal #prnGrnRef_chosen .chosen-single abbr{
+  top: 12px;
 }
 #prnModal #prnGrnRef_chosen .chosen-results li{
   white-space: nowrap;
