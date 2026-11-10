@@ -13,11 +13,25 @@
   overflow: auto;
 }
 
-#parent { 
-  display: block; 
+/* the till's product tiles: a grid, so every tile in a row is the same
+   height whatever its name or price (a long name or a price range used to
+   make one tile taller, and the next row's floats caught on it) */
+#parent {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-auto-rows: max-content; /* rows never squeezed to fit the panel: it scrolls */
+  align-content: start;
+  gap: 10px;
+  margin-left: 0;
+  margin-right: 0;
+  padding: 0 2px 10px;
   height: calc(100vh - 215px);
   overflow: auto;
-  overflow: hidden;
+}
+/* .row's clearfix pseudo-elements would become grid cells */
+#parent::before,
+#parent::after {
+  display: none;
 }
 
 
@@ -27,11 +41,44 @@ color: #FFFFFF;
 }
 
 #parent .box {
-  margin-bottom: 10px;
+  width: auto;
+  float: none;
+  min-width: 0;
+  min-height: 0; /* not bootstrap's 1px: the tile is as tall as its content */
+  margin: 0;
+  padding: 10px 8px 8px;
   text-align: center;
   display: block;
   cursor: pointer;
   border: 1px solid #f1f1f1;
+  border-radius: 4px;
+  background: #fff;
+}
+/* inside a tile: picture, name, stock, then the price kept at the bottom,
+   so prices line up across the row */
+#parent .box > .widget-panel {
+  height: 100%;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+#parent .box > .widget-panel > .text-success {
+  margin-top: auto;
+  padding-top: 2px;
+  line-height: 1.35;
+}
+#parent .box #product_name {
+  height: 40px;
+  line-height: 20px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+#parent .box:hover {
+  border-color: #d5dbe0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
 }
 
 #product_img {
