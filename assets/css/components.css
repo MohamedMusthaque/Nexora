@@ -2932,8 +2932,14 @@ ul.ColVis_collection li {
 /* PRN form: the optional GRN list - wide enough for a GRN on one line, and
    opening upwards when there's no room below (pos.js: placePrnGrnDrop) */
 #prnModal #prnGrnRef_chosen .chosen-drop{
-  width: 400px;
-  max-width: calc(100vw - 40px);
+  width: 100%;
+}
+#prnModal .prn-grn-group label small{
+  font-weight: normal;
+}
+#prnModal #prnGrnRef_chosen .chosen-single{
+  height: 34px;
+  line-height: 32px;
 }
 #prnModal #prnGrnRef_chosen .chosen-results li{
   white-space: nowrap;

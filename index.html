@@ -1348,6 +1348,15 @@
                                 </div>
                             </div>
 
+                            <!-- the GRN the goods came with: picked before the products, which it limits.
+                                 Full width, so the list and the GRN picked show in full (pos.js: fillPrnGrnOptions) -->
+                            <div class="row">
+                                <div class="col-sm-12 form-group prn-grn-group">
+                                    <label for="prnGrnRef">GRN No <small class="text-muted">(optional - pick it to return goods from that GRN; a credit GRN is then covered by the return)</small></label>
+                                    <select id="prnGrnRef" data-placeholder="Search a GRN (optional)"></select>
+                                </div>
+                            </div>
+
                             <div class="grn-add-bar">
                                 <div class="grn-add-product">
                                     <label for="prnProduct">Product</label>
@@ -1399,7 +1408,7 @@
                             <div class="alert alert-info prn-balance-info" style="display: none;"></div>
 
                             <div class="row">
-                                <div class="col-sm-4 form-group">
+                                <div class="col-sm-5 form-group">
                                     <label for="prnRefund">Settled By</label>
                                     <select id="prnRefund" class="form-control">
                                         <option value="Cash">Cash refund</option>
@@ -1409,12 +1418,7 @@
                                     </select>
                                     <span class="help-block prn-credit-hint" style="display: none;">Deducting needs a registered supplier.</span>
                                 </div>
-                                <div class="col-sm-3 form-group">
-                                    <label for="prnGrnRef">GRN No <small class="text-muted">(optional)</small></label>
-                                    <!-- searchable: the chosen supplier's GRNs (pos.js: fillPrnGrnOptions) -->
-                                    <select id="prnGrnRef" data-placeholder="Search a GRN (optional)"></select>
-                                </div>
-                                <div class="col-sm-5 form-group">
+                                <div class="col-sm-7 form-group">
                                     <label for="prnNote">Reason <small class="text-muted">(optional)</small></label>
                                     <input type="text" id="prnNote" class="form-control" maxlength="500" placeholder="e.g. damaged, expired, wrong item">
                                 </div>
