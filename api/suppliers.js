@@ -636,6 +636,44 @@ app.post( "/prn", function ( req, res ) {
             done();
             res.status( status ).send( message );
         };
+        // A PRN against a GRN: only that GRN's products, no more than it
+        // brought in minus what was already returned against it; and goods
+        // bought on credit are deducted from the supplier's balance (the
+        // return covers the credit).
+        let checkGrn = function ( callback ) {
+            if ( !grnRef ) return callback( null, null );
+            grnsDB.findOne( { grn_no: grnRef }, function ( err, grn ) {
+                if ( err ) return fail( 500, "Could not check the GRN." );
+                if ( !grn ) return fail( 400, "The GRN " + grnRef + " doesn't exist." );
+                if ( ( grn.supplier_id || 0 ) !== supplierId ) {
+                    return fail( 400, "The GRN " + grnRef + " is from " + grn.supplier_name + ", not from the supplier this PRN returns to." );
+                }
+                if ( grn.payment_method === "Credit" && refundMethod !== "Credit" ) {
+                    return fail( 400, "The GRN " + grnRef + " was bought on credit, so this return is deducted from the supplier's balance (it covers the credit), not refunded." );
+                }
+                prnsDB.find( { grn_ref: grnRef }, function ( err, earlier ) {
+                    if ( err ) return fail( 500, "Could not check the GRN." );
+                    let received = {}, returned = {}, asked = {};
+                    ( grn.items || [] ).forEach( ( i ) => { received[i.product_id] = ( received[i.product_id] || 0 ) + i.quantity; } );
+                    ( earlier || [] ).forEach( ( r ) => ( r.items || [] ).forEach( ( i ) => { returned[i.product_id] = ( returned[i.product_id] || 0 ) + i.quantity; } ) );
+                    for ( let i = 0; i < items.length; i++ ) {
+                        let id = items[i].product_id;
+                        if ( !received[id] ) {
+                            return fail( 400, "Line " + ( i + 1 ) + ": that product isn't on " + grnRef + "." );
+                        }
+                        asked[id] = ( asked[id] || 0 ) + items[i].quantity;
+                        let left = received[id] - ( returned[id] || 0 );
+                        if ( asked[id] > left ) {
+                            let line = ( grn.items || [] ).find( ( x ) => x.product_id === id ) || {};
+                            return fail( 400, "Line " + ( i + 1 ) + " (" + ( line.product_name || "product" ) + "): " + grnRef + " brought in " +
+                                received[id] + ( returned[id] ? ", " + returned[id] + " already returned" : "" ) + ", so at most " + Math.max( left, 0 ) + " can go back." );
+                        }
+                    }
+                    callback( null, grn );
+                } );
+            } );
+        };
+        checkGrn( function ( err, grn ) {
         Inventory.getProductsByIds( items.map( ( i ) => i.product_id ), function ( err, products ) {
             if ( err ) return fail( 500, "Could not check the products." );
             let wanted = {};
@@ -687,6 +725,8 @@ app.post( "/prn", function ( req, res ) {
                         total_quantity: items.reduce( ( s, i ) => s + i.quantity, 0 ),
                         total: total,
                         grn_ref: grnRef,
+                        grn_id: grn ? grn._id : null,
+                        grn_payment_method: grn ? grn.payment_method : "",
                         position_before: supplier ? round2( position ) : 0,
                         position_after: positionAfter,
                         note: note,
@@ -718,6 +758,7 @@ app.post( "/prn", function ( req, res ) {
                     } );
                 } );
             } );
+        } );
         } );
     } );
 } );

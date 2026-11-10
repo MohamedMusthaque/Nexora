@@ -6548,6 +6548,16 @@ function grnDetailsHtml(g) {
     ["Added By", txnHtml(g.created_by || "-") + `<br><small>${moment(g.created_at).format("DD MMM YYYY, hh:mm A")}</small>`],
   ]);
   if (g.note) meta.push(["Note", txnHtml(g.note)]);
+  // goods sent back against this GRN (PRNs)
+  let returns = (allPrns || []).filter((r) => r.grn_ref === g.grn_no);
+  if (returns.length) {
+    meta.push([
+      "Returned (PRN)",
+      returns
+        .map((r) => `<span class="text-danger">${txnHtml(r.prn_no)}</span> · ${r.total_quantity || 0} units · ${supMoney(r.total)}`)
+        .join("<br>"),
+    ]);
+  }
   return `<div class="grn-view-meta">${meta
       .map((m) => `<div><small>${m[0].toUpperCase()}</small>${m[1]}</div>`)
       .join("")}</div>
@@ -6838,7 +6848,7 @@ function renderSupplierTransactions() {
       return `<tr>
         <td class="nobr" data-order="${i}">${supDate(r.return_date)}</td>
         <td><span class="label label-danger">PRN</span></td>
-        <td>${txnHtml(r.prn_no)}${r.note ? `<br><small class="text-muted">${txnHtml(r.note)}</small>` : ""}</td>
+        <td>${txnHtml(r.prn_no)}${r.grn_ref ? ` <small class="text-muted">for ${txnHtml(r.grn_ref)}</small>` : ""}${r.note ? `<br><small class="text-muted">${txnHtml(r.note)}</small>` : ""}</td>
         <td data-export="${txnHtml(prnSettledText(r.refund_method))}">${prnSettledHtml(r.refund_method)}</td>
         <td class="text-right nobr" data-export="-${supMoney(r.total)}">-${supMoney(r.total)}</td>
         ${balanceCell(position)}
@@ -7360,7 +7370,7 @@ function renderPrns() {
   let rows = list
     .map(
       (r) => `<tr>
-        <td class="nobr" data-order="${Number(r.seq) || 0}"><b>${txnHtml(r.prn_no)}</b></td>
+        <td class="nobr" data-order="${Number(r.seq) || 0}"><b>${txnHtml(r.prn_no)}</b>${r.grn_ref ? `<br><small class="text-muted">for ${txnHtml(r.grn_ref)}</small>` : ""}</td>
         <td class="nobr" data-order="${txnHtml(r.return_date)}">${supDate(r.return_date)}</td>
         <td data-export="${txnHtml(r.supplier_name)}">${txnHtml(r.supplier_name)}${
           r.walk_in ? ' <span class="label label-default">Walk-in</span>' : ""
@@ -7424,12 +7434,14 @@ function openPrnForm(supplierId) {
       }
       // the GRNs for the optional "GRN No" (fresh, newest first; the ones
       // already loaded if that fails)
-      $.get(api + "suppliers/grns")
-        .done(function (grns) {
-          prnGrns = Array.isArray(grns) ? grns : [];
+      $.when($.get(api + "suppliers/grns"), $.get(api + "suppliers/prns"))
+        .done(function (grns, prns) {
+          prnGrns = Array.isArray(grns[0]) ? grns[0] : [];
+          prnExisting = Array.isArray(prns[0]) ? prns[0] : [];
         })
         .fail(function () {
           prnGrns = allGrns.slice();
+          prnExisting = allPrns.slice();
         })
         .always(function () {
           loadSuppliers(function () {
@@ -7454,23 +7466,117 @@ function preparePrnForm(supplierId) {
   $("#prnSupplier").val(String(supplierId || 0));
   $("#prnDate").val(moment().format("YYYY-MM-DD"));
   $(".grn-currency").text(settings?.symbol ? "(" + settings.symbol + ")" : "");
-  // name — cost · stock · barcode, like the GRN form
+  $("#prnRefund").prop("disabled", false);
+  updatePrnSupplierUi(); // also fills the GRN list
+  onPrnGrnChange(); // no GRN yet: every product, any settlement
+  renderPrnLines();
+}
+
+// ---- a PRN against a GRN ----
+// The GRN picked (optional): only its products can go back, at the unit cost
+// paid on it, and no more than it brought in minus what earlier PRNs already
+// returned against it. A GRN bought on credit is covered by the return: it
+// is deducted from the supplier's balance (not refunded).
+let prnExisting = []; // all PRNs (what was already returned against each GRN)
+
+function prnSelectedGrn() {
+  let no = $("#prnGrnRef").val();
+  return no ? prnGrns.find((g) => g.grn_no === no) || null : null;
+}
+
+// product id -> { product_id, name, unit_cost, received, returned, left }
+function prnGrnReturnable(grn) {
+  let out = {};
+  (grn.items || []).forEach((i) => {
+    let e = (out[i.product_id] = out[i.product_id] || { product_id: i.product_id, name: i.product_name, unit_cost: i.unit_cost, received: 0, returned: 0 });
+    e.received += Number(i.quantity) || 0;
+  });
+  prnExisting
+    .filter((r) => r.grn_ref === grn.grn_no)
+    .forEach((r) =>
+      (r.items || []).forEach((i) => {
+        if (out[i.product_id]) out[i.product_id].returned += Number(i.quantity) || 0;
+      })
+    );
+  Object.values(out).forEach((e) => (e.left = Math.max(e.received - e.returned, 0)));
+  return out;
+}
+
+// the product list: the GRN's products (with what can still go back), or
+// every product with stock
+function fillPrnProductOptions() {
+  let grn = prnSelectedGrn();
+  let returnable = grn ? prnGrnReturnable(grn) : null;
+  let list = grn
+    ? Object.values(returnable).map((e) => Object.assign({}, prnProduct(e.product_id) || { _id: e.product_id, name: e.name, stock: 0 }, { grn: e }))
+    : prnProducts;
   $("#prnProduct").html(
     `<option value=""></option>` +
-      prnProducts
+      list
         .map((p) => {
           let barcode = p.barcode != null && String(p.barcode) !== "NaN" ? String(p.barcode) : "";
-          let cost = parseFloat(p.cost_price);
-          let parts = [isNaN(cost) ? "no cost yet" : "cost " + supMoney(cost)];
+          let parts;
+          if (p.grn) {
+            parts = ["cost " + supMoney(p.grn.unit_cost), "received " + p.grn.received];
+            if (p.grn.returned) parts.push(p.grn.returned + " returned");
+            parts.push("can return " + p.grn.left);
+          } else {
+            let cost = parseFloat(p.cost_price);
+            parts = [isNaN(cost) ? "no cost yet" : "cost " + supMoney(cost)];
+          }
           if (p.stock == 1) parts.push("stock " + (parseInt(p.quantity) || 0));
           if (barcode) parts.push(barcode);
-          return `<option value="${p._id}">${txnHtml(p.name)} — ${txnHtml(parts.join(" · "))}</option>`;
+          let none = p.grn && (p.grn.left < 1 || !prnProduct(p._id));
+          return `<option value="${p._id}"${none ? " disabled" : ""}>${txnHtml(p.name)} — ${txnHtml(parts.join(" · "))}</option>`;
         })
         .join("")
   );
   if ($("#prnProduct").data("chosen")) $("#prnProduct").trigger("chosen:updated");
-  updatePrnSupplierUi();
-  renderPrnLines();
+}
+
+// a GRN picked or cleared: products, settlement and the note follow it
+function onPrnGrnChange() {
+  let grn = prnSelectedGrn();
+  fillPrnProductOptions();
+  $("#prnQty, #prnUnitCost").val("");
+  let $refund = $("#prnRefund");
+  let $info = $(".prn-grn-info");
+  if (!grn) {
+    $refund.prop("disabled", false);
+    $info.hide();
+  } else if (grn.payment_method === "Credit") {
+    // the return covers the credit GRN
+    $refund.val("Credit").prop("disabled", true);
+    $info
+      .html(
+        `<i class="fa fa-info-circle"></i> <b>${txnHtml(grn.grn_no)}</b> was bought on <b>credit</b>: this return covers it - the goods returned are <b>deducted from what ${txnHtml(grn.supplier_name)} is owed</b>, not refunded.`
+      )
+      .show();
+  } else {
+    $refund.prop("disabled", false);
+    // suggest settling the way the GRN was paid
+    let suggested = grn.payment_method === "Advance" ? "Credit" : grn.payment_method;
+    if ($refund.find(`option[value="${suggested}"]`).length && !$refund.find(`option[value="${suggested}"]`).prop("disabled")) $refund.val(suggested);
+    $info
+      .html(
+        `<i class="fa fa-info-circle"></i> Returning goods from <b>${txnHtml(grn.grn_no)}</b> (paid by ${txnHtml(grn.payment_method === "Advance" ? "the supplier's advance" : grn.payment_method)}). Only its products, at the cost paid on it.`
+      )
+      .show();
+  }
+  updatePrnTotals();
+}
+
+// a line that doesn't fit the GRN picked: the message, or ""
+function prnGrnProblem(l) {
+  let grn = prnSelectedGrn();
+  if (!grn) return "";
+  let e = prnGrnReturnable(grn)[l.product_id];
+  if (!e) return `"${l.name}" isn't on ${grn.grn_no}. Remove it, or clear the GRN.`;
+  let total = prnQtyOf(l.product_id);
+  if (total > e.left) {
+    return `${grn.grn_no} brought in ${e.received} of "${l.name}"${e.returned ? ", " + e.returned + " already returned" : ""}, so at most ${e.left} can go back (the lines return ${total}).`;
+  }
+  return "";
 }
 
 // walk-in seller: a name box, and the money can only be refunded
@@ -7519,12 +7625,14 @@ function fillPrnGrnOptions() {
   );
   if (picked && list.some((g) => g.grn_no === picked)) $select.val(picked);
   else $select.val("");
+  let changed = ($select.val() || "") !== (picked || "");
   $select.attr("data-placeholder", list.length ? "Search a GRN (optional)" : "No GRNs from this supplier");
   if ($select.data("chosen")) {
     $select.trigger("chosen:updated");
     // the placeholder text follows the supplier
     $select.next(".chosen-container").find(".chosen-single > span").text(list.length ? "Search a GRN (optional)" : "No GRNs from this supplier");
   }
+  if (changed || !$("#prnProduct option").length) onPrnGrnChange();
 }
 
 function prnFormTotal() {
@@ -7578,11 +7686,11 @@ function updatePrnTotals() {
     let $row = $(`#prn_lines tr[data-index="${i}"]`);
     $row.find(".grn-line-total").text(valid ? supMoney(lineTotal) : "-");
     let p = prnProduct(l.product_id);
-    let problem = prnStockProblem(l);
+    let problem = prnGrnProblem(l) || prnStockProblem(l);
     $row.find(".prn-line-after").html(
       p && p.stock == 1 && valid
         ? problem
-          ? `<span class="text-danger" title="${txnHtml(problem)}">not enough</span>`
+          ? `<span class="text-danger" title="${txnHtml(problem)}">${prnGrnProblem(l) ? "check GRN" : "not enough"}</span>`
           : "→ " + ((parseInt(p.quantity) || 0) - prnQtyOf(l.product_id))
         : ""
     );
@@ -7635,6 +7743,24 @@ function addPrnLine() {
   if (costText === "" || !(cost >= 0)) {
     Swal.fire("Oops!", "Please enter the unit cost (0 or more).", "warning");
     return;
+  }
+  let grn = prnSelectedGrn();
+  if (grn) {
+    let e = prnGrnReturnable(grn)[p._id];
+    if (!e) {
+      Swal.fire("Not on this GRN", `"${p.name}" isn't on ${grn.grn_no}.`, "warning");
+      return;
+    }
+    if (prnQtyOf(p._id) + qty > e.left) {
+      Swal.fire(
+        "Too many",
+        `${grn.grn_no} brought in ${e.received} of "${p.name}"${e.returned ? ", " + e.returned + " already returned" : ""}` +
+          (prnQtyOf(p._id) ? `, ${prnQtyOf(p._id)} already on this PRN` : "") +
+          `: at most ${Math.max(e.left - prnQtyOf(p._id), 0)} more can go back.`,
+        "warning"
+      );
+      return;
+    }
   }
   if (p.stock == 1) {
     let stock = parseInt(p.quantity) || 0;
@@ -7726,6 +7852,7 @@ $(function () {
   });
   $("#prnSupplier").on("change", updatePrnSupplierUi);
   $("#prnRefund").on("change", updatePrnBalanceInfo);
+  $("#prnGrnRef").on("change", onPrnGrnChange);
 
   $("#prnModal").on("shown.bs.modal", function () {
     if (!$("#prnProduct").data("chosen")) {
@@ -7745,7 +7872,9 @@ $(function () {
   $("#prnProduct").on("change", function () {
     let p = prnProduct($(this).val());
     if (!p) return;
-    let cost = parseFloat(p.cost_price);
+    let grn = prnSelectedGrn();
+    let fromGrn = grn ? prnGrnReturnable(grn)[p._id] : null;
+    let cost = fromGrn ? Number(fromGrn.unit_cost) : parseFloat(p.cost_price);
     $("#prnUnitCost").val(isNaN(cost) ? "" : cost.toFixed(2));
     setTimeout(() => $("#prnQty").trigger("focus"), 0);
   });
@@ -7790,6 +7919,11 @@ $(function () {
     let bad = prnLines.find((l) => !prnLineValid(l));
     if (bad) {
       Swal.fire("Oops!", `Please check "${bad.name}": the quantity must be a whole number of at least 1 and the unit cost 0 or more.`, "warning");
+      return;
+    }
+    let grnProblem = prnLines.map(prnGrnProblem).find(Boolean);
+    if (grnProblem) {
+      Swal.fire("Check the GRN", grnProblem, "warning");
       return;
     }
     let stockProblem = prnLines.map(prnStockProblem).find(Boolean);
