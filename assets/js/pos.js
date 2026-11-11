@@ -2588,6 +2588,7 @@ if (!authedThisSession) {
       window.scrollTo(0, 0);
       if (page !== "pos") updateTransactionsStickyOffset();
       if (page === "suppliers") fitSuppliersView();
+      if (page === "accounts") fitAccountsView();
     }
 
     $("#transactions").click(function () {
@@ -10870,33 +10871,68 @@ function accountMoney(n, cls) {
   return `<span class="${n < 0 ? "text-danger" : cls || ""}">${supMoney(n)}</span>`;
 }
 
+// The menu is kept short enough to be fully in view: Overview and the
+// breakdowns in a 2 x 2 grid, then one line per account in three sections.
+const ACCOUNTS_MENU_GROUPS = {
+  Money: "Money",
+  Customers: "Credit & Advances",
+  Suppliers: "Credit & Advances",
+  "Sales & Purchases": "Sales, Purchases & Stock",
+  Stock: "Sales, Purchases & Stock",
+};
+const ACCOUNTS_MENU_NAMES = { prn: "Purchase Returns" }; // the full name is on the account's page
+
+// the menu's amounts: without the currency symbol, to fit on the line
+function accountMenuMoney(n) {
+  n = Number(n) || 0;
+  let text = (n < 0 ? "-" : "") + Math.abs(n).toFixed(2);
+  return n < 0 ? `<span class="text-danger">${text}</span>` : text;
+}
+
 function renderAccountsList() {
   let groups = [];
   accountsData.accounts.forEach((a) => {
-    let g = groups.find((x) => x.name === a.group);
-    if (!g) groups.push((g = { name: a.group, accounts: [] }));
+    let name = ACCOUNTS_MENU_GROUPS[a.group] || a.group;
+    let g = groups.find((x) => x.name === name);
+    if (!g) groups.push((g = { name: name, accounts: [] }));
     g.accounts.push(a);
   });
-  let html = `<button type="button" class="accounts-item accounts-item-overview" data-account="overview">
-      <i class="fa fa-th-large"></i><span class="accounts-item-name">Overview</span></button>
-    <div class="accounts-group">Breakdowns</div>`;
-  Object.keys(PARTY_VIEWS).forEach((by) => {
-    let v = PARTY_VIEWS[by];
-    html += `<button type="button" class="accounts-item accounts-item-plain" data-account="by:${by}" title="${txnHtml(v.note)}">
-        <i class="fa ${v.icon}"></i><span class="accounts-item-name">${txnHtml(v.title)}</span></button>`;
-  });
+  let quick = [{ id: "overview", title: "Overview", icon: "fa-th-large", note: "All accounts at a glance" }].concat(
+    Object.keys(PARTY_VIEWS).map((by) => Object.assign({ id: "by:" + by }, PARTY_VIEWS[by]))
+  );
+  let html =
+    `<div class="accounts-quick">` +
+    quick
+      .map(
+        (q) => `<button type="button" class="accounts-item" data-account="${q.id}" title="${txnHtml(q.note)}">
+          <i class="fa ${q.icon}"></i><span class="accounts-item-name">${txnHtml(q.title)}</span></button>`
+      )
+      .join("") +
+    `</div>`;
   groups.forEach((g) => {
     html += `<div class="accounts-group">${txnHtml(g.name)}</div>`;
     g.accounts.forEach((a) => {
       let quiet = a.type === "activity" && !a.count;
-      html += `<button type="button" class="accounts-item${quiet ? " accounts-item-quiet" : ""}" data-account="${txnHtml(a.id)}" title="${txnHtml(a.note || "")}">
+      let tip = a.name + (a.note ? " - " + a.note : "") + ": " + supMoney(accountValue(a));
+      html += `<button type="button" class="accounts-item${quiet ? " accounts-item-quiet" : ""}" data-account="${txnHtml(a.id)}" title="${txnHtml(tip)}">
           <i class="fa ${txnHtml(a.icon)}"></i>
-          <span class="accounts-item-name">${txnHtml(a.name)}</span>
-          <span class="accounts-item-value">${accountMoney(accountValue(a))}</span>
+          <span class="accounts-item-name">${txnHtml(ACCOUNTS_MENU_NAMES[a.id] || a.name)}</span>
+          <span class="accounts-item-value">${accountMenuMoney(accountValue(a))}</span>
         </button>`;
     });
   });
   $("#accountsList").html(html);
+}
+
+// The Accounts page is fixed to the window: it gets the height left below
+// the toolbar; the menu stays in view and the open account scrolls
+// (body.accounts-mode in components.css). Run when the page opens and
+// whenever the window resizes.
+function fitAccountsView() {
+  let el = document.getElementById("accounts_view");
+  if (!el || !$(el).is(":visible")) return;
+  let top = el.getBoundingClientRect().top;
+  el.style.height = Math.max(window.innerHeight - top - 15, 360) + "px";
 }
 
 function showAccount(id) {
@@ -10906,6 +10942,7 @@ function showAccount(id) {
   let menuId = party ? "by:" + party[1] : id;
   $("#accountsList .accounts-item").removeClass("active");
   $(`#accountsList .accounts-item[data-account="${menuId}"]`).addClass("active");
+  $("#accounts_view .accounts-detail").scrollTop(0);
   if (id === "overview") renderAccountsOverview();
   else if (party && party.length > 2) loadPartyStatement(party[1], party.slice(2).join(":"));
   else if (party) loadParties(party[1]);
@@ -11097,6 +11134,10 @@ $(function () {
     showAccount(String($(this).data("account")));
   });
   $("#accountsRefresh").on("click", loadAccounts);
+  $(window).on("resize", fitAccountsView);
+  if (window.ResizeObserver && document.querySelector(".main-toolbar-row")) {
+    new ResizeObserver(fitAccountsView).observe(document.querySelector(".main-toolbar-row"));
+  }
 });
 
 

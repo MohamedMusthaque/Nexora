@@ -4383,18 +4383,33 @@ body.suppliers-mode #suppliers_view .ph-table-scroll::-webkit-scrollbar-thumb{
    | MONEY            | [opening] [in] [out] [closing]              |
    |   Cash   1,200   | date  type  ref  party  details  in out bal |
    |   Card ...       |                                             |
-   The menu stays in view while the statement scrolls with the page. */
-#accounts_view .accounts-header{
+   The page is fixed to the window (pos.js: fitAccountsView): the menu is
+   always fully in view and only the open account (right) scrolls. */
+body.accounts-mode #accounts_view > .row,
+body.accounts-mode #accounts_view > .row > .col-md-12{
+  height: 100%;
+}
+body.accounts-mode #accounts_view .card-box{
+  height: 100%;
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
+  margin-bottom: 0;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  overflow: hidden;
+}
+#accounts_view .accounts-header{
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 #accounts_view .accounts-subtitle{
-  margin: 4px 0 0;
-  font-size: 13px;
+  margin: 2px 0 0;
+  font-size: 12.5px;
   color: #98a6ad;
 }
 #accounts_view .accounts-tools{
@@ -4406,26 +4421,28 @@ body.suppliers-mode #suppliers_view .ph-table-scroll::-webkit-scrollbar-thumb{
   margin: 0;
 }
 #accounts_view .accounts-layout{
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 20px;
 }
 
-/* the menu */
+/* the menu: one line per account, sized to be fully in view (it only gets
+   a scroll bar of its own in a window too short for it) */
 #accounts_view .accounts-list{
-  flex: 0 0 250px;
-  position: sticky;
-  top: calc(var(--toolbar-height, 64px) + 10px);
-  max-height: calc(100vh - var(--toolbar-height, 64px) - 30px);
+  flex: 0 0 270px;
+  min-height: 0;
   overflow-y: auto;
-  padding: 8px;
+  padding: 6px;
   border: 1px solid #e9edf0;
   border-radius: 8px;
   background: #fafbfc;
 }
 #accounts_view .accounts-group{
-  margin: 12px 8px 4px;
-  font-size: 11px;
+  margin: 9px 8px 3px;
+  font-size: 10.5px;
+  line-height: 13px;
   font-weight: 700;
   letter-spacing: 0.6px;
   text-transform: uppercase;
@@ -4434,23 +4451,25 @@ body.suppliers-mode #suppliers_view .ph-table-scroll::-webkit-scrollbar-thumb{
 #accounts_view .accounts-item{
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 2px 8px 2px 6px;
   border: none;
   border-left: 3px solid transparent;
   border-radius: 6px;
   background: transparent;
   color: #4c5667;
   text-align: left;
-  font-size: 13.5px;
+  font-size: 13px;
+  line-height: 18px;
   transition: background 0.12s;
 }
 #accounts_view .accounts-item > .fa{
-  flex: 0 0 28px;
-  height: 28px;
-  line-height: 28px;
-  border-radius: 7px;
+  flex: 0 0 20px;
+  height: 20px;
+  line-height: 20px;
+  font-size: 11px;
+  border-radius: 5px;
   text-align: center;
   background: #eef1f4;
   color: #7a8794;
@@ -4465,9 +4484,30 @@ body.suppliers-mode #suppliers_view .ph-table-scroll::-webkit-scrollbar-thumb{
 }
 #accounts_view .accounts-item-value{
   flex: 0 0 auto;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
+  color: #6c7a86;
+}
+#accounts_view .accounts-item.active .accounts-item-value{
+  color: #2f8f7b;
+}
+/* Overview and the breakdowns: a 2 x 2 grid at the top */
+#accounts_view .accounts-quick{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+#accounts_view .accounts-quick .accounts-item{
+  padding: 5px 6px 5px 4px;
+  font-size: 12.5px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #e9edf0 inset;
+}
+#accounts_view .accounts-quick .accounts-item.active{
+  background: rgba(95, 190, 170, 0.12);
+  box-shadow: none;
 }
 #accounts_view .accounts-item:hover{
   background: #f0f3f5;
@@ -4487,14 +4527,14 @@ body.suppliers-mode #suppliers_view .ph-table-scroll::-webkit-scrollbar-thumb{
 #accounts_view .accounts-item-quiet{
   opacity: 0.6;
 }
-#accounts_view .accounts-item-overview{
-  margin-bottom: 2px;
-}
 
-/* the open account */
+/* the open account: scrolls on its own */
 #accounts_view .accounts-detail{
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
 }
 #accounts_view .accounts-detail-head h4{
   margin: 0;
@@ -4574,43 +4614,23 @@ body.suppliers-mode #suppliers_view .ph-table-scroll::-webkit-scrollbar-thumb{
 #accounts_view .nobr{
   white-space: nowrap;
 }
+/* narrow windows: the menu above the account, the whole card scrolls */
 @media (max-width: 900px){
+  body.accounts-mode #accounts_view .card-box{
+    overflow-y: auto;
+  }
   #accounts_view .accounts-layout{
+    flex: 0 0 auto;
     flex-direction: column;
   }
   #accounts_view .accounts-list{
-    position: static;
     flex: 0 0 auto;
     width: 100%;
-    max-height: none;
+    overflow: visible;
   }
-}
-/* menu items: the name on one line, the amount below it (no cut-off names) */
-#accounts_view .accounts-item{
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  column-gap: 10px;
-  align-items: center;
-}
-#accounts_view .accounts-item > .fa{
-  grid-row: span 2;
-}
-#accounts_view .accounts-item-name{
-  white-space: normal;
-  line-height: 1.25;
-}
-#accounts_view .accounts-item-value{
-  grid-column: 2;
-  font-size: 12px;
-  line-height: 1.3;
-  color: #6c7a86;
-}
-#accounts_view .accounts-item.active .accounts-item-value{
-  color: #2f8f7b;
-}
-#accounts_view .accounts-item-overview > .fa,
-#accounts_view .accounts-item-plain > .fa{
-  grid-row: auto;
+  #accounts_view .accounts-detail{
+    overflow: visible;
+  }
 }
 
 /* Customer-wise / Supplier-wise / Expense-wise (pos.js: renderParties, renderPartyStatement) */
