@@ -2658,23 +2658,27 @@ if (!authedThisSession) {
       $("#expenses_view").toggle(page === "expenses");
       $("#suppliers_view").toggle(page === "suppliers");
       $("#accounts_view").toggle(page === "accounts");
+      $("#journal_view").toggle(page === "journal");
       $("#pointofsale").toggle(page !== "pos");
       $("#transactions").toggleClass("nav-current", page === "transactions");
       $("#expensesNav").toggleClass("nav-current", page === "expenses");
       $("#suppliersNav").toggleClass("nav-current", page === "suppliers");
       $("#accountsNav").toggleClass("nav-current", page === "accounts");
+      $("#journalNav").toggleClass("nav-current", page === "journal");
 
       $("body")
         .toggleClass("transactions-mode", page === "transactions")
         .toggleClass("expenses-mode", page === "expenses")
         .toggleClass("suppliers-mode", page === "suppliers")
         .toggleClass("accounts-mode", page === "accounts")
+        .toggleClass("journal-mode", page === "journal")
         .removeClass("totals-compact");
       window.scrollTo(0, 0);
       if (page !== "pos") updateTransactionsStickyOffset();
       if (page === "suppliers") fitSuppliersView();
       if (page === "accounts") fitAccountsView();
       if (page === "expenses") fitExpensesView();
+      if (page === "journal") fitJournalView();
     }
 
     $("#transactions").click(function () {
@@ -2697,6 +2701,12 @@ if (!authedThisSession) {
       if (!canManageSuppliers()) return;
       showPage("suppliers");
       loadSuppliersPage();
+    });
+
+    $("#journalNav").click(function () {
+      if (!canViewJournal()) return;
+      showPage("journal");
+      openJournal();
     });
 
     $("#accountsNav").click(function () {
@@ -8350,7 +8360,7 @@ function applyJournalPermission() {
   $("#journalNav, #dayEndNav, #accountsNav").toggle(allowed);
   // permission taken away while the Accounts page is open: back to the till
   if (!allowed && $("#accounts_view").is(":visible")) $("#pointofsale").trigger("click");
-  if (!allowed && $("#journalModal").hasClass("in")) $("#journalModal").modal("hide");
+  if (!allowed && $("#journal_view").is(":visible")) $("#pointofsale").trigger("click");
   if (!allowed && $("#dayEndModal").hasClass("in")) $("#dayEndModal").modal("hide");
 }
 
@@ -8363,12 +8373,23 @@ function journalCount(n, one, many) {
   return n + " " + (n === 1 ? one : many);
 }
 
+// the Quick Journal page opens on today (pos.js: showPage("journal"))
 function openJournal() {
   if (!canViewJournal()) return;
   $("#journalDate").val(moment().format("YYYY-MM-DD"));
   $("#journalKind").val("");
   loadJournal();
-  $("#journalModal").modal("show");
+}
+
+// The Quick Journal page is fixed to the window (like the Expenses page): it
+// gets the height left below the toolbar and the day's entries scroll inside
+// it (body.journal-mode in components.css).
+function fitJournalView() {
+  let el = document.getElementById("journal_view");
+  if (!el || !$(el).is(":visible")) return;
+  let top = el.getBoundingClientRect().top;
+  el.style.height = Math.max(window.innerHeight - top - 15, 360) + "px";
+  if ($.fn.DataTable.isDataTable("#journalList")) $("#journalList").DataTable().columns.adjust();
 }
 
 function loadJournal() {
@@ -8520,14 +8541,9 @@ function renderJournalList() {
   );
 }
 
-// Bootstrap can't stack popups: the journal steps aside while a bill is open
-// and comes back when the bill is closed
+// the bill / receipt / slip behind an entry opens over the journal page
 function journalShowBill(show) {
-  $("#orderModal").one("hidden.bs.modal", function () {
-    $("#journalModal").modal("show");
-  });
-  $("#journalModal").one("hidden.bs.modal", show);
-  $("#journalModal").modal("hide");
+  show();
 }
 
 $.fn.viewJournalEntry = function (index) {
@@ -8695,7 +8711,6 @@ function journalPrintHtml() {
 }
 
 $(function () {
-  $("#journalNav").on("click", openJournal);
   $("#journalDate").on("change", loadJournal);
   $("#journalPrevDay").on("click", function () {
     $("#journalDate").val(journalDay().subtract(1, "day").format("YYYY-MM-DD"));
@@ -8718,10 +8733,10 @@ $(function () {
     receipt = journalPrintHtml();
     $(this).print();
   });
-  // the list was measured while the popup was hidden
-  $("#journalModal").on("shown.bs.modal", function () {
-    if ($.fn.DataTable.isDataTable("#journalList")) $("#journalList").DataTable().columns.adjust();
-  });
+  $(window).on("resize", fitJournalView);
+  if (window.ResizeObserver && document.querySelector(".main-toolbar-row")) {
+    new ResizeObserver(fitJournalView).observe(document.querySelector(".main-toolbar-row"));
+  }
 });
 
 function loadTransactions() {

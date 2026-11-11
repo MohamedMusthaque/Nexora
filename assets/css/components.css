@@ -92,7 +92,8 @@
 body.transactions-mode,
 body.expenses-mode,
 body.suppliers-mode,
-body.accounts-mode{
+body.accounts-mode,
+body.journal-mode{
   /* overflow-x: hidden on body would make it a scroll container and stop
      position: sticky from working; clip hides overflow the same way without that */
   overflow-x: clip;
@@ -100,7 +101,8 @@ body.accounts-mode{
 body.transactions-mode .main-toolbar-row,
 body.expenses-mode .main-toolbar-row,
 body.suppliers-mode .main-toolbar-row,
-body.accounts-mode .main-toolbar-row{
+body.accounts-mode .main-toolbar-row,
+body.journal-mode .main-toolbar-row{
   position: sticky;
   top: 0;
   z-index: 1000;
@@ -3233,86 +3235,100 @@ ul.ColVis_collection li {
   min-height: 0;
 }
 
-/* ---- Quick Journal (#journalModal, .modal-fit) ----
+/* ---- Quick Journal page (#journal_view) ----
    [< date >] [Today]  Saturday 8 Nov 2026 ........ [All entries v] [reload]
    [ six totals ]  [ money in / out by method ]
    the day's entries (only this list scrolls) */
-#journalModal .journal-bar{
+#journal_view .journal-header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+#journal_view .journal-bar{
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
 }
-#journalModal .journal-date{
+#journal_view .journal-date{
   display: flex;
   align-items: center;
 }
-#journalModal .journal-date .form-control{
+#journal_view .journal-date .form-control{
   width: 160px;
   border-radius: 0;
   margin: 0 -1px;
 }
-#journalModal .journal-date .btn:first-child{
+#journal_view .journal-date .btn:first-child{
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
 }
-#journalModal .journal-date .btn:last-child{
+#journal_view .journal-date .btn:last-child{
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
 }
-#journalModal .journal-day{
+#journal_view .journal-day{
   font-weight: 600;
   color: #4c5667;
   margin-left: 4px;
 }
-#journalModal #journalKind{
+#journal_view #journalKind{
   width: auto;
   min-width: 180px;
   margin-left: auto;
 }
-#journalModal .journal-top{
+#journal_view .journal-top{
   display: flex;
   align-items: flex-start;
   gap: 14px;
   margin-bottom: 12px;
 }
-#journalModal .journal-tiles{
+#journal_view .journal-tiles{
   flex: 1 1 auto;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 0;
 }
-#journalModal .journal-tiles .sup-tile{
+#journal_view .journal-tiles .sup-tile{
   padding: 6px 10px;
 }
-#journalModal .journal-tiles .sup-value{
+#journal_view .journal-tiles .sup-value{
   font-size: 18px;
 }
-#journalModal .journal-tiles h5{
+#journal_view .journal-tiles h5{
   font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-#journalModal .journal-methods{
-  flex: 0 0 320px;
-  width: 320px;
+#journal_view .journal-methods{
+  flex: 0 0 460px;
+  width: 460px;
   margin-bottom: 0;
   border: 1px solid #e3e3e3;
 }
-#journalModal .journal-methods > thead > tr > th{
+/* amounts on one line (the page is wide enough), so the table stays short */
+#journal_view .journal-methods > thead > tr > th,
+#journal_view .journal-methods > tbody > tr > td{
+  white-space: nowrap;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+#journal_view .journal-methods > thead > tr > th{
   background: #f6f8fa;
   font-size: 12px;
 }
-#journalModal .journal-methods .journal-total > td{
+#journal_view .journal-methods .journal-total > td{
   font-weight: bold;
   border-top: 2px solid #dfe3e8;
 }
-#journalModal .journal-in{
+#journal_view .journal-in{
   color: #3e9e8a;
 }
-#journalModal .journal-out{
+#journal_view .journal-out{
   color: #d84340;
 }
 #journalList .nobr{
@@ -3324,23 +3340,111 @@ ul.ColVis_collection li {
   max-width: 260px;
 }
 @media (max-width: 991px){
-  #journalModal .journal-top{
+  #journal_view .journal-top{
     flex-direction: column;
     align-items: stretch;
   }
-  #journalModal .journal-methods{
+  #journal_view .journal-methods{
     flex: 0 0 auto;
     width: 100%;
   }
-  #journalModal .journal-tiles{
+}
+/* totals two across only on very narrow windows (four across takes less height) */
+@media (max-width: 699px){
+  #journal_view .journal-tiles{
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+/* The totals and the money table never take more than 35% of the page: if
+   they need more (narrow or short windows, where they stack), they scroll in
+   their own box, so the day's entries always keep the rest of the page and
+   scroll in theirs. */
+body.journal-mode #journal_view .journal-top{
+  max-height: 35%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+body.journal-mode #journal_view .journal-top .journal-methods > thead > tr > th{
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+body.journal-mode #journal_view .journal-top::-webkit-scrollbar{
+  width: 8px;
+}
+body.journal-mode #journal_view .journal-top::-webkit-scrollbar-thumb{
+  background: #cfd6dc;
+  border-radius: 4px;
+}
 /* short screens: keep room for the list */
 @media (max-height: 720px){
-  #journalModal .journal-tiles small{
+  #journal_view .journal-tiles small{
     display: none;
   }
+}
+
+
+/* fixed to the window like the Expenses page (pos.js: fitJournalView): the
+   page doesn't scroll, the day's entries scroll inside it */
+body.journal-mode{
+  overflow: hidden;
+}
+body.journal-mode #journal_view > .row,
+body.journal-mode #journal_view > .row > .col-md-12{
+  height: 100%;
+}
+body.journal-mode #journal_view .card-box{
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0;
+  padding-top: 14px;
+  padding-bottom: 12px;
+  overflow: auto; /* very short windows: the whole card scrolls instead */
+}
+body.journal-mode #journal_view .card-box > :not(.dataTables_wrapper){
+  flex: 0 0 auto;
+}
+body.journal-mode #journal_view .card-box > .dataTables_wrapper{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+body.journal-mode #journal_view .dataTables_wrapper > .ph-toolbar,
+body.journal-mode #journal_view .dataTables_wrapper > .ph-footer{
+  flex: 0 0 auto;
+}
+body.journal-mode #journal_view .dataTables_wrapper > .ph-toolbar{
+  margin-bottom: 6px;
+}
+body.journal-mode #journal_view .dataTables_wrapper > .ph-table-scroll{
+  flex: 1 1 auto;
+  min-height: 130px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border-bottom: 1px solid #e3e3e3;
+}
+body.journal-mode #journal_view .ph-table-scroll > table{
+  margin-top: 0 !important;   /* dataTables.bootstrap adds 6px above the table */
+  margin-bottom: 0 !important;
+}
+/* headings stay visible while the rows scroll */
+body.journal-mode #journal_view .ph-table-scroll > table > thead > tr > th{
+  /* !important: jquery.dataTables.min.css sets position: relative on sortable headings */
+  position: sticky !important;
+  top: 0;
+  z-index: 2;
+  background: #f6f8fa;
+  box-shadow: inset 0 -1px 0 #dfe3e8;
+}
+body.journal-mode #journal_view .ph-table-scroll::-webkit-scrollbar{
+  width: 8px;
+  height: 8px;
+}
+body.journal-mode #journal_view .ph-table-scroll::-webkit-scrollbar-thumb{
+  background: #cfd6dc;
+  border-radius: 4px;
 }
 
 /* GRN details & supplier transactions popups (.modal-fit): the popup never
