@@ -2679,6 +2679,7 @@ if (!authedThisSession) {
       if (page === "accounts") fitAccountsView();
       if (page === "expenses") fitExpensesView();
       if (page === "journal") fitJournalView();
+      if (page === "transactions") fitTransactionsView();
     }
 
     $("#transactions").click(function () {
@@ -5305,12 +5306,16 @@ function renderProfit(result) {
   let money = (n) => (n < 0 ? "-" : "") + sym + Math.abs(n).toFixed(2);
   let t = result.totals;
 
-  $("#profitPeriod").text(
-    ($("#profitDateRange .date-range-label").text() || "All dates") +
-      " · " +
-      ($("#status option:selected").text() || "All") +
-      (by_method ? " · " + $("#paymentMethodFilter option:selected").text() : "")
-  );
+  // the Transactions tab's filters this profit follows (Profit is on its own tab)
+  let cashier = $("#users").val() && $("#users").val() != 0 ? $("#users option:selected").text() : "All";
+  $("#profitPeriod")
+    .text(
+      ($("#profitDateRange .date-range-label").text() || "All dates") +
+        " · Cashier: " + cashier +
+        " · Status: " + ($("#status option:selected").text() || "All") +
+        (by_method ? " · " + $("#paymentMethodFilter option:selected").text() : "")
+    )
+    .attr("title", "Cashier, Status and Payment Method are set on the Transactions tab");
   $("#profitNetSales").text(money(t.netSales));
   $("#profitCost").text(money(t.cost));
   $("#profitGross")
@@ -5385,9 +5390,39 @@ function canViewProfit() {
   return !!(user && (user._id === 1 || user.perm_profit == 1));
 }
 
+// Profit is its own tab on the Transactions page: the tab is hidden without
+// the permission (and the page goes back to the Transactions tab)
 function applyProfitPermission() {
-  $("#profitSection").toggle(canViewProfit());
+  let allowed = canViewProfit();
+  $("#profitSection").toggle(allowed);
+  $("#profitTabNav").toggle(allowed);
+  if (!allowed && $("#profitTabNav").hasClass("active")) {
+    $('#transactions_view a[href="#txnTabList"]').tab("show");
+  }
 }
+
+// The Transactions page is fixed to the window (like the Expenses page): it
+// gets the height left below the toolbar, and the bills, the products sold
+// and the profit list scroll inside it (body.transactions-mode in
+// components.css). Run when the page opens and whenever the window resizes.
+function fitTransactionsView() {
+  let el = document.getElementById("transactions_view");
+  if (!el || !$(el).is(":visible")) return;
+  let top = el.getBoundingClientRect().top;
+  el.style.height = Math.max(window.innerHeight - top - 15, 380) + "px";
+  ["#transactionList", "#profitTable"].forEach((sel) => {
+    if ($.fn.DataTable.isDataTable(sel) && $(sel).is(":visible")) $(sel).DataTable().columns.adjust();
+  });
+}
+
+$(function () {
+  // a tab's table was measured while it was hidden
+  $('#transactions_view .transactions-tabs a[data-toggle="tab"]').on("shown.bs.tab", fitTransactionsView);
+  $(window).on("resize", fitTransactionsView);
+  if (window.ResizeObserver && document.querySelector(".main-toolbar-row")) {
+    new ResizeObserver(fitTransactionsView).observe(document.querySelector(".main-toolbar-row"));
+  }
+});
 
 // fetches the sales for the Profit date range + page filters, then shows profit
 function refreshProfit() {
@@ -8959,16 +8994,16 @@ function loadSoldProducts() {
     counter++;
 
     sold_list += `<tr>
-            <td>${item?.product}</td>
-            <td>${item?.qty}</td>
-            <td>${
+            <td>${txnHtml(item?.product)}</td>
+            <td class="text-right">${item?.qty}</td>
+            <td class="text-right txn-stock">${
               product[0]?.stock == 1
                 ? product.length > 0
                   ? product[0]?.quantity
                   : ""
                 : "N/A"
             }</td>
-            <td>${
+            <td class="text-right nobr">${
               settings.symbol + (item?.qty * parseFloat(item.price))?.toFixed(2)
             }</td>
             </tr>`;

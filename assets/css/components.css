@@ -108,45 +108,6 @@ body.journal-mode .main-toolbar-row{
   z-index: 1000;
   background: #ebeff2;
 }
-body.transactions-mode #totals{
-  position: sticky;
-  top: var(--toolbar-height, 64px);
-  z-index: 999;
-  background: #ebeff2;
-  margin-top: 0;
-  padding-top: 10px;
-  transition: box-shadow 0.2s;
-}
-body.transactions-mode #totals > div{
-  transition: height 0.2s, margin 0.2s;
-}
-body.transactions-mode #totals h5,
-body.transactions-mode #totals #counter{
-  transition: margin 0.2s, font-size 0.2s;
-}
-/* compact strip once the page is scrolled */
-body.transactions-mode.totals-compact #totals{
-  padding-top: 6px;
-  padding-bottom: 6px;
-  box-shadow: 0 6px 8px -6px rgba(0, 0, 0, 0.18);
-}
-body.transactions-mode.totals-compact #totals > div{
-  height: 58px;
-  margin-bottom: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-body.transactions-mode.totals-compact #totals h5{
-  margin: 0 0 2px;
-  font-size: 11px;
-}
-body.transactions-mode.totals-compact #totals #counter{
-  margin: 0 !important;
-  font-size: 20px !important;
-  line-height: 1.1;
-}
-
 /* ---- Popups: an open popup always scrolls (even if body.modal-open was
    dropped while switching between popups), so tall content is never cut off ---- */
 .modal.in{
@@ -364,24 +325,27 @@ body.transactions-mode.totals-compact #totals #counter{
   font-size: 12px;
   color: #98a6ad;
 }
-/* ---- Customer Transactions window + Products window + Expenses / Suppliers pages: tabs ---- */
+/* ---- Customer Transactions window + Products window + Expenses / Suppliers / Transactions pages: tabs ---- */
 #customerTransactionsModal .customer-tabs,
 #Products .customer-tabs,
 #expenses_view .customer-tabs,
-#suppliers_view .customer-tabs{
+#suppliers_view .customer-tabs,
+#transactions_view .customer-tabs{
   margin-top: 16px;
   border-bottom: 2px solid #e3e3e3;
 }
 #customerTransactionsModal .customer-tabs > li,
 #Products .customer-tabs > li,
 #expenses_view .customer-tabs > li,
-#suppliers_view .customer-tabs > li{
+#suppliers_view .customer-tabs > li,
+#transactions_view .customer-tabs > li{
   margin-bottom: -2px;
 }
 #customerTransactionsModal .customer-tabs > li > a,
 #Products .customer-tabs > li > a,
 #expenses_view .customer-tabs > li > a,
-#suppliers_view .customer-tabs > li > a{
+#suppliers_view .customer-tabs > li > a,
+#transactions_view .customer-tabs > li > a{
   padding: 9px 16px;
   margin-right: 4px;
   border: none;
@@ -394,7 +358,8 @@ body.transactions-mode.totals-compact #totals #counter{
 #customerTransactionsModal .customer-tabs > li > a:hover,
 #Products .customer-tabs > li > a:hover,
 #expenses_view .customer-tabs > li > a:hover,
-#suppliers_view .customer-tabs > li > a:hover{
+#suppliers_view .customer-tabs > li > a:hover,
+#transactions_view .customer-tabs > li > a:hover{
   color: #4c5667;
   background: transparent;
   border-bottom-color: #cfd6dc;
@@ -403,14 +368,17 @@ body.transactions-mode.totals-compact #totals #counter{
 #Products .customer-tabs > li.active > a,
 #expenses_view .customer-tabs > li.active > a,
 #suppliers_view .customer-tabs > li.active > a,
+#transactions_view .customer-tabs > li.active > a,
 #customerTransactionsModal .customer-tabs > li.active > a:hover,
 #Products .customer-tabs > li.active > a:hover,
 #expenses_view .customer-tabs > li.active > a:hover,
 #suppliers_view .customer-tabs > li.active > a:hover,
+#transactions_view .customer-tabs > li.active > a:hover,
 #customerTransactionsModal .customer-tabs > li.active > a:focus,
 #Products .customer-tabs > li.active > a:focus,
 #expenses_view .customer-tabs > li.active > a:focus,
-#suppliers_view .customer-tabs > li.active > a:focus{
+#suppliers_view .customer-tabs > li.active > a:focus,
+#transactions_view .customer-tabs > li.active > a:focus{
   color: #3e9e8a;
   border: none;
   border-bottom: 2px solid #5fbeaa;
@@ -419,7 +387,8 @@ body.transactions-mode.totals-compact #totals #counter{
 #customerTransactionsModal .customer-tabs .badge,
 #Products .customer-tabs .badge,
 #expenses_view .customer-tabs .badge,
-#suppliers_view .customer-tabs .badge{
+#suppliers_view .customer-tabs .badge,
+#transactions_view .customer-tabs .badge{
   margin-left: 4px;
   background: #e8ecef;
   color: #4c5667;
@@ -428,7 +397,8 @@ body.transactions-mode.totals-compact #totals #counter{
 #customerTransactionsModal .customer-tabs > li.active .badge,
 #Products .customer-tabs > li.active .badge,
 #expenses_view .customer-tabs > li.active .badge,
-#suppliers_view .customer-tabs > li.active .badge{
+#suppliers_view .customer-tabs > li.active .badge,
+#transactions_view .customer-tabs > li.active .badge{
   background: #5fbeaa;
   color: #fff;
 }
@@ -436,7 +406,8 @@ body.transactions-mode.totals-compact #totals #counter{
 #customerTransactionsModal .customer-tab-content,
 #Products .customer-tab-content,
 #expenses_view .customer-tab-content,
-#suppliers_view .customer-tab-content{
+#suppliers_view .customer-tab-content,
+#transactions_view .customer-tab-content{
   padding: 14px 0 0 !important;
   box-shadow: none !important;
   border: none !important;
@@ -4881,4 +4852,361 @@ body.expenses-mode #expenses_view .dataTables_wrapper > .ph-toolbar{
 }
 body.expenses-mode #expenses_view .card-box > .tab-content{
   margin-bottom: 0; /* the theme adds 30px below tab contents */
+}
+
+/* ---- Transactions page (#transactions_view) -------------------------------
+   Transactions
+   [Transactions] [Profit]
+   Cashier [v]  Status [v]  Payment Method [v]  Date [.........]
+   [$ SALES] [# TRANSACTIONS] [basket ITEMS SOLD] [cubes PRODUCTS]
+   | the bills (scroll)                         | Products Sold (scroll) |
+   Fixed to the window (pos.js: fitTransactionsView): the page doesn't
+   scroll, the lists do. */
+body.transactions-mode{
+  overflow: hidden;
+}
+body.transactions-mode #transactions_view > .row,
+body.transactions-mode #transactions_view > .row > .col-md-12{
+  height: 100%;
+}
+#transactions_view .txn-page{
+  display: flex;
+  flex-direction: column;
+  padding-top: 14px;
+  padding-bottom: 12px;
+}
+body.transactions-mode #transactions_view .txn-page{
+  height: 100%;
+  margin-bottom: 0;
+  overflow: auto; /* very short windows: the whole card scrolls instead */
+}
+#transactions_view .txn-page > .txn-header,
+#transactions_view .txn-page > .transactions-tabs{
+  flex: 0 0 auto;
+}
+#transactions_view .txn-header h3{
+  margin: 0;
+}
+#transactions_view .txn-subtitle{
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #98a6ad;
+}
+#transactions_view .transactions-tabs{
+  margin-top: 8px;
+}
+#transactions_view .transactions-tabs > li > a{
+  padding: 10px 16px;
+  line-height: 20px; /* the theme's tab links are 50px tall */
+}
+#transactions_view .transactions-tabs > li > a > .fa{
+  margin-right: 4px;
+}
+#transactions_view .txn-page > .tab-content{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0; /* the theme adds 30px below tab contents */
+  padding-top: 12px !important;
+}
+#transactions_view .tab-content > .tab-pane.active{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#transactions_view .tab-pane > :not(.txn-body):not(#profitSection){
+  flex: 0 0 auto;
+}
+
+/* filters: one row, labels beside the boxes */
+#transactions_view .txn-filters{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  margin-bottom: 12px;
+}
+#transactions_view .txn-filter{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#transactions_view .txn-filter label{
+  margin: 0;
+  font-weight: 600;
+  color: #4c5667;
+  white-space: nowrap;
+}
+#transactions_view .txn-filter select.form-control{
+  width: auto;
+  min-width: 120px;
+  height: 36px;
+}
+#transactions_view .txn-filter-date{
+  flex: 1 1 260px;
+  min-width: 240px;
+}
+#transactions_view .txn-filter-date .transactions-date-filter .date-range-input,
+#transactions_view .txn-filter-date .transactions-date-filter .date-range-clear{
+  height: 36px;
+}
+
+/* totals: white tiles with a coloured icon (were big coloured banners) */
+#transactions_view .txn-tiles{
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 0;
+  background: transparent;
+}
+#transactions_view .txn-tile{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid #e3e8ec;
+  border-radius: 8px;
+  background: #fff;
+  color: #4c5667;
+}
+#transactions_view .txn-tile > div{
+  min-width: 0;
+}
+#transactions_view .txn-tile-icon{
+  flex: 0 0 42px;
+  height: 42px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+#transactions_view .txn-tile h5{
+  margin: 0 0 2px;
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #98a6ad;
+}
+#transactions_view .txn-tile #counter{
+  margin: 0;
+  text-align: left !important;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #36404a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#transactions_view .txn-tile-sales{
+  border-color: #bfe3b2;
+  background: #f6fbf4;
+}
+#transactions_view .txn-tile-sales .txn-tile-icon{ background: rgba(129, 200, 104, 0.16); color: #5ea548; }
+#transactions_view .txn-tile-sales #counter{ color: #4f9a39; }
+#transactions_view .txn-tile-bills .txn-tile-icon{ background: rgba(255, 189, 74, 0.18); color: #d99418; }
+#transactions_view .txn-tile-items .txn-tile-icon{ background: rgba(52, 211, 235, 0.16); color: #1aa9c0; }
+#transactions_view .txn-tile-products .txn-tile-icon{ background: rgba(95, 190, 170, 0.16); color: #3e9e8a; }
+
+/* the bills + the products sold, side by side; each scrolls on its own */
+#transactions_view .txn-body{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 16px;
+}
+#transactions_view .txn-main{
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#transactions_view .txn-main > .dataTables_wrapper{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#transactions_view .dataTables_wrapper > .ph-toolbar,
+#transactions_view .dataTables_wrapper > .ph-footer{
+  flex: 0 0 auto;
+}
+#transactions_view .dataTables_wrapper > .ph-toolbar{
+  margin-bottom: 6px;
+}
+#transactions_view .dataTables_wrapper > .ph-table-scroll{
+  flex: 1 1 auto;
+  min-height: 140px;
+  overflow: auto;
+  border: 1px solid #e3e8ec;
+  border-radius: 6px;
+}
+#transactions_view .ph-table-scroll > table{
+  margin-top: 0 !important;   /* dataTables.bootstrap adds 6px above the table */
+  margin-bottom: 0 !important;
+}
+/* headings stay visible while the rows scroll */
+#transactions_view .ph-table-scroll > table > thead > tr > th,
+#transactions_view .txn-side-scroll > table > thead > tr > th{
+  /* !important: jquery.dataTables.min.css sets position: relative on sortable headings */
+  position: sticky !important;
+  top: 0;
+  z-index: 2;
+  background: #f6f8fa;
+  box-shadow: inset 0 -1px 0 #dfe3e8;
+  border-bottom: none;
+}
+#transactions_view #transactionList > tbody > tr:hover > td{
+  background: #f7faf9;
+}
+#transactions_view .ph-table-scroll::-webkit-scrollbar,
+#transactions_view .txn-side-scroll::-webkit-scrollbar{
+  width: 8px;
+  height: 8px;
+}
+#transactions_view .ph-table-scroll::-webkit-scrollbar-thumb,
+#transactions_view .txn-side-scroll::-webkit-scrollbar-thumb{
+  background: #cfd6dc;
+  border-radius: 4px;
+}
+
+/* Products Sold: a side panel */
+#transactions_view .txn-side{
+  flex: 0 0 330px;
+  min-height: 0;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #e3e8ec;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+#transactions_view .txn-side-head{
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e3e8ec;
+}
+#transactions_view .txn-side-head h4{
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #36404a;
+}
+#transactions_view .txn-side-head h4 > .fa{
+  color: #5fbeaa;
+  margin-right: 4px;
+}
+#transactions_view .txn-side-head small{
+  color: #98a6ad;
+}
+#transactions_view .txn-side-scroll{
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  background: #fff;
+}
+#transactions_view #productsSold{
+  margin: 0;
+}
+#transactions_view #productsSold > thead > tr > th{
+  font-size: 12px;
+  color: #6c7a86;
+  padding: 8px 10px;
+}
+#transactions_view #productsSold > tbody > tr > td{
+  font-size: 13px;
+  padding: 7px 10px;
+  border-top: 1px solid #f0f2f4;
+  vertical-align: middle;
+}
+#transactions_view #productsSold > tbody > tr > td:first-child{
+  font-weight: 600;
+  color: #4c5667;
+}
+#transactions_view #productsSold .txn-stock{
+  color: #98a6ad;
+}
+#transactions_view #product_sales:empty::after{
+  content: "Nothing sold for these filters";
+  display: block;
+  padding: 24px 14px;
+  text-align: center;
+  color: #98a6ad;
+  font-size: 13px;
+}
+
+/* Profit tab: same look, its list scrolls too */
+#transactions_view #profitSection{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#transactions_view #profitSection > :not(.dataTables_wrapper){
+  flex: 0 0 auto;
+}
+#transactions_view #profitSection > .dataTables_wrapper{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#transactions_view #profitSection .profit-header{
+  margin-bottom: 12px;
+}
+#transactions_view #profitSection .profit-tiles{
+  margin-bottom: 12px;
+}
+#transactions_view #profitSection .profit-tile{
+  border-radius: 8px;
+  border-color: #e3e8ec;
+  background: #fff;
+}
+#transactions_view #profitSection .profit-tile-main{
+  border-color: #5fbeaa;
+  background: #f1faf8;
+}
+
+/* narrower windows: a slimmer Products Sold panel; two tiles a row */
+@media (max-width: 1199px){
+  #transactions_view .txn-side{
+    flex-basis: 270px;
+  }
+}
+@media (max-width: 991px){
+  #transactions_view .txn-tiles{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* too narrow to fit side by side: the bills, then the products sold,
+     each in a box of its own height; the card scrolls */
+  #transactions_view .txn-body{
+    display: block;
+    flex: 0 0 auto;
+  }
+  #transactions_view .txn-main > .dataTables_wrapper > .ph-table-scroll{
+    flex: none;
+    height: 360px;
+  }
+  #transactions_view .txn-side{
+    height: 240px;
+    margin-top: 16px;
+  }
+  #transactions_view #profitSection > .dataTables_wrapper > .ph-table-scroll{
+    flex: none;
+    height: 360px;
+  }
 }
