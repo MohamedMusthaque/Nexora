@@ -1209,65 +1209,95 @@
 
 
 
-  <div id="newProduct" class="modal fade bs-example-modal-sm" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" style="display: none;">
-        <div class="modal-dialog modal-sm">
+  <!-- Add / Edit Product: same look as the Account window (#userModal):
+       green header, sections, Cancel / Save always in view.
+       pos.js: setProductFormHeader -->
+  <div id="newProduct" class="modal fade account-modal" tabindex="-1" role="dialog" aria-labelledby="productFormTitle" aria-hidden="true" style="display: none;">
+        <div class="modal-dialog account-dialog">
             <div class="modal-content">
-                <div class="modal-header">
+                <div class="account-hero">
                     <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-                    <h4 class="modal-title" id="mySmallModalLabel">Product
-                        <img  class="loading m-t-5" style="margin-left: 35%" height="50px" src="assets/images/loading.gif" alt="">
-                    </h4>
+                    <div class="account-avatar"><i class="fa fa-cube"></i></div>
+                    <div class="account-hero-text">
+                        <h4 class="modal-title"><span id="productFormTitle">New Product</span>
+                            <img class="loading" height="22" src="assets/images/loading.gif" alt="">
+                        </h4>
+                        <p class="account-subtitle" id="productFormSub">Add a product to sell on the till</p>
+                    </div>
                 </div>
                 <div class="modal-body">
-                    <form id="saveProduct" encType="multipart/form-data">
+                    <form id="saveProduct" encType="multipart/form-data" autocomplete="off">
                         <input type="hidden" name="id" id="product_id">
                         <input type="hidden" name="img" id="img">
                         <input type="hidden" name="remove" id="remove_img">
-                        <div class="form-group">
-                            <label for="userName">Category</label>
-                            <select name="category" class="form-control" id="category"></select>
-                        </div>
-                        <div class="form-group">
-                            <label for="userName">Product Name</label>
-                            <input type="text" required="required"  name="name" parsley-trigger="change" placeholder="Enter a product name" class="form-control" id="productName">
-                        </div>
-                        <div class="row">
-                            <!-- price-input: digits and one decimal point only (pos.js) -->
-                            <div class="form-group col-xs-6">
-                                <label for="product_cost_price">Cost Price</label>
-                                <input type="text" inputmode="decimal" autocomplete="off" name="cost_price" placeholder="What you pay" class="form-control price-input amount-input" id="product_cost_price">
-                                <small class="text-danger price-input-error"></small>
-                            </div>
-                            <div class="form-group col-xs-6">
-                                <label for="product_price">Selling Price</label>
-                                <input type="text" inputmode="decimal" autocomplete="off" required="required" name="price" placeholder="What the customer pays" class="form-control price-input amount-input" id="product_price">
-                                <small class="text-danger price-input-error"></small>
-                            </div>
-                            <div class="col-xs-12">
-                                <p class="text-muted" id="productMarginHint" style="margin: -8px 0 12px; font-size: 12px;"></p>
+
+                        <div class="account-section">
+                            <h5 class="account-section-title"><i class="fa fa-cube"></i> Product</h5>
+                            <div class="row">
+                                <div class="col-sm-6 form-group">
+                                    <label for="productName">Product Name <span class="account-required">*</span></label>
+                                    <input type="text" required="required" name="name" parsley-trigger="change" placeholder="Enter a product name" class="form-control" id="productName">
+                                </div>
+                                <div class="col-sm-6 form-group">
+                                    <label for="category">Category</label>
+                                    <select name="category" class="form-control" id="category"></select>
+                                </div>
                             </div>
                         </div>
-                        <div class="form-group">
-                            <label for="userName">Barcode
-                                <button type="button" id="fill_barcode" class="btn btn-primary btn-sm ml-2 fill-button">Fill</button>
+
+                        <div class="account-section">
+                            <h5 class="account-section-title"><i class="fa fa-tag"></i> Pricing</h5>
+                            <div class="row">
+                                <!-- price-input: digits and one decimal point only (pos.js) -->
+                                <div class="col-sm-6 form-group">
+                                    <label for="product_cost_price">Cost Price</label>
+                                    <input type="text" inputmode="decimal" autocomplete="off" name="cost_price" placeholder="What you pay" class="form-control price-input amount-input" id="product_cost_price">
+                                    <small class="text-danger price-input-error"></small>
+                                </div>
+                                <div class="col-sm-6 form-group">
+                                    <label for="product_price">Selling Price <span class="account-required">*</span></label>
+                                    <input type="text" inputmode="decimal" autocomplete="off" required="required" name="price" placeholder="What the customer pays" class="form-control price-input amount-input" id="product_price">
+                                    <small class="text-danger price-input-error"></small>
+                                </div>
+                            </div>
+                            <p class="account-hint" id="productMarginHint"></p>
+                        </div>
+
+                        <div class="account-section">
+                            <h5 class="account-section-title"><i class="fa fa-barcode"></i> Barcode &amp; Stock</h5>
+                            <div class="row">
+                                <div class="col-sm-6 form-group">
+                                    <label for="product_barcode">Barcode</label>
+                                    <div class="input-group">
+                                        <input type="text" name="barcode" placeholder="Enter or generate" class="form-control" id="product_barcode">
+                                        <span class="input-group-btn">
+                                            <button type="button" id="fill_barcode" class="btn btn-default" title="Generate a barcode"><i class="fa fa-magic"></i> Fill</button>
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="col-sm-6 form-group">
+                                    <label for="quantity">Stock</label>
+                                    <input type="text" name="quantity" placeholder="Available stock" class="form-control" id="quantity">
+                                </div>
+                            </div>
+                            <label class="product-form-check" for="stock">
+                                <input type="checkbox" name="stock" id="stock"> Disable stock check
                             </label>
-                            <input type="text" name="barcode" placeholder=" Enter code or click fill to generate" class="form-control" id="product_barcode">
                         </div>
-                        <div class="form-group">
-                            <label for="userName">Stock</label>
-                            <input type="text" name="quantity" placeholder="Available stock" class="form-control" id="quantity">
+
+                        <div class="account-section">
+                            <h5 class="account-section-title"><i class="fa fa-picture-o"></i> Picture</h5>
+                            <div class="product-form-picture">
+                                <div id="current_img"></div>
+                                <span id="rmv_img" class="btn btn-xs btn-warning"><i class="fa fa-trash-o"></i> Remove</span>
+                                <input type="file" name="imagename" id="imagename" accept="image/*">
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label><input type="checkbox" name="stock" id="stock" style="max-width: 30px; float: left;">  Disable stock check </label>
-                        </div>
-                        <div class="form-group">
-                            <label for="userName"><span id="rmv_img" class="btn btn-xs btn-warning">Remove</span> Picture </label>                      
-                            <div id="current_img"></div>
-                            <input type="file" name="imagename" id="imagename">                            
-                        </div>
-  
-                        <input type="submit" id="submitProduct" class="btn btn-primary btn-block waves-effect waves-light">
                     </form>
+                </div>
+                <div class="modal-footer account-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                    <button type="submit" form="saveProduct" class="btn btn-primary waves-effect waves-light" id="submitProduct"><i class="fa fa-check"></i> Save</button>
                 </div>
             </div>
         </div>

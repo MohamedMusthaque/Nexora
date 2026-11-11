@@ -2757,8 +2757,15 @@ if (!authedThisSession) {
       }, 500);
     });
 
+    // header of the Add / Edit Product window (same look as the Account window)
+    function setProductFormHeader(product) {
+      $("#productFormTitle").text(product ? "Edit Product" : "New Product");
+      $("#productFormSub").text(product ? product.name : "Add a product to sell on the till");
+    }
+
     $("#newProductModal").click(function () {
       $("#saveProduct").get(0).reset();
+      setProductFormHeader(null);
       $("#current_img").text("");
       clearPriceInputErrors();
       updateProductMarginHint();
@@ -2827,6 +2834,7 @@ if (!authedThisSession) {
         data: { history_user: user?.fullname || "", history_user_id: user?._id || "" },
         success: function (response) {
           $("#saveProduct").get(0).reset();
+          setProductFormHeader(null); // "Add another" starts a new product
           $("#current_img").text("");
 
           loadProducts();
@@ -2907,6 +2915,7 @@ if (!authedThisSession) {
         })
         .prop("selected", true);
 
+      setProductFormHeader(allProducts[index]);
       $("#productName").val(allProducts[index].name);
       $("#product_price").val(allProducts[index].price);
       $("#product_cost_price").val(allProducts[index].cost_price ?? "");
