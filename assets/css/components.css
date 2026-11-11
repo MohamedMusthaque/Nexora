@@ -784,13 +784,48 @@ body.journal-mode .main-toolbar-row{
 }
 
 /* ---- Bill window (#orderModal): Print | x on one line, returns that fit ---- */
-#orderModal .bill-modal-header{
-  display: flex;
+/* Print on the left, × on the right: Print takes all the free space after
+   it (margin-right: auto), so × is pushed to the right edge whatever else
+   is in the header */
+#orderModal .modal-header.bill-modal-header{
+  display: flex !important;
+  flex-direction: row;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  text-align: left;
 }
-#orderModal .bill-modal-header .close{
-  margin-top: 0;
+#orderModal .bill-modal-header > .btn{
+  float: none;
+  order: 0;
+  margin: 0 auto 0 0 !important;
+}
+#orderModal .bill-modal-header > .close{
+  float: none;
+  order: 1;
+  margin: 0 0 0 auto !important;
+}
+/* Bootstrap's clearfix (::before / ::after on .modal-header / .modal-footer)
+   would act as flex items: in the bill window they took the two ends, so
+   Print and × sat in the middle; in the green window headers and the
+   Cancel / Save footers they added an extra gap at the edge. */
+#orderModal .bill-modal-header::before,
+#orderModal .bill-modal-header::after,
+.nx-modal .modal-header.nx-hero::before,
+.nx-modal .modal-header.nx-hero::after,
+.modal-footer.account-footer::before,
+.modal-footer.account-footer::after{
+  display: none;
+}
+/* wide enough for the bill (.qt-bill is up to 340px, built in pos.js:
+   billStyle), so it shows as it prints */
+#orderModal .modal-dialog.modal-sm{
+  width: min(400px, calc(100vw - 20px));
+}
+#viewTransaction .bill-return,
+#viewTransaction .bill-returns > p{
+  max-width: 340px;
+  margin-left: auto;
+  margin-right: auto;
 }
 #viewTransaction .bill-return{
   font-size: 10px;
@@ -2987,10 +3022,10 @@ ul.ColVis_collection li {
 #prnModal .modal-content > .prn-footer,
 #adjModal .modal-content > .prn-footer{
   flex: 0 0 auto;
-  padding: 10px 15px 12px;
+  padding: 10px 22px 12px; /* lines up with the green windows' body (.nx-modal) */
   text-align: left;
   background: #fafbfc;
-  border-radius: 0 0 6px 6px;
+  border-radius: 0 0 10px 10px;
 }
 #prnModal .prn-footer .form-group,
 #adjModal .prn-footer .form-group{
@@ -5206,7 +5241,8 @@ body.transactions-mode #transactions_view .txn-page{
 
 /* ---- Account Information window (#userModal), Add / Edit Product (#newProduct)
    New / Edit Customer (#newCustomer, #editCustomer) and Settle Credit
-   (#settleCreditModal) share this look ----
+   (#settleCreditModal), Add / Edit Supplier (#supplierModal) and Pay Supplier /
+   Pay in Advance (#supplierPaymentModal) share this look ----
    [avatar] My Account / New User / Edit User          ×
             @username
    PROFILE      Full Name | Username
@@ -5217,7 +5253,9 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .account-dialog,
 #newCustomer .account-dialog,
 #editCustomer .account-dialog,
-#settleCreditModal .account-dialog{
+#settleCreditModal .account-dialog,
+#supplierModal .account-dialog,
+#supplierPaymentModal .account-dialog{
   width: min(520px, calc(100vw - 30px));
   margin: 30px auto;
 }
@@ -5228,7 +5266,9 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .modal-content,
 #newCustomer .modal-content,
 #editCustomer .modal-content,
-#settleCreditModal .modal-content{
+#settleCreditModal .modal-content,
+#supplierModal .modal-content,
+#supplierPaymentModal .modal-content{
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 60px);
@@ -5244,7 +5284,9 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .account-hero,
 #newCustomer .account-hero,
 #editCustomer .account-hero,
-#settleCreditModal .account-hero{
+#settleCreditModal .account-hero,
+#supplierModal .account-hero,
+#supplierPaymentModal .account-hero{
   flex: 0 0 auto;
   position: relative;
   display: flex;
@@ -5258,7 +5300,9 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .account-hero .close,
 #newCustomer .account-hero .close,
 #editCustomer .account-hero .close,
-#settleCreditModal .account-hero .close{
+#settleCreditModal .account-hero .close,
+#supplierModal .account-hero .close,
+#supplierPaymentModal .account-hero .close{
   position: absolute;
   top: 12px;
   right: 16px;
@@ -5271,14 +5315,18 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .account-hero .close:hover,
 #newCustomer .account-hero .close:hover,
 #editCustomer .account-hero .close:hover,
-#settleCreditModal .account-hero .close:hover{
+#settleCreditModal .account-hero .close:hover,
+#supplierModal .account-hero .close:hover,
+#supplierPaymentModal .account-hero .close:hover{
   opacity: 1;
 }
 #userModal .account-avatar,
 #newProduct .account-avatar,
 #newCustomer .account-avatar,
 #editCustomer .account-avatar,
-#settleCreditModal .account-avatar{
+#settleCreditModal .account-avatar,
+#supplierModal .account-avatar,
+#supplierPaymentModal .account-avatar{
   flex: 0 0 58px;
   height: 58px;
   border-radius: 50%;
@@ -5296,14 +5344,18 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .account-hero-text,
 #newCustomer .account-hero-text,
 #editCustomer .account-hero-text,
-#settleCreditModal .account-hero-text{
+#settleCreditModal .account-hero-text,
+#supplierModal .account-hero-text,
+#supplierPaymentModal .account-hero-text{
   min-width: 0;
 }
 #userModal .account-hero .modal-title,
 #newProduct .account-hero .modal-title,
 #newCustomer .account-hero .modal-title,
 #editCustomer .account-hero .modal-title,
-#settleCreditModal .account-hero .modal-title{
+#settleCreditModal .account-hero .modal-title,
+#supplierModal .account-hero .modal-title,
+#supplierPaymentModal .account-hero .modal-title{
   margin: 0;
   color: #fff;
   font-size: 20px;
@@ -5313,7 +5365,9 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .account-hero .modal-title .loading,
 #newCustomer .account-hero .modal-title .loading,
 #editCustomer .account-hero .modal-title .loading,
-#settleCreditModal .account-hero .modal-title .loading{
+#settleCreditModal .account-hero .modal-title .loading,
+#supplierModal .account-hero .modal-title .loading,
+#supplierPaymentModal .account-hero .modal-title .loading{
   margin-left: 8px;
   vertical-align: middle;
 }
@@ -5321,7 +5375,9 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .account-subtitle,
 #newCustomer .account-subtitle,
 #editCustomer .account-subtitle,
-#settleCreditModal .account-subtitle{
+#settleCreditModal .account-subtitle,
+#supplierModal .account-subtitle,
+#supplierPaymentModal .account-subtitle{
   margin: 3px 0 0;
   font-size: 13px;
   color: rgba(255, 255, 255, 0.85);
@@ -5335,7 +5391,9 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .modal-body,
 #newCustomer .modal-body,
 #editCustomer .modal-body,
-#settleCreditModal .modal-body{
+#settleCreditModal .modal-body,
+#supplierModal .modal-body,
+#supplierPaymentModal .modal-body{
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -5345,14 +5403,18 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .account-section,
 #newCustomer .account-section,
 #editCustomer .account-section,
-#settleCreditModal .account-section{
+#settleCreditModal .account-section,
+#supplierModal .account-section,
+#supplierPaymentModal .account-section{
   margin-bottom: 14px;
 }
 #userModal .account-section + .account-section,
 #newProduct .account-section + .account-section,
 #newCustomer .account-section + .account-section,
 #editCustomer .account-section + .account-section,
-#settleCreditModal .account-section + .account-section{
+#settleCreditModal .account-section + .account-section,
+#supplierModal .account-section + .account-section,
+#supplierPaymentModal .account-section + .account-section{
   padding-top: 14px;
   border-top: 1px solid #eef1f4;
 }
@@ -5360,7 +5422,9 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .account-section-title,
 #newCustomer .account-section-title,
 #editCustomer .account-section-title,
-#settleCreditModal .account-section-title{
+#settleCreditModal .account-section-title,
+#supplierModal .account-section-title,
+#supplierPaymentModal .account-section-title{
   margin: 0 0 10px;
   font-size: 12px;
   font-weight: 700;
@@ -5372,7 +5436,9 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .account-section-title > .fa,
 #newCustomer .account-section-title > .fa,
 #editCustomer .account-section-title > .fa,
-#settleCreditModal .account-section-title > .fa{
+#settleCreditModal .account-section-title > .fa,
+#supplierModal .account-section-title > .fa,
+#supplierPaymentModal .account-section-title > .fa{
   margin-right: 5px;
   color: #5fbeaa;
 }
@@ -5380,14 +5446,18 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .form-group,
 #newCustomer .form-group,
 #editCustomer .form-group,
-#settleCreditModal .form-group{
+#settleCreditModal .form-group,
+#supplierModal .form-group,
+#supplierPaymentModal .form-group{
   margin-bottom: 10px;
 }
 #userModal label,
 #newProduct label,
 #newCustomer label,
 #editCustomer label,
-#settleCreditModal label{
+#settleCreditModal label,
+#supplierModal label,
+#supplierPaymentModal label{
   font-weight: 600;
   color: #4c5667;
   margin-bottom: 5px;
@@ -5396,14 +5466,18 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .account-required,
 #newCustomer .account-required,
 #editCustomer .account-required,
-#settleCreditModal .account-required{
+#settleCreditModal .account-required,
+#supplierModal .account-required,
+#supplierPaymentModal .account-required{
   color: #ef5350;
 }
 #userModal .form-control,
 #newProduct .form-control,
 #newCustomer .form-control,
 #editCustomer .form-control,
-#settleCreditModal .form-control{
+#settleCreditModal .form-control,
+#supplierModal .form-control,
+#supplierPaymentModal .form-control{
   height: 40px;
   border-radius: 6px;
 }
@@ -5411,7 +5485,9 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .account-hint,
 #newCustomer .account-hint,
 #editCustomer .account-hint,
-#settleCreditModal .account-hint{
+#settleCreditModal .account-hint,
+#supplierModal .account-hint,
+#supplierPaymentModal .account-hint{
   margin: 0;
   font-size: 12px;
   color: #98a6ad;
@@ -5544,7 +5620,9 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .account-footer,
 #newCustomer .account-footer,
 #editCustomer .account-footer,
-#settleCreditModal .account-footer{
+#settleCreditModal .account-footer,
+#supplierModal .account-footer,
+#supplierPaymentModal .account-footer{
   flex: 0 0 auto;
   display: flex;
   justify-content: flex-end;
@@ -5557,7 +5635,9 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .account-footer .btn,
 #newCustomer .account-footer .btn,
 #editCustomer .account-footer .btn,
-#settleCreditModal .account-footer .btn{
+#settleCreditModal .account-footer .btn,
+#supplierModal .account-footer .btn,
+#supplierPaymentModal .account-footer .btn{
   min-width: 96px;
   height: 38px;
   border-radius: 6px;
@@ -5566,7 +5646,9 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .account-footer .btn-default,
 #newCustomer .account-footer .btn-default,
 #editCustomer .account-footer .btn-default,
-#settleCreditModal .account-footer .btn-default{
+#settleCreditModal .account-footer .btn-default,
+#supplierModal .account-footer .btn-default,
+#supplierPaymentModal .account-footer .btn-default{
   background: #fff !important;
   border: 1px solid #d5dbe0 !important;
   color: #4c5667 !important;
@@ -5575,10 +5657,13 @@ body.transactions-mode #transactions_view .txn-page{
 #newProduct .account-footer .btn-primary > .fa,
 #newCustomer .account-footer .btn-primary > .fa,
 #editCustomer .account-footer .btn-primary > .fa,
-#settleCreditModal .account-footer .btn-primary > .fa{
+#settleCreditModal .account-footer .btn-primary > .fa,
+#supplierModal .account-footer .btn-primary > .fa,
+#supplierPaymentModal .account-footer .btn-primary > .fa{
   margin-right: 4px;
 }
-#settleCreditModal .account-footer .btn-success > .fa{
+#settleCreditModal .account-footer .btn-success > .fa,
+#supplierPaymentModal .account-footer .btn-success > .fa{
   margin-right: 4px;
 }
 
@@ -5638,7 +5723,8 @@ body.transactions-mode #transactions_view .txn-page{
           subtitle
    Rounded, shadowed, a green header; used by Day End, Select Order,
    Return / Exchange, Open Orders, Customers, Customer Transactions,
-   Products, Category, Product History and New Stock Adjustment. */
+   Products, Category, Product History, New Stock Adjustment, New GRN,
+   New PRN and Supplier Transactions. */
 /* .modal .modal-dialog .modal-content: as specific as the theme (core.css) */
 .modal.nx-modal .modal-dialog .modal-content{
   /* !important: no other window rule (theme, .modal-fit, per-window) may
@@ -5981,5 +6067,67 @@ body.transactions-mode #transactions_view .txn-page{
   #appTooltip,
   #appTooltip.below{
     transform: none;
+  }
+}
+
+/* ---- New GRN / New PRN (.nx-modal.nx-open-lists) ---------------------------
+   Green windows clip their content to round the corners; these two have
+   product / GRN search lists that open over the lines table and must not be
+   cut off. So nothing is clipped here: the header rounds its own top
+   corners, and the footer (PRN) its bottom ones. */
+.modal.nx-modal.nx-open-lists .modal-dialog .modal-content{
+  overflow: visible !important;
+}
+.modal.nx-modal.nx-open-lists .modal-dialog .modal-content .modal-header.nx-hero{
+  border-radius: 10px 10px 0 0 !important;
+}
+.modal.nx-modal.nx-open-lists .modal-dialog .modal-content > .modal-footer{
+  border-radius: 0 0 10px 10px;
+}
+
+/* ---- Pay Supplier / Pay in Advance: where the supplier stands ---- */
+#supplierPaymentModal .sup-pay-summary{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+#supplierPaymentModal .sup-pay-summary > div{
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid #e3e8ec;
+  border-radius: 8px;
+  background: #fafbfc;
+  color: #4c5667;
+}
+#supplierPaymentModal .sup-pay-summary b{
+  font-size: 18px;
+  white-space: nowrap;
+}
+#supplierPaymentModal .sup-pay-owed{
+  border-color: #f3c9c9 !important;
+  background: #fdf3f3 !important;
+}
+#supplierPaymentModal .sup-pay-owed b{
+  color: #d84340;
+}
+#supplierPaymentModal .sup-pay-advance{
+  border-color: #cfe9e2 !important;
+  background: #f1faf7 !important;
+}
+#supplierPaymentModal .sup-pay-advance b{
+  color: #3e9e8a;
+}
+#supplierPaymentModal #supPayHint{
+  margin: -2px 0 10px;
+}
+#supplierPaymentModal #supPayHint:empty{
+  display: none;
+}
+@media (max-width: 480px){
+  #supplierPaymentModal .sup-pay-summary{
+    grid-template-columns: minmax(0, 1fr);
   }
 }

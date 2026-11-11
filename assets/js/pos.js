@@ -1873,20 +1873,7 @@ if (!authedThisSession) {
       // setting value of card info / bank info to empty
       $("#paymentInfo").val("");
 
-      let items = "";
-      let payment = 0;
-
-      cart.forEach((item) => {
-        items +=
-          "<tr><td>" +
-          item.product_name +
-          "</td><td>" +
-          item.quantity +
-          "</td><td>" +
-          settings.symbol +
-          moneyText(parseFloat(item.price)) +
-          "</td></tr>";
-      });
+      let payment = []; // the bill's payment lines
 
       let currentTime = new Date(moment());
 
@@ -1898,7 +1885,6 @@ if (!authedThisSession) {
         return;
       }
 
-      let date = moment(currentTime).format("YYYY-MM-DD HH:mm:ss");
       let paid =
         $("#payment").val() == ""
           ? ""
@@ -1910,7 +1896,6 @@ if (!authedThisSession) {
       let refNumber = $("#refNumber").val();
       let orderNumber = holdOrder;
       let type = "";
-      let tax_row = "";
 
       switch (paymentType) {
         case 1:
@@ -1963,103 +1948,41 @@ if (!authedThisSession) {
         if (balanceDue < 0.005) balanceDue = 0;
       }
 
+      let sym = settings.symbol;
       if (paid == "" && advanceUsed > 0) {
         // printed bill before any payment: the advance is already deducted
-        payment = `<tr>
-                        <td>Advance used</td>
-                        <td>:</td>
-                        <td>-${settings.symbol + moneyText(advanceUsed)}</td>
-                    </tr>
-                    <tr>
-                        <td><b>Amount to pay</b></td>
-                        <td>:</td>
-                        <td><b>${settings.symbol + moneyText(Math.max((parseFloat(orderTotal) || 0) - advanceUsed, 0))}</b></td>
-                    </tr>`;
+        payment = [
+          ["Advance used", "-" + sym + moneyText(advanceUsed)],
+          ["Amount to pay", sym + moneyText(Math.max((parseFloat(orderTotal) || 0) - advanceUsed, 0)), "strong"],
+        ];
       }
       if (status == 3 && paid == "" && type === "Credit" && customer != 0) {
         // printed bill for a credit sale (registered customers only)
-        payment = `<tr>
-                        <td><b>On credit</b></td>
-                        <td>:</td>
-                        <td><b>${settings.symbol + moneyText((parseFloat(orderTotal) || 0))}</b></td>
-                    </tr>
-                    <tr>
-                        <td>Method</td>
-                        <td>:</td>
-                        <td>Credit</td>
-                    </tr>`;
+        payment = [
+          ["On credit", sym + moneyText(parseFloat(orderTotal) || 0), "strong"],
+          ["Method", "Credit"],
+        ];
       }
       if (paid != "") {
-        payment = `${
-                      advanceUsed > 0
-                        ? `<tr>
-                        <td>Advance used</td>
-                        <td>:</td>
-                        <td>-${settings.symbol + moneyText(advanceUsed)}</td>
-                    </tr>
-                    <tr>
-                        <td><b>Amount to pay</b></td>
-                        <td>:</td>
-                        <td><b>${settings.symbol + moneyText(Math.max((parseFloat(orderTotal) || 0) - advanceUsed, 0))}</b></td>
-                    </tr>`
-                        : ""
-                    }                    <tr>
-                        <td>Paid${creditPart > 0 ? " (" + type + ")" : ""}</td>
-                        <td>:</td>
-                        <td>${paid === "" || paid == null ? settings.symbol : settings.symbol + moneyText(paid)}</td>
-                    </tr>${
-                      creditPart > 0
-                        ? `<tr>
-                        <td><b>On credit</b></td>
-                        <td>:</td>
-                        <td><b>${settings.symbol + moneyText(creditPart)}</b></td>
-                    </tr>`
-                        : ""
-                    }
-                    <tr>${
-                      balanceDue > 0
-                        ? `
-                        <td><b>Balance due</b></td>
-                        <td>:</td>
-                        <td><b>${settings.symbol + moneyText(balanceDue)}</b></td>`
-                        : `
-                        <td>Change</td>
-                        <td>:</td>
-                        <td>${
-                          settings.symbol + moneyText(Math.abs(change))
-                        }</td>`
-                    }
-                    </tr>${
-                      advanceDeposit > 0
-                        ? `<tr>
-                        <td>Saved as advance</td>
-                        <td>:</td>
-                        <td>${settings.symbol + moneyText(advanceDeposit)}</td>
-                    </tr>`
-                        : ""
-                    }
-                    <tr>
-                        <td>Method</td>
-                        <td>:</td>
-                        <td>${methodLabel}</td>
-                    </tr>${
-                      (advanceUsed > 0 || advanceDeposit > 0) && advanceAfter !== null
-                        ? `<tr>
-                        <td>Advance balance</td>
-                        <td>:</td>
-                        <td>${settings.symbol + moneyText(advanceAfter)}</td>
-                    </tr>`
-                        : ""
-                    }`;
+        payment = [
+          advanceUsed > 0 ? ["Advance used", "-" + sym + moneyText(advanceUsed)] : null,
+          advanceUsed > 0
+            ? ["Amount to pay", sym + moneyText(Math.max((parseFloat(orderTotal) || 0) - advanceUsed, 0)), "strong"]
+            : null,
+          ["Paid" + (creditPart > 0 ? " (" + type + ")" : ""), paid === "" || paid == null ? sym : sym + moneyText(paid)],
+          creditPart > 0 ? ["On credit", sym + moneyText(creditPart), "strong"] : null,
+          balanceDue > 0
+            ? ["Balance due", sym + moneyText(balanceDue), "strong"]
+            : ["Change", sym + moneyText(Math.abs(change))],
+          advanceDeposit > 0 ? ["Saved as advance", sym + moneyText(advanceDeposit)] : null,
+          ["Method", methodLabel],
+          (advanceUsed > 0 || advanceDeposit > 0) && advanceAfter !== null
+            ? ["Advance balance", sym + moneyText(advanceAfter)]
+            : null,
+        ];
       }
 
-      if (settings.charge_tax) {
-        tax_row = `<tr>
-                    <td>Vat(${settings.percentage})% </td>
-                    <td>:</td>
-                    <td>${settings.symbol}${moneyText(parseFloat(totalVat))}</td>
-                </tr>`;
-      }
+      let taxLabel = settings.charge_tax ? "VAT (" + settings.percentage + "%)" : "";
 
       if (status == 0) {
         if ($("#customer").val() == 0 && $("#refNumber").val() == "") {
@@ -2083,93 +2006,26 @@ if (!authedThisSession) {
         method = "POST";
       }
 
-      receipt = `<div style="font-size: 10px;">                            
-        <p style="text-align: center;">
-        ${
-          settings.img == ""
-            ? settings.img
-            : '<img style="max-width: 50px;max-width: 100px;" src ="' +
-              img_path +
-              settings.img +
-              '" /><br>'
-        }
-            <span style="font-size: 22px;">${settings.store}</span> <br>
-            ${settings.address_one} <br>
-            ${settings.address_two} <br>
-            ${
-              settings.contact != "" ? "Tel: " + settings.contact + "<br>" : ""
-            } 
-            ${settings.tax != "" ? "Vat No: " + settings.tax + "<br>" : ""} 
-        </p>
-        <hr>
-        <left>
-            <p>
-            Order No : ${orderNumber} <br>
-            Ref No : ${refNumber == "" ? orderNumber : refNumber} <br>
-            Customer : ${
-              customer == 0 ? "Walk in customer" : customer.name
-            } <br>
-            Cashier : ${user.fullname} <br>
-            Date : ${date}<br>
-            </p>
-
-        </left>
-        <hr>
-        <table width="100%">
-            <thead style="text-align: left;">
-            <tr>
-                <th>Item</th>
-                <th>Qty</th>
-                <th>Price</th>
-            </tr>
-            </thead>
-            <tbody>
-            ${items}                
-     
-            <tr>                        
-                <td><b>Subtotal</b></td>
-                <td>:</td>
-                <td><b>${settings.symbol}${moneyText(subTotal)}</b></td>
-            </tr>
-            <tr>
-                <td>Discount</td>
-                <td>:</td>
-                <td>${
-                  discount > 0
-                    ? settings.symbol + moneyText(parseFloat(discount))
-                    : ""
-                }</td>
-            </tr>
-            
-            ${tax_row}
-        
-            <tr>
-                <td><h3>Total</h3></td>
-                <td><h3>:</h3></td>
-                <td>
-                    <h3>${settings.symbol}${moneyText(parseFloat(orderTotal))}</h3>
-                </td>
-            </tr>
-            ${payment == 0 ? "" : payment}
-            </tbody>
-            </table>
-            <br>
-            <hr>
-            <br>
-            <p style="text-align: center;">
-             ${settings.footer}
-             </p>
-            </div>`;
+      // a bill printed before paying (status 3) says so in a box
+      receipt = saleBillHtml({
+        invoice: orderNumber,
+        ref: refNumber == "" ? orderNumber : refNumber,
+        customer: customer == 0 ? "Walk in customer" : customer.name,
+        cashier: user.fullname,
+        date: moment(currentTime).format("DD MMM YYYY HH:mm:ss"),
+        items: cart,
+        subtotal: subTotal,
+        discount: discount,
+        taxLabel: taxLabel,
+        tax: totalVat,
+        total: orderTotal,
+        payment: payment,
+        status: status == 3 ? (paid == "" ? "NOT PAID YET" : "PAYMENT NOT CONFIRMED") : "",
+      });
 
       if (status == 3) {
         if (cart.length > 0) {
-          // printed before the payment is confirmed: say so on the bill
-          receipt = receipt.replace(
-            "</tbody>",
-            `<tr><td>Status</td><td>:</td><td><b>${
-              paid == "" ? "Not paid yet" : "Payment not confirmed"
-            }</b></td></tr></tbody>`
-          );
+          // printed before the payment is confirmed: the bill says so (saleBillHtml status)
           printJS({
             printable: receipt,
             type: "raw-html",
@@ -6399,6 +6255,7 @@ function openSupplierForm(supplier) {
   $("#saveSupplier").get(0).reset();
   $("#supplier_id").val(supplier ? supplier._id : "");
   $("#supplierModalTitle").text(supplier ? "Edit Supplier" : "Add Supplier");
+  $("#supplierModalSub").text(supplier ? supplier.name || "" : "Someone you buy goods from");
   if (supplier) {
     $("#supplierName").val(supplier.name || "");
     $("#supplierContact").val(supplier.contact_person || "");
@@ -6971,79 +6828,225 @@ function supBillPositionText(pos) {
   return pos > 0.004 ? "Owed " + supMoney(pos) : pos < -0.004 ? "Advance " + supMoney(-pos) : "Settled";
 }
 
-function supBillHeader(title) {
-  return `<p style="text-align: center;">
-      ${settings.img ? '<img style="max-width: 100px;" src="' + img_path + settings.img + '" /><br>' : ""}
-      <span style="font-size: 22px;">${settings.store || ""}</span> <br>
-      ${settings.address_one || ""} <br>
-      ${settings.address_two || ""} <br>
-      ${settings.contact ? "Tel: " + settings.contact + "<br>" : ""}
-    </p>
-    <hr>
-    <p style="text-align: center; font-size: 13px;"><b>${title}</b></p>`;
+// ======================================================================
+// Bills: one look for every printed document - the sale bill, GRN, PRN,
+// credit receipts, and the supplier payment / stock adjustment / money
+// transfer / Quick Journal / Day End notes.
+//   store header
+//   ───── DOCUMENT TITLE ─────
+//   details (label ............ value)
+//   ITEM | QTY | PRICE | TOTAL
+//   totals, the grand total between rules
+//   - - - payment / settlement - - -
+//   note, signatures, footer
+// The styles travel inside the bill (a <style> scoped to .qt-bill): print-js
+// prints the bill in a frame of its own, without the app's stylesheets.
+// Black on white only, so it prints the same on a receipt printer.
+// ======================================================================
+function billStyle() {
+  return `<style>
+.qt-bill{font-family:"Segoe UI",Arial,Helvetica,sans-serif;font-size:11px;line-height:1.4;color:#000;max-width:340px;margin:0 auto;}
+.qt-bill *{box-sizing:border-box;}
+.qt-bill p{margin:0 0 6px;}
+.qt-bill table{width:100%;border-collapse:collapse;}
+.qt-bill td,.qt-bill th{padding:2px 0;vertical-align:top;}
+.qt-bill hr{border:0;border-top:1px dashed #000;margin:8px 0;}
+.qt-bill h3{font-size:14px;font-weight:700;margin:2px 0;}
+.qt-bill .qb-head{text-align:center;}
+.qt-bill .qb-logo{display:block;margin:0 auto 4px;max-width:110px;max-height:64px;}
+.qt-bill .qb-store{font-size:17px;font-weight:700;letter-spacing:.3px;line-height:1.25;}
+.qt-bill .qb-addr{font-size:10.5px;}
+.qt-bill .qb-title{margin:8px 0;padding:4px 0;border-top:1px solid #000;border-bottom:1px solid #000;text-align:center;font-size:12px;font-weight:700;letter-spacing:1.5px;}
+.qt-bill .qb-meta td:first-child{width:42%;padding-right:6px;}
+.qt-bill .qb-meta td:last-child{font-weight:600;text-align:right;word-break:break-word;}
+.qt-bill .qb-items{margin-top:8px;}
+.qt-bill thead th{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:left;padding:3px 0;border-top:1px solid #000;border-bottom:1px solid #000;}
+.qt-bill .qb-items td{padding:4px 0;border-bottom:1px dotted #999;}
+.qt-bill .qb-num{text-align:right !important;white-space:nowrap;padding-left:6px !important;}
+.qt-bill .qb-sub{display:block;font-size:9.5px;color:#444;}
+.qt-bill .qb-totals{margin-top:6px;}
+.qt-bill .qb-totals td:last-child{text-align:right;white-space:nowrap;padding-left:8px;}
+.qt-bill .qb-strong td{font-weight:700;}
+.qt-bill .qb-muted td{color:#444;}
+.qt-bill .qb-grand td{font-size:15px;font-weight:700;padding:5px 0;border-top:1px solid #000;border-bottom:3px double #000;}
+.qt-bill .qb-section{margin-top:8px;padding-top:6px;border-top:1px dashed #000;}
+.qt-bill .qb-section-title{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px;}
+.qt-bill .qb-status{margin-top:8px;padding:4px;border:1px solid #000;text-align:center;font-weight:700;letter-spacing:.5px;}
+.qt-bill .qb-note{margin-top:8px;font-size:10.5px;word-break:break-word;}
+.qt-bill .qb-sign{margin-top:36px;}
+.qt-bill .qb-sign td{width:45%;padding-top:4px;border-top:1px dotted #000;text-align:center;font-size:10px;}
+.qt-bill .qb-sign td.qb-gap{width:10%;border:0;}
+.qt-bill .qb-foot{margin-top:10px;padding-top:6px;border-top:1px dashed #000;text-align:center;font-size:10.5px;}
+</style>`;
 }
 
-// a summary line in a 4-column bill table: label : value
+// the store's name, logo and address (VAT No on sale bills)
+function billHeader(opts) {
+  let s = settings || {};
+  let lines = [s.address_one, s.address_two].filter(Boolean).map((l) => `<div>${l}</div>`).join("");
+  return `<div class="qb-head">
+      ${s.img ? `<img class="qb-logo" src="${img_path + s.img}" alt="">` : ""}
+      <div class="qb-store">${s.store || ""}</div>
+      <div class="qb-addr">${lines}${s.contact ? `<div>Tel: ${s.contact}</div>` : ""}${
+        opts && opts.vat && s.tax ? `<div>VAT No: ${s.tax}</div>` : ""
+      }</div>
+    </div>`;
+}
+
+// opens a bill: styles, store header and the document's title
+function billStart(title, opts) {
+  return `${billStyle()}<div class="qt-bill">${billHeader(opts)}<div class="qb-title">${title}</div>`;
+}
+
+// closes a bill, with the footer text (e.g. "Thank you!") if any
+function billEnd(foot) {
+  return `${foot ? `<div class="qb-foot">${foot}</div>` : ""}</div>`;
+}
+
+// details: [label, value] rows; empty values are left out
+function billMeta(rows) {
+  let html = rows
+    .filter((r) => r && r[1] !== undefined && r[1] !== null && r[1] !== "")
+    .map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`)
+    .join("");
+  return `<table class="qb-meta">${html}</table>`;
+}
+
+// the items: cols [{ label, num }], rows [cell, cell...] (cells are HTML)
+function billItems(cols, rows) {
+  let head = cols.map((c) => `<th${c.num ? ' class="qb-num"' : ""}>${c.label}</th>`).join("");
+  let body = rows
+    .map((r) => `<tr>${r.map((cell, i) => `<td${cols[i] && cols[i].num ? ' class="qb-num"' : ""}>${cell}</td>`).join("")}</tr>`)
+    .join("");
+  return `<table class="qb-items"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+// an item's name, with a small second line (batch, selling price...)
+function billItemName(name, sub) {
+  return txnHtml(name) + (sub ? `<span class="qb-sub">${sub}</span>` : "");
+}
+
+// totals / payment lines: [label, value, kind]; kind: "strong" | "grand" | "muted"
+function billTotals(rows) {
+  let html = rows
+    .filter(Boolean)
+    .map(([label, value, kind]) => `<tr${kind ? ` class="qb-${kind}"` : ""}><td>${label}</td><td>${value}</td></tr>`)
+    .join("");
+  return `<table class="qb-totals">${html}</table>`;
+}
+
+// a block under a dashed rule, e.g. Payment
+function billSection(title, html) {
+  return `<div class="qb-section">${title ? `<div class="qb-section-title">${title}</div>` : ""}${html}</div>`;
+}
+
+function billNote(label, text) {
+  return text ? `<div class="qb-note"><b>${label}:</b> ${txnHtml(text)}</div>` : "";
+}
+
+// a boxed line, e.g. "NOT PAID YET" on a bill printed before paying
+function billStatus(text) {
+  return text ? `<div class="qb-status">${text}</div>` : "";
+}
+
+// Older notes (supplier payment, stock adjustment, transfer, journal, day
+// end) are written as <div class="qt-bill"> + these three helpers
+function supBillHeader(title) {
+  return `${billStyle()}${billHeader()}<div class="qb-title">${title}</div>`;
+}
+
+// a summary line in a 4-column bill table: label ... value
 function supBillRow(label, value, big) {
-  if (big) {
-    let h = (t) => `<h3 style="margin: 4px 0;">${t}</h3>`;
-    return `<tr><td colspan="2">${h(label)}</td><td>${h(":")}</td><td style="text-align: right;">${h(value)}</td></tr>`;
-  }
-  return `<tr><td colspan="2">${label}</td><td>:</td><td style="text-align: right;">${value}</td></tr>`;
+  return `<tr${big ? ' class="qb-grand"' : ""}><td colspan="3">${label}</td><td class="qb-num">${value}</td></tr>`;
 }
 
 function supBillSignatures(left, right) {
-  let line = (t) =>
-    `<td style="width: 45%; border-top: 1px dotted #000; text-align: center; padding-top: 3px;">${t}</td>`;
-  return `<table width="100%" style="margin-top: 35px;"><tr>${line(left)}<td style="width: 10%;"></td>${line(right)}</tr></table>`;
+  return `<table class="qb-sign"><tr><td>${left}</td><td class="qb-gap"></td><td>${right}</td></tr></table>`;
 }
 
 function grnBillHtml(g) {
-  let items = (g.items || [])
-    .map(
-      (i) => `<tr>
-        <td>${txnHtml(i.product_name)}${i.selling_price != null ? `<br><small>sell @ ${supMoney(i.selling_price)}${i.batch_code ? " · " + txnHtml(i.batch_code) : ""}</small>` : ""}</td>
-        <td>${i.quantity}</td>
-        <td>${supMoney(i.unit_cost)}</td>
-        <td style="text-align: right;">${supMoney(i.total)}</td>
-      </tr>`
-    )
-    .join("");
+  let items = (g.items || []).map((i) => [
+    billItemName(
+      i.product_name,
+      i.selling_price != null ? `sell @ ${supMoney(i.selling_price)}${i.batch_code ? " · " + txnHtml(i.batch_code) : ""}` : ""
+    ),
+    i.quantity,
+    supMoney(i.unit_cost),
+    supMoney(i.total),
+  ]);
   let used = Number(g.advance_used) || 0;
   let due = grnAmountDue(g);
-  let payment = "";
-  if (used > 0) payment += supBillRow("From supplier advance", supMoney(used));
-  if (g.payment_method === "Credit") payment += supBillRow("On credit", "<b>" + supMoney(due) + "</b>");
-  else if (g.payment_method !== "Advance") payment += supBillRow("Paid by " + txnHtml(g.payment_method), supMoney(due));
   let pos = g.walk_in ? null : supBillPositionFor("g", g);
-  if (pos) payment += supBillRow("Supplier balance now", "<b>" + supBillPositionText(pos.after) + "</b>");
+  let payment = [
+    used > 0 ? ["From supplier advance", supMoney(used)] : null,
+    g.payment_method === "Credit"
+      ? ["On credit", supMoney(due), "strong"]
+      : g.payment_method !== "Advance"
+      ? ["Paid by " + txnHtml(g.payment_method), supMoney(due)]
+      : null,
+    pos ? ["Supplier balance now", supBillPositionText(pos.after), "strong"] : null,
+  ];
 
-  return `<div style="font-size: 10px;">
-    ${supBillHeader("GOODS RECEIVED NOTE")}
-    <p>
-      GRN No : <b>${txnHtml(g.grn_no)}</b> <br>
-      Supplier : ${txnHtml(g.supplier_name)}${g.walk_in ? " (Walk-in)" : ""} <br>
-      Received on : ${supDate(g.received_date)} <br>
-      Received by : ${txnHtml(g.created_by || "-")} <br>
-      Date : ${moment(g.created_at).format("DD MMM YYYY HH:mm:ss")}
-    </p>
-    <hr>
-    <table width="100%">
-      <thead style="text-align: left;">
-        <tr><th>Item</th><th style="padding: 0 6px;">Qty</th><th style="padding: 0 6px;">Cost</th><th style="text-align: right;">Total</th></tr>
-      </thead>
-      <tbody>
-        ${items}
-        <tr><td colspan="4"><hr style="margin: 4px 0;"></td></tr>
-        ${supBillRow("Products / Units", (g.item_count || (g.items || []).length) + " / " + (g.total_quantity || 0))}
-        ${supBillRow("Total", supMoney(g.total), true)}
-        ${payment}
-      </tbody>
-    </table>
-    ${g.note ? "<p>Note : " + txnHtml(g.note) + "</p>" : ""}
-    <hr>
-    ${supBillSignatures("Received by", "Supplier")}
-  </div>`;
+  return (
+    billStart("GOODS RECEIVED NOTE") +
+    billMeta([
+      ["GRN No", txnHtml(g.grn_no)],
+      ["Supplier", txnHtml(g.supplier_name) + (g.walk_in ? " (Walk-in)" : "")],
+      ["Received on", supDate(g.received_date)],
+      ["Received by", txnHtml(g.created_by || "-")],
+      ["Entered", moment(g.created_at).format("DD MMM YYYY HH:mm")],
+    ]) +
+    billItems(
+      [{ label: "Item" }, { label: "Qty", num: true }, { label: "Cost", num: true }, { label: "Total", num: true }],
+      items
+    ) +
+    billTotals([
+      ["Products / Units", (g.item_count || (g.items || []).length) + " / " + (g.total_quantity || 0), "muted"],
+      ["Total", supMoney(g.total), "grand"],
+    ]) +
+    (payment.some(Boolean) ? billSection("Payment", billTotals(payment)) : "") +
+    billNote("Note", g.note) +
+    supBillSignatures("Received by", "Supplier") +
+    billEnd()
+  );
+}
+
+// ---- the sale bill (checkout and Transactions use the same one) ----
+// b: { invoice, ref, customer, cashier, date, items, subtotal, discount,
+//      taxLabel, tax, total, payment: [[label, value, kind]], status }
+function saleBillHtml(b) {
+  let sym = settings.symbol || "";
+  let money = (n) => sym + moneyText(parseFloat(n) || 0);
+  let items = (b.items || []).map((i) => {
+    let qty = parseFloat(i.quantity) || 0;
+    let price = parseFloat(i.price) || 0;
+    return [billItemName(i.product_name), i.quantity, money(price), money(price * qty)];
+  });
+  let discount = parseFloat(b.discount) || 0;
+  let payment = (b.payment || []).filter(Boolean);
+  return (
+    billStart("INVOICE", { vat: true }) +
+    billMeta([
+      ["Invoice No", txnHtml(b.invoice)],
+      ["Ref No", txnHtml(b.ref)],
+      ["Customer", txnHtml(b.customer)],
+      ["Cashier", txnHtml(b.cashier)],
+      ["Date", txnHtml(b.date)],
+    ]) +
+    billItems(
+      [{ label: "Item" }, { label: "Qty", num: true }, { label: "Price", num: true }, { label: "Total", num: true }],
+      items
+    ) +
+    billTotals([
+      ["Subtotal", money(b.subtotal), "strong"],
+      discount > 0 ? ["Discount", "-" + money(discount)] : null,
+      b.taxLabel ? [b.taxLabel, money(b.tax)] : null,
+      ["Total", money(b.total), "grand"],
+    ]) +
+    (payment.length ? billSection("Payment", billTotals(payment)) : "") +
+    billStatus(b.status) +
+    billEnd(settings.footer)
+  );
 }
 
 function supplierPaymentBillHtml(p) {
@@ -7052,7 +7055,7 @@ function supplierPaymentBillHtml(p) {
   let toAdvance = Number(p.to_advance) || 0;
   let toCredit = p.to_credit !== undefined ? Number(p.to_credit) || 0 : amount - toAdvance;
   let name = p.supplier_name || (supplierTxnData && supplierTxnData.supplier ? supplierTxnData.supplier.name : "");
-  return `<div style="font-size: 10px;">
+  return `<div class="qt-bill">
     ${supBillHeader(toCredit > 0 ? "SUPPLIER PAYMENT" : "ADVANCE PAYMENT TO SUPPLIER")}
     <p>
       Payment No : <b>${txnHtml(p.payment_no || p._id)}</b> <br>
@@ -7125,7 +7128,8 @@ function refreshSupplierTransactions() {
 
 function renderSupplierTransactions() {
   let s = supplierTxnData.supplier;
-  $("#supplierTransactionsTitle").html(`<i class="fa fa-truck"></i> ${txnHtml(s.name)}`);
+  $("#supplierTransactionsTitle").text(s.name || "Supplier");
+  // the header's subtitle: how to reach the supplier
   $("#supplierTransactionsContact").html(
     [s.contact_person, s.phone, s.email, s.address].filter(Boolean).map(txnHtml).join(" &nbsp;·&nbsp; ") ||
       "No contact details"
@@ -7252,7 +7256,7 @@ function openSupplierPayment() {
   if (!s) return;
   $("#saveSupplierPayment").get(0).reset();
   let owing = s.balance > 0.004;
-  $("#supplierPaymentTitle").html('<i class="fa fa-money"></i> ' + (owing ? "Pay Supplier" : "Pay in Advance"));
+  $("#supplierPaymentTitle").text(owing ? "Pay Supplier" : "Pay in Advance");
   $("#submitSupplierPayment").text(owing ? "Save Payment" : "Save Advance Payment");
   $("#supPayName").text(s.name);
   $("#supPayOwed").text(supMoney(s.balance));
@@ -8124,49 +8128,43 @@ function addPrnLine() {
 
 // ---- the PRN bill (like the GRN bill) ----
 function prnBillHtml(r) {
-  let items = (r.items || [])
-    .map(
-      (i) => `<tr>
-        <td>${txnHtml(i.product_name)}</td>
-        <td style="padding: 0 6px;">${i.quantity}</td>
-        <td style="padding: 0 6px; white-space: nowrap;">${supMoney(i.unit_cost)}</td>
-        <td style="text-align: right; white-space: nowrap;">${supMoney(i.total)}</td>
-      </tr>`
-    )
-    .join("");
-  let settle =
+  let items = (r.items || []).map((i) => [
+    billItemName(i.product_name),
+    i.quantity,
+    supMoney(i.unit_cost),
+    supMoney(i.total),
+  ]);
+  let settlement = [
     r.refund_method === "Credit"
-      ? supBillRow("Deducted from supplier's balance", "<b>" + supMoney(r.total) + "</b>")
-      : supBillRow("Refunded by " + txnHtml(r.refund_method), "<b>" + supMoney(r.total) + "</b>");
-  let balance = !r.walk_in && r.position_after != null ? supBillRow("Supplier balance now", "<b>" + supBillPositionText(r.position_after) + "</b>") : "";
-  return `<div style="font-size: 10px;">
-    ${supBillHeader("PURCHASE RETURN NOTE")}
-    <p>
-      PRN No : <b>${txnHtml(r.prn_no)}</b> <br>
-      Returned to : ${txnHtml(r.supplier_name)}${r.walk_in ? " (Walk-in)" : ""} <br>
-      Return date : ${supDate(r.return_date)} <br>
-      ${r.grn_ref ? "GRN : " + txnHtml(r.grn_ref) + " <br>" : ""}
-      Returned by : ${txnHtml(r.created_by || "-")} <br>
-      Date : ${moment(r.created_at).format("DD MMM YYYY HH:mm:ss")}
-    </p>
-    <hr>
-    <table width="100%">
-      <thead style="text-align: left;">
-        <tr><th>Item</th><th style="padding: 0 6px;">Qty</th><th style="padding: 0 6px;">Cost</th><th style="text-align: right;">Total</th></tr>
-      </thead>
-      <tbody>
-        ${items}
-        <tr><td colspan="4"><hr style="margin: 4px 0;"></td></tr>
-        ${supBillRow("Products / Units", (r.item_count || (r.items || []).length) + " / " + (r.total_quantity || 0))}
-        ${supBillRow("Total", supMoney(r.total), true)}
-        ${settle}
-        ${balance}
-      </tbody>
-    </table>
-    ${r.note ? "<p>Reason : " + txnHtml(r.note) + "</p>" : ""}
-    <hr>
-    ${supBillSignatures("Returned by", "Received by (Supplier)")}
-  </div>`;
+      ? ["Deducted from supplier's balance", supMoney(r.total), "strong"]
+      : ["Refunded by " + txnHtml(r.refund_method), supMoney(r.total), "strong"],
+    !r.walk_in && r.position_after != null
+      ? ["Supplier balance now", supBillPositionText(r.position_after), "strong"]
+      : null,
+  ];
+  return (
+    billStart("PURCHASE RETURN NOTE") +
+    billMeta([
+      ["PRN No", txnHtml(r.prn_no)],
+      ["Returned to", txnHtml(r.supplier_name) + (r.walk_in ? " (Walk-in)" : "")],
+      ["Return date", supDate(r.return_date)],
+      ["GRN", r.grn_ref ? txnHtml(r.grn_ref) : ""],
+      ["Returned by", txnHtml(r.created_by || "-")],
+      ["Entered", moment(r.created_at).format("DD MMM YYYY HH:mm")],
+    ]) +
+    billItems(
+      [{ label: "Item" }, { label: "Qty", num: true }, { label: "Cost", num: true }, { label: "Total", num: true }],
+      items
+    ) +
+    billTotals([
+      ["Products / Units", (r.item_count || (r.items || []).length) + " / " + (r.total_quantity || 0), "muted"],
+      ["Total", supMoney(r.total), "grand"],
+    ]) +
+    billSection("Settlement", billTotals(settlement)) +
+    billNote("Reason", r.note) +
+    supBillSignatures("Returned by", "Received by (Supplier)") +
+    billEnd()
+  );
 }
 
 // PRN bill: from the PRN list, the supplier window and the Quick Journal
@@ -8427,38 +8425,32 @@ $.fn.viewGrn = function (id) {
 // A customer's credit payment receipt (Customers -> Transactions -> Payments,
 // and the Quick Journal), shown in the sales bill window
 function creditPaymentReceiptHtml(p) {
-  let esc = (t) => $("<i>").text(t || "").html();
-  let row = (label, value, strong) =>
-    `<tr><td>${label}</td><td>:</td><td style="text-align:right">${strong ? "<b>" + value + "</b>" : value}</td></tr>`;
-  return `<div style="font-size: 10px;">
-        <p style="text-align: center;">
-          ${settings.img ? '<img style="max-width: 100px;" src="' + img_path + settings.img + '" /><br>' : ""}
-          <span style="font-size: 22px;">${settings.store || ""}</span> <br>
-          ${settings.address_one || ""} <br>
-          ${settings.address_two || ""} <br>
-          ${settings.contact ? "Tel: " + settings.contact + "<br>" : ""}
-        </p>
-        <hr>
-        <p style="text-align: center; font-size: 13px;"><b>CREDIT PAYMENT RECEIPT</b></p>
-        <p>
-          Receipt No : ${p.receipt_no || ""} <br>
-          Customer : ${esc(p.customer_name)} <br>
-          Received by : ${esc(p.user)} <br>
-          Date : ${moment(p.date).format("DD MMM YYYY HH:mm:ss")}
-        </p>
-        <hr>
-        <table width="100%">
-          ${row("Balance before", supMoney(parseFloat(p.balance_before) || 0))}
-          ${row("<h3 style='margin:4px 0'>Amount paid</h3>", "<h3 style='margin:4px 0'>" + supMoney(parseFloat(p.received ?? p.amount) || 0) + "</h3>")}
-          ${parseFloat(p.advance_added) > 0 ? row("Applied to credit", supMoney(parseFloat(p.amount) || 0)) + row("Saved as advance", supMoney(parseFloat(p.advance_added)), true) : ""}
-          ${row("Method", esc(p.method))}
-          ${p.reference ? row("Reference", esc(p.reference)) : ""}
-          ${row("Balance now", supMoney(parseFloat(p.balance_after) || 0), true)}
-        </table>
-        ${p.note ? "<p>Note: " + esc(p.note) + "</p>" : ""}
-        <hr>
-        <p style="text-align: center;">${settings.footer || "Thank you!"}</p>
-      </div>`;
+  let advance = parseFloat(p.advance_added) > 0;
+  return (
+    billStart("CREDIT PAYMENT RECEIPT") +
+    billMeta([
+      ["Receipt No", txnHtml(p.receipt_no || "")],
+      ["Customer", txnHtml(p.customer_name)],
+      ["Received by", txnHtml(p.user)],
+      ["Date", moment(p.date).format("DD MMM YYYY HH:mm:ss")],
+    ]) +
+    billTotals([
+      ["Balance before", supMoney(parseFloat(p.balance_before) || 0), "muted"],
+      ["Amount paid", supMoney(parseFloat(p.received ?? p.amount) || 0), "grand"],
+    ]) +
+    billSection(
+      "Payment",
+      billTotals([
+        advance ? ["Applied to credit", supMoney(parseFloat(p.amount) || 0)] : null,
+        advance ? ["Saved as advance", supMoney(parseFloat(p.advance_added)), "strong"] : null,
+        ["Method", txnHtml(p.method)],
+        p.reference ? ["Reference", txnHtml(p.reference)] : null,
+        ["Balance now", supMoney(parseFloat(p.balance_after) || 0), "strong"],
+      ])
+    ) +
+    billNote("Note", p.note) +
+    billEnd(settings.footer || "Thank you!")
+  );
 }
 
 let journalData = null; // { from, to, entries, summary } of the day shown
@@ -8757,7 +8749,7 @@ function journalPrintHtml() {
     })
     .join("");
 
-  return `<div style="font-size: 10px;">
+  return `<div class="qt-bill">
     ${supBillHeader("QUICK JOURNAL")}
     <p>
       Date : <b>${journalDay().format("dddd D MMM YYYY")}</b> <br>
@@ -9128,210 +9120,56 @@ $.fn.viewTransaction = function (index, source) {
   let trans = (source || allTransactions)[index];
   if (!trans) return;
 
-  let payment = 0;
-  let discount = trans.discount;
+  let sym = settings.symbol;
   let refNumber =
     trans?.ref_number != ""
       ? trans.ref_number
       : trans?.order;
   let orderNumber = trans?.order;
-  let type = "";
-  let tax_row = "";
-  let items = "";
-  let products = trans?.items;
 
-  products.forEach((item) => {
-    items +=
-      "<tr><td>" +
-      item.product_name +
-      "</td><td>" +
-      item.quantity +
-      "</td><td>" +
-      settings.symbol +
-      moneyText(parseFloat(item.price)) +
-      "</td></tr>";
-  });
-
-  switch (trans?.payment_type) {
-    case 1:
-      type = "Cash";
-      break;
-    case 2:
-      type = "Card";
-      break;
-    default:
-      type = "Cash";
-  }
-
-  // console.log("Method Type: ", type)
-
+  // the payment lines (same figures as the bill printed at the till)
+  let payment = [];
   if (trans?.paid != "") {
     let advUsed = parseFloat(trans?.advance_used) || 0;
     let advKept = parseFloat(trans?.advance_deposit) || 0;
     let advAfter = trans?.advance_balance_after;
     let onCredit = trans?.payment_type !== "Credit" ? parseFloat(trans?.credit_amount) || 0 : 0;
-    payment = `${
-                  advUsed > 0
-                    ? `<tr>
-                    <td>Advance used</td>
-                    <td>:</td>
-                    <td>-${settings.symbol + moneyText(advUsed)}</td>
-                </tr>
-                <tr>
-                    <td><b>Amount to pay</b></td>
-                    <td>:</td>
-                    <td><b>${settings.symbol + moneyText(Math.max((parseFloat(trans?.total) || 0) - advUsed, 0))}</b></td>
-                </tr>`
-                    : ""
-                }                <tr>
-                    <td>Paid${onCredit > 0 ? " (" + trans?.payment_type + ")" : ""}</td>
-                    <td>:</td>
-                    <td>${trans?.paid === "" || trans?.paid == null ? settings.symbol : settings.symbol + moneyText(trans.paid)}</td>
-                </tr>${
-                  onCredit > 0
-                    ? `<tr>
-                    <td><b>On credit</b></td>
-                    <td>:</td>
-                    <td><b>${settings.symbol + moneyText(onCredit)}</b></td>
-                </tr>`
-                    : ""
-                }
-                <tr>
-                    <td>Change</td>
-                    <td>:</td>
-                    <td>${
-                      settings.symbol +
-                      moneyText(Math.abs(trans?.change))
-                    }</td>
-                </tr>${
-                  advKept > 0
-                    ? `<tr>
-                    <td>Saved as advance</td>
-                    <td>:</td>
-                    <td>${settings.symbol + moneyText(advKept)}</td>
-                </tr>`
-                    : ""
-                }
-                <tr>
-                    <td>Method</td>
-                    <td>:</td>
-                    <td>${trans?.payment_type}${onCredit > 0 ? " + Credit" : ""}</td>
-                </tr>${
-                  advAfter !== undefined && advAfter !== null && advAfter !== ""
-                    ? `<tr>
-                    <td>Advance balance</td>
-                    <td>:</td>
-                    <td>${settings.symbol + moneyText((parseFloat(advAfter) || 0))}</td>
-                </tr>`
-                    : ""
-                }
-                ${
-                  trans?.payment_info
-                    ? `<tr>
-                    <td>Transaction Code</td>
-                    <td>:</td>
-                    <td>${trans?.payment_info}</td>
-                </tr>`
-                    : ""
-                }`;
+    payment = [
+      advUsed > 0 ? ["Advance used", "-" + sym + moneyText(advUsed)] : null,
+      advUsed > 0
+        ? ["Amount to pay", sym + moneyText(Math.max((parseFloat(trans?.total) || 0) - advUsed, 0)), "strong"]
+        : null,
+      [
+        "Paid" + (onCredit > 0 ? " (" + txnHtml(trans?.payment_type) + ")" : ""),
+        trans?.paid === "" || trans?.paid == null ? sym : sym + moneyText(trans.paid),
+      ],
+      onCredit > 0 ? ["On credit", sym + moneyText(onCredit), "strong"] : null,
+      ["Change", sym + moneyText(Math.abs(trans?.change))],
+      advKept > 0 ? ["Saved as advance", sym + moneyText(advKept)] : null,
+      ["Method", txnHtml(trans?.payment_type) + (onCredit > 0 ? " + Credit" : "")],
+      advAfter !== undefined && advAfter !== null && advAfter !== ""
+        ? ["Advance balance", sym + moneyText(parseFloat(advAfter) || 0)]
+        : null,
+      trans?.payment_info ? ["Transaction Code", txnHtml(trans.payment_info)] : null,
+    ];
   } else if (trans?.payment_type) {
-    payment = `<tr>
-                    <td>Method</td>
-                    <td>:</td>
-                    <td>${trans.payment_type}</td>
-                </tr>`;
+    payment = [["Method", txnHtml(trans.payment_type)]];
   }
 
-  if (settings.charge_tax) {
-    tax_row = `<tr>
-                <td>Vat(${settings.percentage})% </td>
-                <td>:</td>
-                <td>${settings.symbol}${moneyText(parseFloat(trans.tax))}</td>
-            </tr>`;
-  }
-
-  receipt = `<div style="font-size: 10px;">                            
-        <p style="text-align: center;">
-        ${
-          settings.img == ""
-            ? settings.img
-            : '<img style="max-width: 50px;max-width: 100px;" src ="' +
-              img_path +
-              settings.img +
-              '" /><br>'
-        }
-            <span style="font-size: 22px;">${settings.store}</span> <br>
-            ${settings.address_one} <br>
-            ${settings.address_two} <br>
-            ${
-              settings.contact != "" ? "Tel: " + settings.contact + "<br>" : ""
-            } 
-            ${settings.tax != "" ? "Vat No: " + settings.tax + "<br>" : ""} 
-    </p>
-    <hr>
-    <left>
-        <p>
-        Invoice : ${orderNumber} <br>
-        Ref No : ${refNumber} <br>
-        Customer : ${
-          trans?.customer == 0
-            ? "Walk in Customer"
-            : trans?.customer?.name
-        } <br>
-        Cashier : ${trans?.user} <br>
-        Date : ${moment(trans?.date).format(
-          "DD MMM YYYY HH:mm:ss"
-        )}<br>
-        </p>
-
-    </left>
-    <hr>
-    <table width="100%">
-        <thead style="text-align: left;">
-        <tr>
-            <th>Item</th>
-            <th>Qty</th>
-            <th>Price</th>
-        </tr>
-        </thead>
-        <tbody>
-        ${items}                
- 
-        <tr>                        
-            <td><b>Subtotal</b></td>
-            <td>:</td>
-            <td><b>${settings.symbol}${moneyText(trans?.subtotal)}</b></td>
-        </tr>
-        <tr>
-            <td>Discount</td>
-            <td>:</td>
-            <td>${
-              discount > 0
-                ? settings.symbol +
-                  moneyText(parseFloat(trans?.discount))
-                : ""
-            }</td>
-        </tr>
-        
-        ${tax_row}
-    
-        <tr>
-            <td><h3>Total</h3></td>
-            <td><h3>:</h3></td>
-            <td>
-                <h3>${settings.symbol}${moneyText(trans?.total)}</h3>
-            </td>
-        </tr>
-        ${payment == 0 ? "" : payment}
-        </tbody>
-        </table>
-        <br>
-        <hr>
-        <br>
-        <p style="text-align: center;">
-         ${settings.footer}
-         </p>
-        </div>`;
+  receipt = saleBillHtml({
+    invoice: orderNumber,
+    ref: refNumber,
+    customer: trans?.customer == 0 ? "Walk in Customer" : trans?.customer?.name,
+    cashier: trans?.user,
+    date: moment(trans?.date).format("DD MMM YYYY HH:mm:ss"),
+    items: trans?.items || [],
+    subtotal: trans?.subtotal,
+    discount: trans?.discount,
+    taxLabel: settings.charge_tax ? "VAT (" + settings.percentage + "%)" : "",
+    tax: trans?.tax,
+    total: trans?.total,
+    payment: payment,
+  });
 
   $("#viewTransaction").html("");
   $("#viewTransaction").html(receipt);
@@ -10372,7 +10210,7 @@ function adjBillHtml(a) {
       </tr>`
     )
     .join("");
-  return `<div style="font-size: 10px;">
+  return `<div class="qt-bill">
     ${supBillHeader("STOCK ADJUSTMENT")}
     <p>
       Adj. No : <b>${txnHtml(a.adj_no)}</b> <br>
@@ -10850,7 +10688,7 @@ function updateTransferHint() {
 
 // the transfer slip, printed like the other bills
 function transferSlipHtml(t) {
-  return `<div style="font-size: 10px;">
+  return `<div class="qt-bill">
     ${supBillHeader("MONEY TRANSFER")}
     <p>
       Transfer No : <b>${txnHtml(t.transfer_no)}</b> <br>
@@ -10898,7 +10736,7 @@ function dayEndPrintHtml() {
     .filter((e) => e.kind === "transfer")
     .map((e) => row(txnHtml(e.reference) + " " + txnHtml(e.transfer_from) + " &rarr; " + txnHtml(e.transfer_to), supMoney(e.amount)))
     .join("");
-  return `<div style="font-size: 10px;">
+  return `<div class="qt-bill">
     ${supBillHeader("DAY END")}
     <p>
       Date : <b>${moment(dayEndData.from, "YYYY-MM-DD").format("dddd D MMM YYYY")}</b> <br>

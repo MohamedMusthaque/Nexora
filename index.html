@@ -1380,53 +1380,74 @@
 
 
 
-     <!-- Add / edit a supplier (pos.js: openSupplierForm) -->
-     <div id="supplierModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="supplierModalTitle" aria-hidden="true" style="display: none;">
-            <div class="modal-dialog modal-md">
+     <!-- Add / edit a supplier (pos.js: openSupplierForm). Same look as the
+          Account window (#userModal): green header, sections, Cancel / Save
+          always in view. -->
+     <div id="supplierModal" class="modal fade account-modal" tabindex="-1" role="dialog" aria-labelledby="supplierModalTitle" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog account-dialog">
                 <div class="modal-content">
-                    <div class="modal-header">
+                    <div class="account-hero">
                         <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-                        <h4 class="modal-title" id="supplierModalTitle">Add Supplier</h4>
+                        <div class="account-avatar"><i class="fa fa-truck"></i></div>
+                        <div class="account-hero-text">
+                            <h4 class="modal-title" id="supplierModalTitle">Add Supplier</h4>
+                            <p class="account-subtitle" id="supplierModalSub">Someone you buy goods from</p>
+                        </div>
                     </div>
                     <div class="modal-body">
                         <form id="saveSupplier" autocomplete="off">
                             <input type="hidden" id="supplier_id">
-                            <div class="form-group">
-                                <label for="supplierName">Supplier Name</label>
-                                <input type="text" id="supplierName" class="form-control" maxlength="100" placeholder="e.g. ABC Distributors" required>
-                            </div>
-                            <div class="row">
-                                <div class="col-sm-6 form-group">
-                                    <label for="supplierContact">Contact Person <small class="text-muted">(optional)</small></label>
-                                    <input type="text" id="supplierContact" class="form-control" maxlength="100">
+
+                            <div class="account-section">
+                                <h5 class="account-section-title"><i class="fa fa-truck"></i> Supplier</h5>
+                                <div class="form-group">
+                                    <label for="supplierName">Supplier Name <span class="account-required">*</span></label>
+                                    <input type="text" id="supplierName" class="form-control" maxlength="100" placeholder="e.g. ABC Distributors" required>
                                 </div>
-                                <div class="col-sm-6 form-group">
-                                    <label for="supplierPhone">Phone <small class="text-muted">(optional)</small></label>
-                                    <input type="text" id="supplierPhone" class="form-control" maxlength="50">
+                                <div class="row">
+                                    <div class="col-sm-6 form-group">
+                                        <label for="supplierContact">Contact Person <small class="text-muted">(optional)</small></label>
+                                        <input type="text" id="supplierContact" class="form-control" maxlength="100">
+                                    </div>
+                                    <div class="col-sm-6 form-group">
+                                        <label for="supplierPhone">Phone <small class="text-muted">(optional)</small></label>
+                                        <input type="text" id="supplierPhone" class="form-control" maxlength="50">
+                                    </div>
                                 </div>
                             </div>
-                            <div class="form-group">
-                                <label for="supplierEmail">Email <small class="text-muted">(optional)</small></label>
-                                <input type="email" id="supplierEmail" class="form-control" maxlength="100">
+
+                            <div class="account-section">
+                                <h5 class="account-section-title"><i class="fa fa-map-marker"></i> Email &amp; Address</h5>
+                                <div class="form-group">
+                                    <label for="supplierEmail">Email <small class="text-muted">(optional)</small></label>
+                                    <input type="email" id="supplierEmail" class="form-control" maxlength="100">
+                                </div>
+                                <div class="form-group">
+                                    <label for="supplierAddress">Address <small class="text-muted">(optional)</small></label>
+                                    <textarea id="supplierAddress" class="form-control" rows="2" maxlength="200"></textarea>
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label for="supplierAddress">Address <small class="text-muted">(optional)</small></label>
-                                <textarea id="supplierAddress" class="form-control" rows="2" maxlength="200"></textarea>
-                            </div>
-                            <button type="submit" class="btn btn-primary btn-block waves-effect waves-light" id="submitSupplier">Save Supplier</button>
                         </form>
+                    </div>
+                    <div class="modal-footer account-footer">
+                        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                        <button type="submit" form="saveSupplier" class="btn btn-primary waves-effect waves-light" id="submitSupplier"><i class="fa fa-check"></i> Save Supplier</button>
                     </div>
                </div>
           </div>
      </div>
 
      <!-- New Good Receive Note (pos.js: openGrnForm). Saving it adds the quantities to stock. -->
-     <div id="grnModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="grnModalTitle" aria-hidden="true" style="display: none;">
+     <div id="grnModal" class="modal fade nx-modal nx-open-lists" tabindex="-1" role="dialog" aria-labelledby="grnModalTitle" aria-hidden="true" style="display: none;">
             <div class="modal-dialog modal-lg">
                 <div class="modal-content">
-                    <div class="modal-header">
+                    <div class="modal-header nx-hero">
                         <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-                        <h4 class="modal-title" id="grnModalTitle"><i class="fa fa-truck"></i> New Good Receive Note (GRN)</h4>
+                        <span class="nx-hero-icon"><i class="fa fa-truck"></i></span>
+                        <div class="nx-hero-text">
+                            <h4 class="modal-title" id="grnModalTitle">New Good Receive Note (GRN)</h4>
+                            <p class="nx-hero-sub">Goods received from a supplier: saving adds them to stock</p>
+                        </div>
                     </div>
                     <div class="modal-body">
                         <form id="saveGrn" autocomplete="off">
@@ -1539,12 +1560,16 @@
      </div>
 
      <!-- New Purchase Return Note (pos.js: openPrnForm). Saving it takes the quantities out of stock. -->
-     <div id="prnModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="prnModalTitle" aria-hidden="true" style="display: none;">
+     <div id="prnModal" class="modal fade nx-modal nx-open-lists" tabindex="-1" role="dialog" aria-labelledby="prnModalTitle" aria-hidden="true" style="display: none;">
             <div class="modal-dialog modal-lg">
                 <div class="modal-content">
-                    <div class="modal-header">
+                    <div class="modal-header nx-hero">
                         <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-                        <h4 class="modal-title" id="prnModalTitle"><i class="fa fa-reply"></i> New Purchase Return Note (PRN)</h4>
+                        <span class="nx-hero-icon"><i class="fa fa-reply"></i></span>
+                        <div class="nx-hero-text">
+                            <h4 class="modal-title" id="prnModalTitle">New Purchase Return Note (PRN)</h4>
+                            <p class="nx-hero-sub">Goods sent back to a supplier: saving takes them out of stock</p>
+                        </div>
                     </div>
                     <div class="modal-body">
                         <form id="savePrn" autocomplete="off">
@@ -1902,15 +1927,19 @@
      </div>
 
      <!-- One supplier's GRNs and payments (pos.js: openSupplierTransactions) -->
-     <div id="supplierTransactionsModal" class="modal fade modal-fit" tabindex="-1" role="dialog" aria-labelledby="supplierTransactionsTitle" aria-hidden="true" style="display: none;">
+     <div id="supplierTransactionsModal" class="modal fade modal-fit nx-modal" tabindex="-1" role="dialog" aria-labelledby="supplierTransactionsTitle" aria-hidden="true" style="display: none;">
             <div class="modal-dialog modal-lg">
                 <div class="modal-content">
-                    <div class="modal-header">
+                    <div class="modal-header nx-hero">
                         <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-                        <h4 class="modal-title" id="supplierTransactionsTitle">Supplier</h4>
+                        <span class="nx-hero-icon"><i class="fa fa-truck"></i></span>
+                        <div class="nx-hero-text">
+                            <h4 class="modal-title" id="supplierTransactionsTitle">Supplier</h4>
+                            <!-- the supplier's contact details (pos.js: renderSupplierTransactions) -->
+                            <p class="nx-hero-sub" id="supplierTransactionsContact">GRNs, returns, payments and advances</p>
+                        </div>
                     </div>
                     <div class="modal-body">
-                        <div class="sup-contact text-muted" id="supplierTransactionsContact"></div>
                         <div class="sup-tiles">
                             <div class="sup-tile">
                                 <h5>TOTAL PURCHASES</h5>
@@ -1960,42 +1989,63 @@
           </div>
      </div>
 
-     <!-- Pay a supplier what is owed for credit GRNs (pos.js: openSupplierPayment) -->
-     <div id="supplierPaymentModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="supplierPaymentTitle" aria-hidden="true" style="display: none;">
-            <div class="modal-dialog modal-md">
+     <!-- Pay a supplier what is owed for credit GRNs, or pay in advance when
+          nothing is owed (pos.js: openSupplierPayment). Same look as the
+          Account window (#userModal). -->
+     <div id="supplierPaymentModal" class="modal fade account-modal" tabindex="-1" role="dialog" aria-labelledby="supplierPaymentTitle" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog account-dialog">
                 <div class="modal-content">
-                    <div class="modal-header">
+                    <div class="account-hero">
                         <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-                        <h4 class="modal-title" id="supplierPaymentTitle">Pay Supplier</h4>
+                        <div class="account-avatar"><i class="fa fa-money"></i></div>
+                        <div class="account-hero-text">
+                            <h4 class="modal-title" id="supplierPaymentTitle">Pay Supplier</h4>
+                            <p class="account-subtitle" id="supPayName"></p>
+                        </div>
                     </div>
                     <div class="modal-body">
                         <form id="saveSupplierPayment" autocomplete="off">
-                            <p class="sup-pay-owed"><b id="supPayName"></b> &nbsp;·&nbsp; Owed: <b id="supPayOwed">0.00</b> &nbsp;·&nbsp; Advance: <b id="supPayAdvance">0.00</b></p>
-                            <div class="row">
-                                <div class="col-sm-6 form-group">
-                                    <label for="supPayAmount">Amount <span class="text-muted grn-currency"></span></label>
-                                    <input autocomplete="off" inputmode="decimal" type="text" id="supPayAmount" class="form-control amount-input" required>
-                                </div>
-                                <div class="col-sm-6 form-group">
-                                    <label for="supPayDate">Date</label>
-                                    <input type="date" id="supPayDate" class="form-control" required>
+                            <div class="account-section">
+                                <!-- where the supplier stands now -->
+                                <div class="sup-pay-summary">
+                                    <div class="sup-pay-owed"><span>Owed</span><b id="supPayOwed">0.00</b></div>
+                                    <div class="sup-pay-advance"><span>Advance</span><b id="supPayAdvance">0.00</b></div>
                                 </div>
                             </div>
-                            <p class="help-block" id="supPayHint"></p>
-                            <div class="form-group">
-                                <label for="supPayMethod">Paid By</label>
-                                <select id="supPayMethod" class="form-control">
-                                    <option value="Cash">Cash</option>
-                                    <option value="Bank Transfer">Bank Transfer</option>
-                                    <option value="Card">Card</option>
-                                </select>
+
+                            <div class="account-section">
+                                <h5 class="account-section-title"><i class="fa fa-credit-card"></i> Payment</h5>
+                                <div class="row">
+                                    <div class="col-sm-6 form-group">
+                                        <label for="supPayAmount">Amount <span class="text-muted grn-currency"></span> <span class="account-required">*</span></label>
+                                        <input autocomplete="off" inputmode="decimal" type="text" id="supPayAmount" class="form-control amount-input" required>
+                                    </div>
+                                    <div class="col-sm-6 form-group">
+                                        <label for="supPayDate">Date</label>
+                                        <input type="date" id="supPayDate" class="form-control" required>
+                                    </div>
+                                </div>
+                                <p class="account-hint" id="supPayHint"></p>
+                                <div class="row">
+                                    <div class="col-sm-6 form-group">
+                                        <label for="supPayMethod">Paid By</label>
+                                        <select id="supPayMethod" class="form-control">
+                                            <option value="Cash">Cash</option>
+                                            <option value="Bank Transfer">Bank Transfer</option>
+                                            <option value="Card">Card</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-sm-6 form-group">
+                                        <label for="supPayNote">Note <small class="text-muted">(optional)</small></label>
+                                        <input type="text" id="supPayNote" class="form-control" maxlength="500" placeholder="Cheque or transfer reference">
+                                    </div>
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label for="supPayNote">Note <small class="text-muted">(optional)</small></label>
-                                <input type="text" id="supPayNote" class="form-control" maxlength="500" placeholder="e.g. cheque or transfer reference">
-                            </div>
-                            <button type="submit" class="btn btn-success btn-block waves-effect waves-light" id="submitSupplierPayment">Save Payment</button>
                         </form>
+                    </div>
+                    <div class="modal-footer account-footer">
+                        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                        <button type="submit" form="saveSupplierPayment" class="btn btn-success waves-effect waves-light" id="submitSupplierPayment">Save Payment</button>
                     </div>
                </div>
           </div>
