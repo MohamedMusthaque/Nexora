@@ -12,6 +12,11 @@ dist-*/
 /UsersmusthAppDataRoaming/
 *.db
 
+# Secrets: environment files and Google OAuth client downloads (Google Drive backup)
+.env
+.env.*
+client_secret*.json
+
 # Local editor / AI tool settings
 .kilo/
 .mcp.json

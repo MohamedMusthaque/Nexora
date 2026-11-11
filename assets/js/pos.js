@@ -11625,3 +11625,293 @@ $(function () {
     syncAccountPerms();
   });
 });
+
+
+// ======================================================================
+// Google Drive backup (lib/driveBackup.js): Settings > Data & Backup, and
+// the cloud icon in the toolbar (opens that section). Backups are saved on
+// this PC first and uploaded whenever the internet is connected.
+// ======================================================================
+let driveStatus = null;
+let driveEditingClient = false; // the "Google client settings" form opened by hand
+
+function driveEsc(t) {
+  return $("<i>").text(t == null ? "" : String(t)).html();
+}
+
+function driveWhen(iso) {
+  return iso ? moment(iso).fromNow() : "never";
+}
+
+function driveSize(bytes) {
+  return bytes > 1024 * 1024 ? (bytes / 1024 / 1024).toFixed(1) + " MB" : Math.max(1, Math.round(bytes / 1024)) + " KB";
+}
+
+// the state in one line: for the toolbar icon and the Settings card
+function driveState(s) {
+  if (!s || !s.configured) {
+    return { level: "off", icon: "fa-cloud", head: "Google Drive backup is not set up", text: "Set it up in Settings > Data & Backup." };
+  }
+  if (!s.connected) {
+    if (s.signingIn) return { level: "busy", icon: "fa-refresh fa-spin", head: "Signing in...", text: "Finish signing in in your browser." };
+    return { level: "off", icon: "fa-cloud", head: "Not signed in to Google Drive", text: "Sign in with Google to back up your data." };
+  }
+  if (s.authError) {
+    return { level: "error", icon: "fa-exclamation-triangle", head: "Sign in to Google again", text: "The Google sign-in expired or was removed, so backups can't upload. Sign out and sign in again." };
+  }
+  if (!s.enabled) {
+    return { level: "off", icon: "fa-cloud", head: "Automatic backup is off", text: "Turn it on with the switch, or use Back up now." };
+  }
+  if (s.lastError) {
+    return { level: "error", icon: "fa-exclamation-triangle", head: "Backup needs attention", text: s.lastError };
+  }
+  if (s.running) {
+    return { level: "busy", icon: "fa-refresh fa-spin", head: "Backing up to Google Drive...", text: "Saving and uploading a copy of your data." };
+  }
+  let last = s.lastBackupAt ? "Last upload " + driveWhen(s.lastBackupAt) + "." : "Nothing uploaded yet.";
+  if (!s.online) {
+    return {
+      level: "offline",
+      icon: "fa-cloud",
+      head: s.pending ? "Offline - your latest backup is waiting on this PC" : "Offline",
+      text: last + (s.pending ? " It uploads by itself as soon as the internet is connected." : " New changes are saved on this PC until the internet is back."),
+    };
+  }
+  if (s.queuedAt && s.nextRetryAt) {
+    return { level: "pending", icon: "fa-clock-o", head: "Upload waiting", text: last + " Next try " + driveWhen(s.nextRetryAt) + "." };
+  }
+  if (s.pending) {
+    return { level: "pending", icon: "fa-cloud-upload", head: "Changes waiting to be backed up", text: last + " The next backup runs within a few minutes." };
+  }
+  return { level: "ok", icon: "fa-cloud-upload", head: "Your data is backed up to Google Drive", text: last };
+}
+
+function renderDriveStatus(s) {
+  driveStatus = s;
+  if (!s) return;
+  let st = driveState(s);
+
+  // which part of the card: set-up / sign in / connected
+  let setup = !s.configured || driveEditingClient;
+  $("#driveSetup").toggle(setup);
+  $("#driveCancelClient").toggle(!!s.configured);
+  $("#driveSignIn").toggle(!setup && !s.connected);
+  $("#driveConnected").toggle(!setup && s.connected);
+  $("#driveEditClient").toggle(!setup && !s.connected);
+  $("#driveSwitch").toggle(!!s.connected);
+  $("#driveEnabled").prop("checked", !!s.enabled);
+  $("#driveSignInBtn").prop("disabled", !!s.signingIn);
+  $("#driveSignInWait").toggle(!!s.signingIn);
+  if (setup && !$("#driveClientId").is(":focus") && !$("#driveClientId").val()) $("#driveClientId").val(s.clientId || "");
+
+  if (s.connected) {
+    $("#driveEmail").text(s.email || "Signed in");
+    let facts = [
+      ["Internet", s.online ? '<span class="text-success">Connected</span>' : '<span class="text-warning">Offline</span>'],
+      [
+        "Last upload",
+        s.lastBackupAt
+          ? `${driveEsc(moment(s.lastBackupAt).format("DD MMM YYYY, hh:mm A"))} <small class="text-muted">(${driveEsc(driveWhen(s.lastBackupAt))})</small>`
+          : "Not yet",
+      ],
+    ];
+    if (s.queuedAt) facts.push(["Waiting", `Backup of ${driveEsc(moment(s.queuedAt).format("DD MMM, hh:mm A"))}, saved on this PC`]);
+    facts.push(["In Drive", `"Nexora Backups" folder &middot; this PC: ${driveEsc(s.machine)}`]);
+    $("#driveStatus").html(
+      `<div class="drive-state drive-${st.level}"><i class="fa ${st.icon}"></i><div><b>${driveEsc(st.head)}</b><span>${driveEsc(st.text)}</span></div></div>` +
+        `<dl class="drive-facts">${facts.map((f) => `<dt>${f[0]}</dt><dd>${f[1]}</dd>`).join("")}</dl>`
+    );
+    $("#driveBackupNow").prop("disabled", !!s.running);
+  }
+
+  // toolbar icon: users who can open Settings, not on a network terminal
+  // (the data lives on the server PC there)
+  let can = user && user.perm_settings == 1 && platform?.app !== "Network Point of Sale Terminal";
+  $("#driveIndicator")
+    .toggle(!!can)
+    .attr("class", "btn btn-light waves-effect waves-light drive-indicator drive-" + st.level)
+    .attr("title", st.head + (st.text ? " - " + st.text : ""))
+    .find("i")
+    .attr("class", "fa " + st.icon);
+}
+
+function refreshDriveStatus() {
+  return ipcRenderer.invoke("drive-backup:status").then(renderDriveStatus).catch(() => {});
+}
+
+function driveBackupResultText(r) {
+  if (!r) return "";
+  if (r.uploaded) return "Uploaded to Google Drive: " + r.uploaded;
+  if (r.offline) return "You're offline, so the backup is saved on this PC. It uploads by itself as soon as the internet is connected.";
+  if (r.busy) return "A backup is already running; another follows straight after.";
+  return "";
+}
+
+function driveSignIn() {
+  ipcRenderer.invoke("drive-backup:sign-in").then(function (res) {
+    renderDriveStatus(res.status || driveStatus);
+    if (!res.success) {
+      if (!/cancelled/i.test(res.error || "")) Swal.fire("Google sign-in", res.error || "Sign-in failed.", "error");
+      return;
+    }
+    let b = res.backup || {};
+    Swal.fire({
+      icon: b.success === false ? "warning" : "success",
+      title: "Connected to Google Drive",
+      html:
+        `<p>Signed in as <b>${driveEsc(res.email)}</b>.</p>` +
+        `<p>${driveEsc(b.success === false ? "The first backup didn't upload: " + b.error : driveBackupResultText(b))}</p>` +
+        "<p>From now on Nexora backs up automatically after changes and when it closes.</p>",
+    });
+  });
+}
+
+function driveRestore() {
+  Swal.fire({ title: "Loading backups from Google Drive...", allowOutsideClick: false });
+  Swal.showLoading();
+  ipcRenderer.invoke("drive-backup:list").then(function (res) {
+    Swal.hideLoading();
+    if (!res.success) {
+      Swal.fire("Oops!", res.offline ? "Can't reach Google Drive. Check the internet connection and try again." : res.error, "error");
+      return;
+    }
+    let list = res.backups || [];
+    if (!list.length) {
+      Swal.fire("No backups yet", "There are no Nexora backups in your Google Drive.", "info");
+      return;
+    }
+    let options = {};
+    let labels = {};
+    list.slice(0, 300).forEach((b) => {
+      labels[b.id] = moment(b.created).format("DD MMM YYYY, hh:mm A");
+      options[b.id] = labels[b.id] + "  ·  " + (b.thisMachine ? "this PC" : b.machine || "another PC") + "  ·  " + driveSize(b.size);
+    });
+    Swal.fire({
+      title: "Restore from Google Drive",
+      html: '<p class="text-muted" style="font-size: 14px;">Pick the backup to bring back. The newest is at the top.</p>',
+      input: "select",
+      inputOptions: options,
+      inputValue: list[0].id,
+      showCancelButton: true,
+      confirmButtonText: "Next",
+    }).then(function (pick) {
+      if (!pick.value) return;
+      Swal.fire({
+        icon: "warning",
+        title: "Replace all current data?",
+        html:
+          `<p>Everything in Nexora now (products, sales, customers, suppliers, settings) is replaced with the backup from <b>${driveEsc(labels[pick.value])}</b>, and the app restarts.</p>` +
+          '<p class="text-muted" style="font-size: 13px;">A copy of the current data is saved first, in the "Nexora-Backups" folder of your data location.</p>',
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        confirmButtonText: "Restore & Restart",
+      }).then(function (ok) {
+        if (!ok.value) return;
+        Swal.fire({ title: "Downloading the backup...", allowOutsideClick: false, allowEscapeKey: false });
+        Swal.showLoading();
+        ipcRenderer.invoke("drive-backup:restore", pick.value).then(function (r) {
+          Swal.hideLoading();
+          if (!r || !r.success) {
+            Swal.fire("Oops!", (r && r.error) || "Could not restore that backup.", "error");
+            return;
+          }
+          Swal.fire({
+            icon: "success",
+            title: "Ready to restore",
+            text: "The app restarts now and opens with the restored data.",
+            allowOutsideClick: false,
+            confirmButtonText: "Restart now",
+          }).then(function () {
+            ipcRenderer.send("app-relaunch", "");
+          });
+        });
+      });
+    });
+  });
+}
+
+$(function () {
+  ipcRenderer.on("drive-backup:status", (e, s) => renderDriveStatus(s));
+  refreshDriveStatus();
+  // the connection is back: upload what waits now, not at the next check
+  window.addEventListener("online", function () {
+    refreshDriveStatus();
+    ipcRenderer.invoke("drive-backup:poke");
+  });
+  window.addEventListener("offline", refreshDriveStatus);
+  // "2 minutes ago" keeps counting
+  setInterval(() => driveStatus && renderDriveStatus(driveStatus), 30000);
+  $("#settingsModal").on("show.bs.modal", function () {
+    driveEditingClient = false;
+    refreshDriveStatus();
+  });
+
+  $(document).on("click", "#driveCard .drive-link", function (e) {
+    e.preventDefault();
+    ipcRenderer.invoke("drive-backup:open-url", $(this).attr("data-url"));
+  });
+
+  $("#driveSaveClient").on("click", function () {
+    ipcRenderer.invoke("drive-backup:set-client", $("#driveClientId").val(), $("#driveClientSecret").val()).then(function (res) {
+      if (!res.success) {
+        Swal.fire("Check the Client ID", res.error, "warning");
+        return;
+      }
+      driveEditingClient = false;
+      $("#driveClientSecret").val("");
+      renderDriveStatus(res.status);
+    });
+  });
+  $("#driveCancelClient").on("click", function () {
+    driveEditingClient = false;
+    renderDriveStatus(driveStatus);
+  });
+  $("#driveEditClient").on("click", function (e) {
+    e.preventDefault();
+    driveEditingClient = true;
+    $("#driveClientId").val((driveStatus && driveStatus.clientId) || "");
+    renderDriveStatus(driveStatus);
+  });
+
+  $("#driveSignInBtn").on("click", driveSignIn);
+  $("#driveCancelSignIn").on("click", function (e) {
+    e.preventDefault();
+    ipcRenderer.invoke("drive-backup:cancel-sign-in");
+  });
+
+  $("#driveEnabled").on("change", function () {
+    ipcRenderer.invoke("drive-backup:set-enabled", this.checked).then(renderDriveStatus);
+  });
+
+  $("#driveBackupNow").on("click", function () {
+    ipcRenderer.invoke("drive-backup:run").then(function (res) {
+      if (res && res.success) {
+        Swal.fire({ icon: res.offline ? "info" : "success", title: res.offline ? "Saved on this PC" : "Backed up", text: driveBackupResultText(res), timer: res.offline ? undefined : 3000 });
+      } else {
+        Swal.fire("Oops!", (res && res.error) || "The backup failed.", "error");
+      }
+    });
+  });
+
+  $("#driveRestore").on("click", driveRestore);
+  $("#driveOpenFolder").on("click", () => ipcRenderer.invoke("drive-backup:open-folder"));
+
+  $("#driveSignOut").on("click", function () {
+    Swal.fire({
+      title: "Sign out of Google Drive?",
+      text: "Automatic backups stop. Backups already in your Drive stay there.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Sign out",
+    }).then(function (r) {
+      if (!r.value) return;
+      ipcRenderer.invoke("drive-backup:sign-out").then((res) => renderDriveStatus(res.status));
+    });
+  });
+
+  // toolbar icon: straight to Settings > Data & Backup
+  $("#driveIndicator").on("click", function () {
+    $("#settings").trigger("click");
+    setTimeout(() => showSettingsPane("data_management_section"), 0);
+  });
+});

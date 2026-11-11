@@ -181,6 +181,12 @@
 
                             <span class="toolbar-sep"></span>
 
+                            <!-- Google Drive backup at a glance; opens Settings > Data & Backup
+                                 (pos.js: renderDriveStatus). Shown to users who can open Settings. -->
+                            <button type="button" class="btn btn-light waves-effect waves-light drive-indicator" id="driveIndicator" style="display: none;" title="Google Drive backup">
+                                <i class="fa fa-cloud"></i>
+                            </button>
+
                             <button type="button" class="btn btn-light waves-effect waves-light" id="cashier" title="">
                                 <span class="btn-label"><i class="glyphicon glyphicon-user"></i></span><span id="loggedin-user" style="display:none;"></span>
                             </button>
@@ -3207,6 +3213,70 @@
                                         </div>
                                         <span class="help-block">Moves your existing data to the new folder and restarts the app.</span>
                                     </div>
+                                </div>
+                                <!-- Google Drive Backup (lib/driveBackup.js, pos.js: "Google Drive backup"):
+                                     automatic backups uploaded to Google Drive whenever the PC is online.
+                                     Three states: set-up (OAuth client) / sign in / connected. -->
+                                <div class="settings-card drive-card" id="driveCard">
+                                    <div class="drive-head">
+                                        <div>
+                                            <b><i class="fa fa-google"></i> Google Drive Backup</b>
+                                            <span class="help-block">Keeps a copy of all your data in your Google Drive. Changes are backed up automatically: while offline, backups are saved on this PC and uploaded as soon as the internet is connected.</span>
+                                        </div>
+                                        <label class="drive-switch" id="driveSwitch" title="Turn automatic Google Drive backups on or off">
+                                            <input type="checkbox" id="driveEnabled">
+                                            <span class="drive-switch-track"></span>
+                                        </label>
+                                    </div>
+
+                                    <!-- 1. one-time set-up: the app's Google OAuth client -->
+                                    <div class="drive-setup" id="driveSetup" style="display: none;">
+                                        <p class="drive-setup-intro"><b>One-time set-up.</b> Google needs a free "OAuth client" for Nexora before it can sign in. It takes about 5 minutes:</p>
+                                        <ol class="drive-steps">
+                                            <li>Open <a href="#" class="drive-link" data-url="https://console.cloud.google.com/projectcreate">Google Cloud</a> with your Google account and create a project (e.g. "Nexora POS").</li>
+                                            <li>Turn on the <a href="#" class="drive-link" data-url="https://console.cloud.google.com/apis/library/drive.googleapis.com">Google Drive API</a> (click <b>Enable</b>).</li>
+                                            <li>Set up the <a href="#" class="drive-link" data-url="https://console.cloud.google.com/apis/credentials/consent">consent screen</a>: user type <b>External</b>, app name <b>Nexora</b>, your e-mail. Then on the <a href="#" class="drive-link" data-url="https://console.cloud.google.com/auth/audience">Audience</a> page click <b>Publish app</b> &rarr; <b>Confirm</b>. Until then Google blocks the sign-in ("has not completed the Google verification process"), unless your Gmail is added there as a test user.</li>
+                                            <li>In <a href="#" class="drive-link" data-url="https://console.cloud.google.com/apis/credentials">Credentials</a>: <b>Create credentials &rarr; OAuth client ID &rarr; Desktop app</b>. Copy the <b>Client ID</b> and <b>Client secret</b> below.</li>
+                                        </ol>
+                                        <div class="row">
+                                            <div class="col-sm-7 form-group">
+                                                <label for="driveClientId">Client ID</label>
+                                                <input type="text" class="form-control" id="driveClientId" placeholder="123456-abc.apps.googleusercontent.com" autocomplete="off" spellcheck="false">
+                                            </div>
+                                            <div class="col-sm-5 form-group">
+                                                <label for="driveClientSecret">Client secret</label>
+                                                <input type="text" class="form-control" id="driveClientSecret" placeholder="GOCSPX-..." autocomplete="off" spellcheck="false">
+                                            </div>
+                                        </div>
+                                        <div class="drive-btns">
+                                            <button type="button" class="btn btn-success" id="driveSaveClient"><i class="fa fa-check"></i> Save</button>
+                                            <button type="button" class="btn btn-default" id="driveCancelClient" style="display: none;">Cancel</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- 2. sign in -->
+                                    <div class="drive-signin" id="driveSignIn" style="display: none;">
+                                        <button type="button" class="btn drive-google-btn" id="driveSignInBtn"><i class="fa fa-google"></i> Sign in with Google</button>
+                                        <span class="drive-signin-wait" id="driveSignInWait" style="display: none;">
+                                            <i class="fa fa-refresh fa-spin"></i> Finish signing in in your browser...
+                                            <a href="#" id="driveCancelSignIn">Cancel</a>
+                                        </span>
+                                        <p class="help-block">Nexora can only see the backups it creates in your Drive, never your other files.</p>
+                                    </div>
+
+                                    <!-- 3. connected -->
+                                    <div class="drive-connected" id="driveConnected" style="display: none;">
+                                        <div class="drive-account"><i class="fa fa-google"></i> <span id="driveEmail"></span></div>
+                                        <div id="driveStatus"></div>
+                                        <div class="drive-btns">
+                                            <button type="button" class="btn btn-success" id="driveBackupNow"><i class="fa fa-cloud-upload"></i> Back up now</button>
+                                            <button type="button" class="btn btn-warning" id="driveRestore"><i class="fa fa-cloud-download"></i> Restore from Google Drive...</button>
+                                            <button type="button" class="btn btn-default" id="driveOpenFolder"><i class="fa fa-external-link"></i> Open in Drive</button>
+                                            <button type="button" class="btn btn-default" id="driveSignOut"><i class="fa fa-sign-out"></i> Sign out</button>
+                                        </div>
+                                    </div>
+
+                                    <a href="#" class="drive-client-link" id="driveEditClient" style="display: none;"><i class="fa fa-cog"></i> Google client settings</a>
                                 </div>
                                 <div class="settings-card settings-action-card">
                                     <div class="settings-action-text">

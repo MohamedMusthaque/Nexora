@@ -4,6 +4,7 @@ const {app, BrowserWindow, ipcMain, dialog} = require('electron');
 const path = require('path')
 const fs = require('fs')
 const { getDataRoot, setDataRoot, getPosDir, setPendingReset, takePendingReset } = require('./lib/dataConfig')
+const driveBackup = require('./lib/driveBackup')
 
 // Single-instance guard: a second launch (double-click, installer, update)
 // would crash the express server with EADDRINUSE on port 8001. Quit instead
@@ -98,6 +99,8 @@ app.on("ready", async ()=>{
   process.env.APPDATA = getDataRoot();
   // a database reset requested from Settings runs now, before the datastores open
   applyPendingReset();
+  // so does a restore from a Google Drive backup (Settings > Data & Backup)
+  driveBackup.applyPendingRestore();
   // multer's diskStorage (uploads) doesn't create its destination folder on
   // its own, unlike nedb (which mkdirp's server/databases internally) - so a
   // freshly chosen/empty data directory needs this or the first logo/product
@@ -116,6 +119,9 @@ app.on("ready", async ()=>{
   }
 
   createWindow();
+
+  // automatic backups to Google Drive, uploaded whenever the PC is online
+  driveBackup.init({ getWindow: () => mainWindow });
 
   // electron-context-menu v4 is ESM-only, so it must be loaded via dynamic import()
   const { default: contextMenu } = await import('electron-context-menu');

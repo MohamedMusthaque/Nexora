@@ -6139,3 +6139,238 @@ body.transactions-mode #transactions_view .txn-page{
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ---- Google Drive Backup (Settings > Data & Backup, and the toolbar icon) --
+   pos.js: renderDriveStatus; lib/driveBackup.js does the backing up */
+#settingsModal .drive-card{
+  padding-bottom: 16px;
+}
+#settingsModal .drive-head{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+#settingsModal .drive-head b > .fa{
+  color: #4285f4;
+  margin-right: 4px;
+}
+#settingsModal .drive-head .help-block{
+  margin: 4px 0 0;
+}
+/* on / off switch */
+#settingsModal .drive-switch{
+  flex: 0 0 auto;
+  margin: 2px 0 0;
+  cursor: pointer;
+}
+#settingsModal .drive-switch input{
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+#settingsModal .drive-switch-track{
+  display: block;
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: #d5dbe0;
+  transition: background 0.15s;
+}
+#settingsModal .drive-switch-track::after{
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: left 0.15s;
+}
+#settingsModal .drive-switch input:checked + .drive-switch-track{
+  background: #5fbeaa;
+}
+#settingsModal .drive-switch input:checked + .drive-switch-track::after{
+  left: 20px;
+}
+#settingsModal .drive-switch input:focus-visible + .drive-switch-track{
+  box-shadow: 0 0 0 3px rgba(95, 190, 170, 0.35);
+}
+/* 1. set-up */
+#settingsModal .drive-setup{
+  padding: 12px 14px 2px;
+  margin-bottom: 4px;
+  border: 1px dashed #cfd6dc;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+#settingsModal .drive-setup-intro{
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: #4c5667;
+}
+#settingsModal .drive-steps{
+  margin: 0 0 12px;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #4c5667;
+}
+#settingsModal .drive-steps li{
+  margin-bottom: 3px;
+}
+#settingsModal .drive-steps a{
+  color: #3e9e8a;
+  font-weight: 600;
+  text-decoration: underline;
+}
+#settingsModal .drive-btns{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+/* 2. sign in: Google's own button look */
+#settingsModal .drive-signin{
+  margin-bottom: 4px;
+}
+#settingsModal .drive-google-btn{
+  height: 40px;
+  padding: 0 18px;
+  border: 1px solid #dadce0 !important;
+  border-radius: 20px;
+  background: #fff !important;
+  color: #3c4043 !important;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.15);
+}
+#settingsModal .drive-google-btn:hover{
+  background: #f8faff !important;
+  border-color: #c6dafc !important;
+}
+#settingsModal .drive-google-btn > .fa{
+  margin-right: 6px;
+  color: #4285f4;
+}
+#settingsModal .drive-signin-wait{
+  margin-left: 12px;
+  font-size: 13px;
+  color: #4c5667;
+}
+#settingsModal .drive-signin-wait a{
+  margin-left: 6px;
+}
+#settingsModal .drive-signin .help-block{
+  margin: 8px 0 0;
+}
+/* 3. connected */
+#settingsModal .drive-account{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 4px 12px 4px 8px;
+  border: 1px solid #e3e8ec;
+  border-radius: 16px;
+  background: #fafbfc;
+  font-size: 13px;
+  font-weight: 600;
+  color: #36404a;
+}
+#settingsModal .drive-account > .fa{
+  font-size: 18px;
+  color: #4285f4;
+}
+#settingsModal .drive-state{
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 1px solid #e3e8ec;
+  border-left-width: 4px;
+  border-radius: 6px;
+  background: #fafbfc;
+}
+#settingsModal .drive-state > .fa{
+  font-size: 18px;
+  margin-top: 1px;
+}
+#settingsModal .drive-state b{
+  display: block;
+  color: #36404a;
+}
+#settingsModal .drive-state span{
+  display: block;
+  font-size: 12.5px;
+  color: #6c757d;
+  word-break: break-word;
+}
+#settingsModal .drive-state.drive-ok{ border-left-color: #5fbeaa; }
+#settingsModal .drive-state.drive-ok > .fa{ color: #5fbeaa; }
+#settingsModal .drive-state.drive-pending,
+#settingsModal .drive-state.drive-busy{ border-left-color: #5d9cec; }
+#settingsModal .drive-state.drive-pending > .fa,
+#settingsModal .drive-state.drive-busy > .fa{ color: #5d9cec; }
+#settingsModal .drive-state.drive-offline{ border-left-color: #ffbd4a; }
+#settingsModal .drive-state.drive-offline > .fa{ color: #e0a030; }
+#settingsModal .drive-state.drive-error{ border-left-color: #f05050; background: #fff7f7; }
+#settingsModal .drive-state.drive-error > .fa{ color: #f05050; }
+#settingsModal .drive-state.drive-off > .fa{ color: #98a6ad; }
+#settingsModal .drive-facts{
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 14px;
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+#settingsModal .drive-facts dt{
+  font-weight: 600;
+  color: #98a6ad;
+}
+#settingsModal .drive-facts dd{
+  margin: 0;
+  color: #4c5667;
+  min-width: 0;
+  word-break: break-word;
+}
+#settingsModal .drive-client-link{
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #98a6ad;
+}
+
+/* toolbar: the cloud icon takes the state's colour */
+.top-toolbar .drive-indicator{
+  position: relative;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.top-toolbar .drive-indicator.drive-ok > .fa{ color: #3e9e8a; }
+.top-toolbar .drive-indicator.drive-pending > .fa,
+.top-toolbar .drive-indicator.drive-busy > .fa{ color: #5d9cec; }
+.top-toolbar .drive-indicator.drive-offline > .fa{ color: #e0a030; }
+.top-toolbar .drive-indicator.drive-error > .fa{ color: #f05050; }
+.top-toolbar .drive-indicator.drive-off > .fa{ color: #98a6ad; }
+/* a dot for "needs a look": not set up / off, offline, or a problem */
+.top-toolbar .drive-indicator.drive-off::after,
+.top-toolbar .drive-indicator.drive-offline::after,
+.top-toolbar .drive-indicator.drive-error::after{
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid #fff;
+  background: #ffbd4a;
+}
+.top-toolbar .drive-indicator.drive-error::after{
+  background: #f05050;
+}
