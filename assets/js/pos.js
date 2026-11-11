@@ -4898,14 +4898,12 @@ if (!authedThisSession) {
         $(this).find("option:selected").text() ==
         "Network Point of Sale Terminal"
       ) {
-        $("#net_settings_form").show(500);
-        $("#settings_form, #data_management_section").hide(500);
+        setSettingsMode(true);
         macaddress.one(function (err, mac) {
           $("#mac").val(mac);
         });
       } else {
-        $("#net_settings_form").hide(500);
-        $("#settings_form, #data_management_section").show(500);
+        setSettingsMode(false);
       }
     });
 
@@ -4957,8 +4955,7 @@ if (!authedThisSession) {
 
     $("#settings").click(function () {
       if (platform?.app == "Network Point of Sale Terminal") {
-        $("#net_settings_form").show(500);
-        $("#settings_form, #data_management_section").hide(500);
+        setSettingsMode(true);
 
         $("#ip").val(platform.ip);
         $("#till").val(platform.till);
@@ -4973,8 +4970,7 @@ if (!authedThisSession) {
           })
           .prop("selected", true);
       } else {
-        $("#net_settings_form").hide(500);
-        $("#settings_form, #data_management_section").show(500);
+        setSettingsMode(false);
 
         $("#settings_id").val("1");
         $("#store").val(settings.store);
@@ -5021,11 +5017,70 @@ if (!authedThisSession) {
     });
   });
 
+// ---- Settings window: a menu on the left, one section at a time ----
+
+// open one section (and highlight its menu item)
+function showSettingsPane(id) {
+  $("#settingsModal .settings-nav-item").removeClass("active").filter(`[data-pane="${id}"]`).addClass("active");
+  $("#settingsModal .settings-pane").removeClass("active");
+  $("#" + id).addClass("active");
+  $("#settingsModal .settings-content").scrollTop(0);
+}
+
+// a network terminal only has its server / till form; the other modes have
+// the store's settings and the data tools
+function setSettingsMode(terminal) {
+  $("#net_settings_form").toggle(!!terminal);
+  $("#settingsModal .settings-nav-menu, #settingsModal .settings-panes").toggle(!terminal);
+  $("#save_net_settings").toggle(!!terminal);
+  $("#save_settings").toggle(!terminal);
+  if (!terminal) {
+    if (!$("#settingsModal .settings-pane.active").length) showSettingsPane("setPaneStore");
+    updateSettingsPreview();
+  }
+}
+
+// the Receipt & Logo section's preview: the receipt's header and footer as
+// they'll print, from what's typed
+let settingsPreviewLogo = "";
+function updateSettingsPreview() {
+  let esc = (v) => $("<div>").text(v == null ? "" : String(v)).html();
+  let val = (id) => $.trim($("#" + id).val() || "");
+  let logo = settingsPreviewLogo || ($("#current_logo").is(":visible") ? $("#current_logo img").attr("src") || "" : "");
+  $("#setPreviewLogo").html(logo ? `<img src="${esc(logo)}" alt="">` : "");
+  $("#setPreviewStore").text(val("store") || "Store Name");
+  let lines = [val("address_one"), val("address_two")].filter(Boolean).map(esc);
+  if (val("contact")) lines.push("Tel: " + esc(val("contact")));
+  if (val("tax")) lines.push("Vat No: " + esc(val("tax")));
+  $("#setPreviewLines").html(lines.join("<br>"));
+  $("#setPreviewAmount").text((val("symbol") || "") + "150.00");
+  $("#setPreviewFooter").html(esc(val("footer") || "Your receipt footer").replace(/\n/g, "<br>"));
+}
+
+$(document).on("click", "#settingsModal .settings-nav-item", function () {
+  showSettingsPane($(this).data("pane"));
+});
+$(document).on("input change", "#settings_form input, #settings_form textarea", updateSettingsPreview);
+// a new logo picked: preview it before saving
+$(document).on("change", "#logoname", function () {
+  let file = this.files && this.files[0];
+  if (settingsPreviewLogo) URL.revokeObjectURL(settingsPreviewLogo);
+  settingsPreviewLogo = file ? URL.createObjectURL(file) : "";
+  updateSettingsPreview();
+});
+// every time it opens: the first section, the right mode, a fresh preview
+$(document).on("show.bs.modal", "#settingsModal", function (e) {
+  if (e.target !== this) return;
+  showSettingsPane("setPaneStore");
+  setSettingsMode($("#app option:selected").text() == "Network Point of Sale Terminal");
+});
+
   $("#rmv_logo").click(function () {
     $("#remove_logo").val("1");
     $("#current_logo").hide(500);
     $(this).hide(500);
     $("#logoname").show(500);
+    setTimeout(updateSettingsPreview, 520);
   });
 
   $("#rmv_img").click(function () {

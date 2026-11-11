@@ -3449,3 +3449,462 @@ body.suppliers-mode #suppliers_view .ph-table-scroll::-webkit-scrollbar-thumb{
   background: #cfd6dc;
   border-radius: 4px;
 }
+
+/* ---- Settings window ----------------------------------------------------
+   Wide and fixed to the screen: a menu on the left, one section at a time on
+   the right (only that scrolls), and Save in the footer. */
+#settingsModal .settings-dialog{
+  width: min(1040px, calc(100vw - 40px));
+  margin: 24px auto;
+}
+#settingsModal .modal-dialog .modal-content{
+  display: flex;
+  flex-direction: column;
+  height: min(680px, calc(100vh - 48px));
+  padding: 0;
+  overflow: hidden;
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+#settingsModal .modal-dialog .modal-content .modal-header{
+  flex: 0 0 auto;
+  padding: 16px 24px 14px;
+  border-bottom: 1px solid #e9edf0;
+  background: #fff;
+}
+#settingsModal .modal-header .close{
+  margin-top: 4px;
+}
+#settingsModal .modal-title{
+  font-size: 19px;
+  font-weight: 600;
+  color: #36404a;
+}
+#settingsModal .modal-title > .fa{
+  color: #5fbeaa;
+  margin-right: 4px;
+}
+#settingsModal .settings-loading{
+  height: 24px;
+  margin-left: 10px;
+  vertical-align: middle;
+}
+#settingsModal .settings-subtitle{
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #98a6ad;
+}
+#settingsModal .modal-dialog .modal-content .settings-body{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  padding: 0;
+  background: #f5f7f9;
+}
+
+/* the menu */
+#settingsModal .settings-nav{
+  flex: 0 0 250px;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 14px;
+  background: #fff;
+  border-right: 1px solid #e9edf0;
+  overflow-y: auto;
+}
+#settingsModal .settings-mode{
+  padding: 12px;
+  margin-bottom: 14px;
+  border-radius: 6px;
+  background: #f5f7f9;
+}
+#settingsModal .settings-mode label{
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #98a6ad;
+  margin-bottom: 6px;
+}
+#settingsModal .settings-mode select{
+  height: 32px;
+  font-size: 13px;
+}
+#settingsModal .settings-nav-menu{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+#settingsModal .settings-nav-item{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #4c5667;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+  transition: background 0.15s, color 0.15s;
+}
+#settingsModal .settings-nav-item > .fa{
+  flex: 0 0 32px;
+  height: 32px;
+  line-height: 32px;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 15px;
+  background: #f1f4f6;
+  color: #7a8794;
+  transition: background 0.15s, color 0.15s;
+}
+#settingsModal .settings-nav-item small{
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  font-weight: normal;
+  color: #98a6ad;
+}
+#settingsModal .settings-nav-item:hover{
+  background: #f5f7f9;
+}
+#settingsModal .settings-nav-item:focus{
+  outline: none;
+}
+#settingsModal .settings-nav-item.active{
+  background: rgba(95, 190, 170, 0.1);
+  border-left-color: #5fbeaa;
+  color: #2f8f7b;
+}
+#settingsModal .settings-nav-item.active > .fa{
+  background: #5fbeaa;
+  color: #fff;
+}
+
+/* the open section */
+#settingsModal .settings-content{
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 22px 28px 24px;
+}
+#settingsModal .settings-pane{
+  display: none;
+  max-width: 720px;
+}
+#settingsModal .settings-pane.active{
+  display: block;
+  animation: settingsPaneIn 0.18s ease-out;
+}
+@keyframes settingsPaneIn{
+  from{ opacity: 0; transform: translateY(4px); }
+  to{ opacity: 1; transform: none; }
+}
+#settingsModal .settings-pane-net{
+  max-width: 720px;
+}
+#settingsModal .settings-pane-head{
+  margin-bottom: 16px;
+}
+#settingsModal .settings-pane-head h5{
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: #36404a;
+}
+#settingsModal .settings-pane-head h5 > .fa{
+  color: #5fbeaa;
+  margin-right: 6px;
+}
+#settingsModal .settings-pane-head p{
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #98a6ad;
+}
+#settingsModal .settings-group-title{
+  margin: 18px 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #98a6ad;
+}
+#settingsModal .settings-pane-head + .settings-group-title{
+  margin-top: 0;
+}
+#settingsModal .settings-card{
+  padding: 18px 20px 4px;
+  margin-bottom: 14px;
+  background: #fff;
+  border: 1px solid #e9edf0;
+  border-radius: 8px;
+}
+#settingsModal .settings-card label{
+  font-weight: 600;
+  color: #4c5667;
+}
+#settingsModal .settings-card .form-control{
+  height: 38px;
+  border-radius: 4px;
+}
+#settingsModal .settings-card textarea.form-control{
+  height: auto;
+  resize: vertical;
+}
+#settingsModal .settings-card .input-group-addon{
+  background: #f5f7f9;
+  color: #7a8794;
+}
+#settingsModal .settings-card .help-block{
+  margin: 5px 0 0;
+  font-size: 12px;
+  color: #98a6ad;
+}
+
+/* on/off switches with a title and a line of explanation */
+#settingsModal .settings-toggles{
+  padding: 0;
+  overflow: hidden;
+}
+#settingsModal .settings-toggle{
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0;
+  padding: 14px 20px;
+  cursor: pointer;
+  font-weight: normal;
+}
+#settingsModal .settings-toggle + .settings-toggle{
+  border-top: 1px solid #eef1f3;
+}
+#settingsModal .settings-toggle:hover{
+  background: #fafbfc;
+}
+#settingsModal .settings-toggle-text{
+  flex: 1 1 auto;
+  min-width: 0;
+}
+#settingsModal .settings-toggle-text b{
+  display: block;
+  font-weight: 600;
+  color: #36404a;
+}
+#settingsModal .settings-toggle-text small{
+  display: block;
+  margin-top: 2px;
+  font-weight: normal;
+  font-size: 12px;
+  color: #98a6ad;
+}
+#settingsModal .settings-toggle input[type="checkbox"]{
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 0 0 auto;
+  position: relative;
+  width: 42px;
+  height: 24px;
+  margin: 0;
+  border-radius: 12px;
+  background: #d5dbe0;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+#settingsModal .settings-toggle input[type="checkbox"]::after{
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.18s;
+}
+#settingsModal .settings-toggle input[type="checkbox"]:checked{
+  background: #5fbeaa;
+}
+#settingsModal .settings-toggle input[type="checkbox"]:checked::after{
+  transform: translateX(18px);
+}
+#settingsModal .settings-toggle input[type="checkbox"]:focus{
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(95, 190, 170, 0.25);
+}
+
+/* Receipt & Logo: the fields beside a paper preview */
+#settingsModal .settings-receipt{
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+#settingsModal .settings-receipt-fields{
+  flex: 1 1 auto;
+  min-width: 0;
+}
+#settingsModal .settings-receipt-preview{
+  flex: 0 0 240px;
+}
+#settingsModal .settings-preview-label{
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #98a6ad;
+}
+#settingsModal .settings-paper{
+  padding: 18px 16px 22px;
+  background: #fff;
+  border: 1px solid #e9edf0;
+  border-radius: 4px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+  font-family: 'Share Tech', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #36404a;
+  text-align: center;
+  word-break: break-word;
+}
+#settingsModal #setPreviewLogo img{
+  max-width: 70px;
+  max-height: 60px;
+  margin-bottom: 6px;
+}
+#settingsModal .settings-paper-store{
+  font-size: 18px;
+  line-height: 1.3;
+  margin-bottom: 2px;
+}
+#settingsModal .settings-paper-rule{
+  margin: 10px 0;
+  border-top: 1px dashed #c3cbd2;
+}
+#settingsModal .settings-paper-items{
+  display: flex;
+  justify-content: space-between;
+  text-align: left;
+}
+#settingsModal #current_logo img{
+  max-width: 80px;
+  max-height: 80px;
+  margin: 4px 0 8px;
+  padding: 4px;
+  border: 1px solid #e9edf0;
+  border-radius: 6px;
+}
+#settingsModal #rmv_logo{
+  margin-left: 8px;
+  vertical-align: 1px;
+}
+#settingsModal .settings-file{
+  display: block;
+  width: 100%;
+  padding: 10px;
+  border: 1px dashed #c3cbd2;
+  border-radius: 6px;
+  background: #fafbfc;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* Data & Backup: action cards */
+#settingsModal .settings-action-card{
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 20px;
+}
+#settingsModal .settings-action-text{
+  flex: 1 1 auto;
+  min-width: 0;
+}
+#settingsModal .settings-action-text b{
+  color: #36404a;
+}
+#settingsModal .settings-action-btns{
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+}
+#settingsModal .settings-danger{
+  border-color: #f5c6c4;
+  background: #fff8f7;
+}
+#settingsModal .settings-danger .settings-action-text b{
+  color: #c9302c;
+}
+
+/* footer: always on screen */
+#settingsModal .modal-dialog .modal-content .settings-footer{
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-top: 1px solid #e9edf0;
+  background: #fff;
+}
+#settingsModal .settings-footer .btn + .btn{
+  margin-left: 0;
+}
+#settingsModal .settings-footer .btn{
+  min-width: 110px;
+}
+#settingsModal .settings-footer-note{
+  flex: 1 1 auto;
+  font-size: 12.5px;
+  color: #98a6ad;
+  text-align: left;
+}
+#settingsModal #save_net_settings{
+  display: none;
+}
+/* Cancel: a quiet outline, so Save stands out (the theme makes btn-default teal) */
+#settingsModal .settings-footer .btn-default{
+  background: #fff !important;
+  border: 1px solid #d5dbe0 !important;
+  color: #4c5667 !important;
+}
+#settingsModal .settings-footer .btn-default:hover{
+  background: #f5f7f9 !important;
+}
+
+/* narrow windows: the menu goes across the top */
+@media (max-width: 860px){
+  #settingsModal .modal-dialog .modal-content .settings-body{
+    flex-direction: column;
+  }
+  #settingsModal .settings-nav{
+    flex: 0 0 auto;
+    border-right: none;
+    border-bottom: 1px solid #e9edf0;
+    padding: 10px 12px;
+  }
+  #settingsModal .settings-nav-menu{
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  #settingsModal .settings-nav-item{
+    flex: 0 0 auto;
+    width: auto;
+    border-left: none;
+  }
+  #settingsModal .settings-nav-item small{
+    display: none;
+  }
+  #settingsModal .settings-receipt{
+    flex-direction: column;
+  }
+  #settingsModal .settings-receipt-preview{
+    flex: 0 0 auto;
+    width: 100%;
+  }
+}

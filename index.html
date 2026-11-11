@@ -2390,162 +2390,262 @@
 </div>
 
 
-     <div id="settingsModal" class="modal fade bs-example-modal-sm" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" style="display: none;">
-            <div class="modal-dialog modal-md">
+     <!-- Settings: a wide window with a menu on the left; only the open
+          section scrolls and Save stays in the footer (pos.js: showSettingsPane,
+          setSettingsMode). Field ids and names are the ones the save code reads. -->
+     <div id="settingsModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog settings-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
                         <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-                        <h4 class="modal-title" id="mySmallModalLabel">Settings
-                            <img  class="loading m-t-5" style="margin-left: 35%" height="50px" src="assets/images/loading.gif" alt="">
+                        <h4 class="modal-title" id="mySmallModalLabel"><i class="fa fa-cog"></i> Settings
+                            <img class="loading settings-loading" height="24" src="assets/images/loading.gif" alt="">
                         </h4>
+                        <p class="settings-subtitle">Your store's details, receipts, payments and data.</p>
                     </div>
-                    <div class="modal-body">  
-                        
-                        
-                        <div class="form-group">
-                        <label for="app">Application</label>
-                        <select name="app" id="app" class="form-control">
-                            <option>Standalone Point of Sale</option>
-                            <option>Network Point of Sale Terminal</option>
-                            <option>Network Point of Sale Server</option>                                            
-                        </select>
-                 </div>
+                    <div class="modal-body settings-body">
 
-                <form id="net_settings_form">
-                 <div class="row">
-                    <div class="form-group">
-                        <label for="userName">Server IP Address*</label>
-                        <input type="text" required="required" placeholder="Enter the IP address of the admin computer." name="ip" class="form-control" id="ip">
-                    </div>
-                    <div class="row">
-                            <div class="col-md-5">
-                                <div class="form-group">
-                                    <label for="userName">Till Number*</label>
-                                    <input type="text" required="required" placeholder="Enter a number" name="till" class="form-control" id="till">
+                        <aside class="settings-nav">
+                            <div class="settings-mode">
+                                <label for="app">Application</label>
+                                <select name="app" id="app" class="form-control input-sm">
+                                    <option>Standalone Point of Sale</option>
+                                    <option>Network Point of Sale Terminal</option>
+                                    <option>Network Point of Sale Server</option>
+                                </select>
+                            </div>
+                            <nav class="settings-nav-menu">
+                                <button type="button" class="settings-nav-item active" data-pane="setPaneStore"><i class="fa fa-building-o"></i><span>Store<small>Name, address, contact</small></span></button>
+                                <button type="button" class="settings-nav-item" data-pane="setPaneTax"><i class="fa fa-percent"></i><span>Tax &amp; Currency<small>Symbol, VAT</small></span></button>
+                                <button type="button" class="settings-nav-item" data-pane="setPaneOps"><i class="fa fa-sliders"></i><span>Payments &amp; Operations<small>What the till allows</small></span></button>
+                                <button type="button" class="settings-nav-item" data-pane="setPaneReceipt"><i class="fa fa-file-text-o"></i><span>Receipt &amp; Logo<small>Logo, footer, preview</small></span></button>
+                                <button type="button" class="settings-nav-item" data-pane="data_management_section"><i class="fa fa-database"></i><span>Data &amp; Backup<small>Location, backup, reset</small></span></button>
+                            </nav>
+                        </aside>
+
+                        <div class="settings-content">
+
+                            <!-- a network terminal only needs its server and till number -->
+                            <form id="net_settings_form" class="settings-pane-net">
+                                <div class="settings-pane-head">
+                                    <h5><i class="fa fa-sitemap"></i> Network Terminal</h5>
+                                    <p>This till uses the data of the server computer.</p>
                                 </div>
-                            </div>
-                            <div class="col-md-7">
-                                <div class="form-group">
-                                    <label for="userName">Hardware Identification Number </label>
-                                    <input type="text" required="required" name="mac" class="form-control" id="mac" readonly="readonly">
-                                </div>
-                            </div>
-                    </div>
-                     <div class="form-group">
-                        <input id="save_settings" type="submit" class="btn btn-default btn-block waves-effect waves-light" value="Save Settings">
-                    </div>
-                 </div>
-                </form>
-              
-
-
-                 <form id="settings_form" encType="multipart/form-data">
-
-                    <input type="hidden" name="id" id="settings_id">
-                    <input type="hidden" name="img" id="logo_img">
-                    <input type="hidden" name="remove" id="remove_logo">
-
-                        <div class="row">
-                            <div class="col-md-6">
-                               
-                                 <div class="form-group">
-                                    <label for="userName">Store Name</label>
-                                    <input type="text" required="required"  name="store" class="form-control" id="store">
-                                 </div>
-                                 <div class="form-group">
-                                        <label for="userName">Address Line 1</label>
-                                        <input type="text" required="required"  name="address_one" class="form-control" id="address_one">
-                                 </div>
-                                 <div class="form-group">
-                                        <label for="userName">Address Line 2</label>
-                                        <input type="text" required="required"  name="address_two" class="form-control" id="address_two">
-                                 </div>
-                                 <div class="form-group">
-                                        <label for="userName">Contact Number</label>
-                                        <input type="text" name="contact" class="form-control" id="contact">
-                                 </div>
-                                 <div class="form-group">
-                                        <label for="userName">Vat Number</label>
-                                        <input type="text" name="tax" parsley-trigger="change" class="form-control" id="tax">
-                                 </div>
-                              
-
-                            </div>
-                            <div class="col-md-6">
+                                <div class="settings-card">
                                     <div class="form-group">
-                                            <label for="userName">Currency Symbol</label>
-                                            <input type="text" required="required"  name="symbol" class="form-control" id="symbol">
-                                     </div>
-    
-                                     <div class="form-group">
-                                            <label for="userName">Vat Percentage</label>
-                                            <div style="width: 80%; float:left;">
-                                            <input type="text" required="required"  name="percentage" class="form-control" id="percentage">
-                                            </div>
-                                            <div class="pull-right p-t-10"> % </div>
-                                     </div>
-                                     <br><br>
-                                     <div class="form-group">
-                                        <label><input type="checkbox" name="charge_tax" id="charge_tax"> Charge Vat</label>
-                                     </div>
-                                     <div class="form-group">
-                                        <label for="userName">Payment Options</label>
-                                        <label class="checkbox-inline"><input type="checkbox" name="card_disabled" id="card_disabled"> Disable Card Payment</label>
-                                        <label class="checkbox-inline"><input type="checkbox" name="bank_disabled" id="bank_disabled"> Disable Bank Transfer</label>
-                                     </div>
-                                     <div class="form-group">
-                                        <label for="userName">Operations Options</label>
-                                        <label class="checkbox-inline"><input type="checkbox" name="return_disabled" id="return_disabled"> Disable Return/Refund</label>
-                                        <label class="checkbox-inline"><input type="checkbox" name="exchange_disabled" id="exchange_disabled"> Disable Exchange</label>
-                                        <label class="checkbox-inline"><input type="checkbox" name="stock_check_disabled" id="stock_check_disabled"> Disable 'Disable stock check' function</label>
-                                     </div>
-                                     <div class="form-group">
-                                        <label for="userName"><span id="rmv_logo" class="btn btn-xs btn-warning">Remove</span> Logo </label>              
-                                        <div id="current_logo"></div>                                        
-                                       
-                                        <input type="file" name="imagename" id="logoname">                            
+                                        <label for="ip">Server IP Address <span class="text-danger">*</span></label>
+                                        <input type="text" required="required" placeholder="Enter the IP address of the admin computer." name="ip" class="form-control" id="ip">
                                     </div>
+                                    <div class="row">
+                                        <div class="col-sm-5">
+                                            <div class="form-group">
+                                                <label for="till">Till Number <span class="text-danger">*</span></label>
+                                                <input type="text" required="required" placeholder="Enter a number" name="till" class="form-control" id="till">
+                                            </div>
+                                        </div>
+                                        <div class="col-sm-7">
+                                            <div class="form-group">
+                                                <label for="mac">Hardware Identification Number</label>
+                                                <input type="text" required="required" name="mac" class="form-control" id="mac" readonly="readonly">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </form>
+
+                            <div class="settings-panes">
+                            <form id="settings_form" encType="multipart/form-data">
+
+                                <input type="hidden" name="id" id="settings_id">
+                                <input type="hidden" name="img" id="logo_img">
+                                <input type="hidden" name="remove" id="remove_logo">
+
+                                <!-- Store -->
+                                <section class="settings-pane active" id="setPaneStore">
+                                    <div class="settings-pane-head">
+                                        <h5><i class="fa fa-building-o"></i> Store</h5>
+                                        <p>Printed at the top of every receipt and bill.</p>
+                                    </div>
+                                    <div class="settings-card">
+                                        <div class="form-group">
+                                            <label for="store">Store Name <span class="text-danger">*</span></label>
+                                            <input type="text" required="required" name="store" class="form-control" id="store" placeholder="e.g. Nexora Mart">
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-sm-6 form-group">
+                                                <label for="address_one">Address Line 1 <span class="text-danger">*</span></label>
+                                                <input type="text" required="required" name="address_one" class="form-control" id="address_one" placeholder="No. / street">
+                                            </div>
+                                            <div class="col-sm-6 form-group">
+                                                <label for="address_two">Address Line 2 <span class="text-danger">*</span></label>
+                                                <input type="text" required="required" name="address_two" class="form-control" id="address_two" placeholder="City">
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-sm-6 form-group">
+                                                <label for="contact">Contact Number</label>
+                                                <div class="input-group">
+                                                    <span class="input-group-addon"><i class="fa fa-phone"></i></span>
+                                                    <input type="text" name="contact" class="form-control" id="contact" placeholder="Shown as Tel: on receipts">
+                                                </div>
+                                            </div>
+                                            <div class="col-sm-6 form-group">
+                                                <label for="tax">VAT Number</label>
+                                                <input type="text" name="tax" parsley-trigger="change" class="form-control" id="tax" placeholder="Leave empty if not registered">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <!-- Tax & Currency -->
+                                <section class="settings-pane" id="setPaneTax">
+                                    <div class="settings-pane-head">
+                                        <h5><i class="fa fa-percent"></i> Tax &amp; Currency</h5>
+                                        <p>How prices and VAT are shown and charged.</p>
+                                    </div>
+                                    <div class="settings-card">
+                                        <div class="row">
+                                            <div class="col-sm-6 form-group">
+                                                <label for="symbol">Currency Symbol <span class="text-danger">*</span></label>
+                                                <input type="text" required="required" name="symbol" class="form-control" id="symbol" placeholder="e.g. Rs. ">
+                                                <span class="help-block">Put before every amount, e.g. <b>Rs. 150.00</b></span>
+                                            </div>
+                                            <div class="col-sm-6 form-group">
+                                                <label for="percentage">VAT Percentage <span class="text-danger">*</span></label>
+                                                <div class="input-group">
+                                                    <input type="text" required="required" name="percentage" class="form-control" id="percentage" placeholder="0">
+                                                    <span class="input-group-addon">%</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="settings-card settings-toggles">
+                                        <label class="settings-toggle">
+                                            <span class="settings-toggle-text"><b>Charge VAT</b><small>Add the VAT percentage to every sale.</small></span>
+                                            <input type="checkbox" name="charge_tax" id="charge_tax">
+                                        </label>
+                                    </div>
+                                </section>
+
+                                <!-- Payments & Operations -->
+                                <section class="settings-pane" id="setPaneOps">
+                                    <div class="settings-pane-head">
+                                        <h5><i class="fa fa-sliders"></i> Payments &amp; Operations</h5>
+                                        <p>Switch off what this store doesn't use.</p>
+                                    </div>
+                                    <h6 class="settings-group-title">Payment Options</h6>
+                                    <div class="settings-card settings-toggles">
+                                        <label class="settings-toggle">
+                                            <span class="settings-toggle-text"><b>Disable Card Payment</b><small>Hide Card at the till and when settling credit.</small></span>
+                                            <input type="checkbox" name="card_disabled" id="card_disabled">
+                                        </label>
+                                        <label class="settings-toggle">
+                                            <span class="settings-toggle-text"><b>Disable Bank Transfer</b><small>Hide Bank Transfer as a way to pay.</small></span>
+                                            <input type="checkbox" name="bank_disabled" id="bank_disabled">
+                                        </label>
+                                    </div>
+                                    <h6 class="settings-group-title">Operations Options</h6>
+                                    <div class="settings-card settings-toggles">
+                                        <label class="settings-toggle">
+                                            <span class="settings-toggle-text"><b>Disable Return / Refund</b><small>Sold items can't be returned for money back.</small></span>
+                                            <input type="checkbox" name="return_disabled" id="return_disabled">
+                                        </label>
+                                        <label class="settings-toggle">
+                                            <span class="settings-toggle-text"><b>Disable Exchange</b><small>Sold items can't be exchanged for others.</small></span>
+                                            <input type="checkbox" name="exchange_disabled" id="exchange_disabled">
+                                        </label>
+                                        <label class="settings-toggle">
+                                            <span class="settings-toggle-text"><b>Disable 'Disable stock check' function</b><small>Products with no stock can't be sold.</small></span>
+                                            <input type="checkbox" name="stock_check_disabled" id="stock_check_disabled">
+                                        </label>
+                                    </div>
+                                </section>
+
+                                <!-- Receipt & Logo -->
+                                <section class="settings-pane" id="setPaneReceipt">
+                                    <div class="settings-pane-head">
+                                        <h5><i class="fa fa-file-text-o"></i> Receipt &amp; Logo</h5>
+                                        <p>The logo and closing note on printed receipts.</p>
+                                    </div>
+                                    <div class="settings-receipt">
+                                        <div class="settings-receipt-fields">
+                                            <div class="settings-card">
+                                                <div class="form-group">
+                                                    <label for="logoname">Logo <span id="rmv_logo" class="btn btn-xs btn-warning"><i class="fa fa-trash"></i> Remove</span></label>
+                                                    <div id="current_logo"></div>
+                                                    <input type="file" name="imagename" id="logoname" accept="image/*" class="settings-file">
+                                                    <span class="help-block">A small square image works best.</span>
+                                                </div>
+                                                <div class="form-group">
+                                                    <label for="footer">Receipt Footer</label>
+                                                    <textarea name="footer" class="form-control" id="footer" rows="4" placeholder="e.g. Thank you, come again!"></textarea>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <!-- how the top and bottom of a receipt will look (pos.js: updateSettingsPreview) -->
+                                        <div class="settings-receipt-preview">
+                                            <div class="settings-preview-label">Preview</div>
+                                            <div class="settings-paper">
+                                                <div id="setPreviewLogo"></div>
+                                                <div class="settings-paper-store" id="setPreviewStore"></div>
+                                                <div id="setPreviewLines"></div>
+                                                <div class="settings-paper-rule"></div>
+                                                <div class="settings-paper-items"><span>Item x 1</span><span id="setPreviewAmount"></span></div>
+                                                <div class="settings-paper-rule"></div>
+                                                <div class="settings-paper-footer" id="setPreviewFooter"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
+                            </form>
+
+                            <!-- Data & Backup -->
+                            <section class="settings-pane" id="data_management_section">
+                                <div class="settings-pane-head">
+                                    <h5><i class="fa fa-database"></i> Data &amp; Backup</h5>
+                                    <p>Where your data lives, and keeping a copy safe.</p>
+                                </div>
+                                <div class="settings-card">
                                     <div class="form-group">
-                                        <label for="userName">Receipt Footer</label>
-                                        <textarea name="footer" class="form-control" id="footer"></textarea>
-                                    </div>                                    
+                                        <label for="data_location_display">Current Data Location</label>
+                                        <div class="input-group">
+                                            <span class="input-group-addon"><i class="fa fa-folder-open-o"></i></span>
+                                            <input type="text" class="form-control" id="data_location_display" readonly="readonly">
+                                            <span class="input-group-btn">
+                                                <button type="button" class="btn btn-default" id="change_data_location">Change...</button>
+                                            </span>
+                                        </div>
+                                        <span class="help-block">Moves your existing data to the new folder and restarts the app.</span>
+                                    </div>
+                                </div>
+                                <div class="settings-card settings-action-card">
+                                    <div class="settings-action-text">
+                                        <b>Backup &amp; Restore</b>
+                                        <span class="help-block">Restoring replaces all current data and restarts the app.</span>
+                                    </div>
+                                    <div class="settings-action-btns">
+                                        <button type="button" class="btn btn-info" id="backup_data"><i class="fa fa-download"></i> Backup Data</button>
+                                        <button type="button" class="btn btn-warning" id="restore_data"><i class="fa fa-upload"></i> Restore Data</button>
+                                    </div>
+                                </div>
+                                <div class="settings-card settings-action-card settings-danger reset-db-group">
+                                    <div class="settings-action-text">
+                                        <b><i class="fa fa-exclamation-triangle"></i> Reset Database</b>
+                                        <span class="help-block">Clears all sales, customers, products, expenses, suppliers and GRNs, store settings and images, keeping only the user accounts, then restarts the app. A backup is made automatically first.</span>
+                                    </div>
+                                    <div class="settings-action-btns">
+                                        <button type="button" class="btn btn-danger" id="reset_database"><i class="fa fa-trash"></i> Reset Database...</button>
+                                    </div>
+                                </div>
+                            </section>
                             </div>
-                           
-                        </div>
-
-                       
-                        <div class="form-group">
-                                <input id="save_settings" type="submit" class="btn btn-default btn-block waves-effect waves-light" value="Save Settings">
-                        </div>
-
-                    </form>
-
-                    <div id="data_management_section">
-                        <hr>
-                        <h5>Data Storage</h5>
-                        <div class="form-group">
-                            <label for="data_location_display">Current Data Location</label>
-                            <div class="input-group">
-                                <input type="text" class="form-control" id="data_location_display" readonly="readonly">
-                                <span class="input-group-btn">
-                                    <button type="button" class="btn btn-default" id="change_data_location">Change...</button>
-                                </span>
-                            </div>
-                            <span class="help-block">Moves your existing data to the new folder and restarts the app.</span>
-                        </div>
-                        <div class="form-group">
-                            <label>Backup &amp; Restore</label> <br>
-                            <button type="button" class="btn btn-info" id="backup_data">Backup Data</button>
-                            <button type="button" class="btn btn-warning" id="restore_data">Restore Data</button>
-                            <span class="help-block">Restoring replaces all current data and restarts the app.</span>
-                        </div>
-                        <div class="form-group reset-db-group">
-                            <label>Reset Database</label> <br>
-                            <button type="button" class="btn btn-danger" id="reset_database"><i class="fa fa-trash"></i> Reset Database...</button>
-                            <span class="help-block">Clears all sales, customers, products, expenses, suppliers and GRNs, store settings and images, keeping only the user accounts, then restarts the app. A backup is made automatically first.</span>
                         </div>
                     </div>
-
+                    <div class="modal-footer settings-footer">
+                        <span class="settings-footer-note"><i class="fa fa-info-circle"></i> Saving restarts the till with the new settings.</span>
+                        <button type="button" class="btn btn-default waves-effect" data-dismiss="modal">Cancel</button>
+                        <button id="save_settings" type="submit" form="settings_form" class="btn btn-success waves-effect waves-light"><i class="fa fa-check"></i> Save Settings</button>
+                        <button id="save_net_settings" type="submit" form="net_settings_form" class="btn btn-success waves-effect waves-light"><i class="fa fa-check"></i> Save Settings</button>
                     </div>
                </div>
           </div>
