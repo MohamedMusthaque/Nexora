@@ -349,3 +349,18 @@ margin-right: 30px;
 #NotiflixNotifyWrap .nx-close-button path{
   fill: #fff;
 }
+
+/* amount fields (pos.js: class "amount-input"): positive numbers with commas */
+.amount-input-error{
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+}
+.amount-input-error:empty{
+  display: none;
+}
+input.amount-input.amount-input-invalid,
+input.amount-input.amount-input-invalid:focus{
+  border-color: #ef5350 !important;
+  box-shadow: 0 0 0 2px rgba(239, 83, 80, 0.2) !important;
+}

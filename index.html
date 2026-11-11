@@ -826,7 +826,7 @@
                      </div>
                      <div class="row">
                          <div class="col-md-3">Discount</div>
-                         <div class="col-md-3"><input class="form-control" type="number" min="0" id="inputDiscount" oninput="$(this).calculateCart();"></div>
+                         <div class="col-md-3"><input autocomplete="off" inputmode="decimal" class="form-control amount-input" type="text" id="inputDiscount" oninput="$(this).calculateCart();"></div>
                          <div class="col-md-3">Gross Price (inc <span id="taxInfo"></span>% Tax)</div>
                          <div class="col-md-3"><h3 id="gross_price">0.00</h3></div>
                      </div>
@@ -980,11 +980,11 @@
                           <div class="pay-amounts">
                               <label class="pay-amount pay-amount-due">
                                   <span class="pay-amount-label">To pay <span id="price_curr"></span></span>
-                                  <input id="payablePrice" readonly type="number" class="form-control" tabindex="-1">
+                                  <input autocomplete="off" inputmode="decimal" id="payablePrice" readonly type="text" class="form-control amount-input" tabindex="-1">
                               </label>
                               <label class="pay-amount pay-amount-paid">
                                   <span class="pay-amount-label">Payment <span id="payment_curr"></span></span>
-                                  <input type="text" placeholder="0.00" class="form-control" id="payment" autocomplete="off">
+                                  <input inputmode="decimal" type="text" placeholder="0.00" class="form-control amount-input" id="payment" autocomplete="off">
                               </label>
                           </div>
                           <div class="pay-keypad">
@@ -1070,7 +1070,7 @@
                       </div>
                       <div class="form-group" id="creditLimitGroup" style="display: none;">
                           <label for="creditLimit">Credit limit amount*</label>
-                          <input type="number" min="0" step="0.01" placeholder="Maximum outstanding credit" class="form-control" id="creditLimit">
+                          <input autocomplete="off" inputmode="decimal" type="text" placeholder="Maximum outstanding credit" class="form-control amount-input" id="creditLimit">
                       </div>
 
                       <input type="submit" class="btn btn-primary btn-block waves-effect waves-light">
@@ -1118,7 +1118,7 @@
                     </div>
                     <div class="form-group" id="creditLimitGroupEdit" style="display: none;">
                         <label for="creditLimitEdit">Credit limit amount*</label>
-                        <input type="number" min="0" step="0.01" placeholder="Maximum outstanding credit" class="form-control" id="creditLimitEdit">
+                        <input autocomplete="off" inputmode="decimal" type="text" placeholder="Maximum outstanding credit" class="form-control amount-input" id="creditLimitEdit">
                     </div>
 
                     <input type="submit" class="btn btn-primary btn-block waves-effect waves-light">
@@ -1158,12 +1158,12 @@
                             <!-- price-input: digits and one decimal point only (pos.js) -->
                             <div class="form-group col-xs-6">
                                 <label for="product_cost_price">Cost Price</label>
-                                <input type="text" inputmode="decimal" autocomplete="off" name="cost_price" placeholder="What you pay" class="form-control price-input" id="product_cost_price">
+                                <input type="text" inputmode="decimal" autocomplete="off" name="cost_price" placeholder="What you pay" class="form-control price-input amount-input" id="product_cost_price">
                                 <small class="text-danger price-input-error"></small>
                             </div>
                             <div class="form-group col-xs-6">
                                 <label for="product_price">Selling Price</label>
-                                <input type="text" inputmode="decimal" autocomplete="off" required="required" name="price" placeholder="What the customer pays" class="form-control price-input" id="product_price">
+                                <input type="text" inputmode="decimal" autocomplete="off" required="required" name="price" placeholder="What the customer pays" class="form-control price-input amount-input" id="product_price">
                                 <small class="text-danger price-input-error"></small>
                             </div>
                             <div class="col-xs-12">
@@ -1299,12 +1299,12 @@
                                 </div>
                                 <div class="grn-add-cost">
                                     <label for="grnUnitCost">Unit Cost <span class="text-muted grn-currency"></span></label>
-                                    <input type="number" id="grnUnitCost" class="form-control" min="0" step="0.01" placeholder="0.00">
+                                    <input autocomplete="off" inputmode="decimal" type="text" id="grnUnitCost" class="form-control amount-input" placeholder="0.00">
                                 </div>
                                 <!-- this batch sells at its own price, after the earlier stock (pos.js: addGrnLine) -->
                                 <div class="grn-add-cost">
                                     <label for="grnSellPrice" title="Goods at a cost price a product already has keep that product's price. Goods at a new cost price become a new product: enter its selling price.">Selling Price <span class="text-muted grn-currency"></span></label>
-                                    <input type="number" id="grnSellPrice" class="form-control" min="0" step="0.01" placeholder="0.00">
+                                    <input autocomplete="off" inputmode="decimal" type="text" id="grnSellPrice" class="form-control amount-input" placeholder="0.00">
                                 </div>
                                 <!-- only for goods that become a new product: its barcode, typed or scanned
                                      (left empty, one is made) - pos.js: updateGrnAddBar -->
@@ -1425,7 +1425,7 @@
                                 </div>
                                 <div class="grn-add-cost">
                                     <label for="prnUnitCost" title="What the supplier gives back per unit (the product's cost price)">Unit Cost <span class="text-muted grn-currency"></span></label>
-                                    <input type="number" id="prnUnitCost" class="form-control" min="0" step="0.01" placeholder="0.00">
+                                    <input autocomplete="off" inputmode="decimal" type="text" id="prnUnitCost" class="form-control amount-input" placeholder="0.00">
                                 </div>
                                 <div class="grn-add-btn">
                                     <button type="button" class="btn btn-danger" id="prnAddLine"><i class="fa fa-plus"></i> Add</button>
@@ -1694,7 +1694,7 @@
                             <div class="row">
                                 <div class="col-xs-6 form-group">
                                     <label for="transferAmount">Amount <span class="text-muted transfer-currency"></span></label>
-                                    <input type="number" id="transferAmount" class="form-control" min="0.01" step="0.01" placeholder="0.00">
+                                    <input autocomplete="off" inputmode="decimal" type="text" id="transferAmount" class="form-control amount-input" placeholder="0.00">
                                 </div>
                                 <div class="col-xs-6 form-group">
                                     <label for="transferDate">Date</label>
@@ -1913,7 +1913,7 @@
                             <div class="row">
                                 <div class="col-sm-6 form-group">
                                     <label for="supPayAmount">Amount <span class="text-muted grn-currency"></span></label>
-                                    <input type="number" id="supPayAmount" class="form-control" min="0.01" step="0.01" required>
+                                    <input autocomplete="off" inputmode="decimal" type="text" id="supPayAmount" class="form-control amount-input" required>
                                 </div>
                                 <div class="col-sm-6 form-group">
                                     <label for="supPayDate">Date</label>
@@ -1958,7 +1958,7 @@
                                 </div>
                                 <div class="col-sm-6 form-group">
                                     <label for="expenseAmount">Amount <span class="text-muted expense-currency"></span></label>
-                                    <input type="number" id="expenseAmount" name="amount" class="form-control" min="0.01" step="0.01" placeholder="0.00" required>
+                                    <input autocomplete="off" inputmode="decimal" type="text" id="expenseAmount" name="amount" class="form-control amount-input" placeholder="0.00" required>
                                 </div>
                             </div>
                             <div class="form-group">
@@ -2537,7 +2537,7 @@
                 <div class="form-group">
                     <label for="settleAmount">Amount received*</label>
                     <div class="settle-amount-row">
-                        <input type="text" inputmode="decimal" autocomplete="off" class="form-control price-input" id="settleAmount" placeholder="0.00">
+                        <input type="text" inputmode="decimal" autocomplete="off" class="form-control price-input amount-input" id="settleAmount" placeholder="0.00">
                         <button type="button" class="btn btn-default" id="settleFullAmount">Full amount</button>
                     </div>
                     <small class="text-danger price-input-error"></small>

@@ -48,6 +48,119 @@ let btoa = require("btoa");
 let ExcelJS = require("exceljs");
 let JsBarcode = require("jsbarcode");
 let macaddress = require("macaddress");
+
+// ---- Amount fields (inputs with class "amount-input") ----------------------
+// Money is typed with thousands separators ("1,250,000.50") and only as a
+// positive number: digits and one decimal point, at most 2 decimals. Minus,
+// plus, "e" and letters are blocked. The commas are only for showing:
+// $(field).val() gives the plain number ("1250000.50") and
+// $(field).val(x) shows x with commas, so the code reading and filling these
+// fields (and forms sent with serialize / ajaxSubmit, which use .val())
+// works with plain numbers.
+
+// the plain number in some text: commas dropped, the first number kept (so
+// pasting "Rs. 1,250.00" gives "1250.00"), at most 2 decimals
+function cleanAmountText(value) {
+  let text = String(value == null ? "" : value).replace(/,/g, "");
+  let match = text.match(/\d+(\.\d*)?|\.\d+|^\.$/);
+  let cleaned = match ? match[0] : "";
+  let dot = cleaned.indexOf(".");
+  if (dot !== -1) cleaned = cleaned.slice(0, dot + 1) + cleaned.slice(dot + 1, dot + 3);
+  return cleaned;
+}
+
+// "1250000.5" -> "1,250,000.5" (a number being typed, e.g. "1250." stays as it is)
+function groupAmountText(clean) {
+  let dot = clean.indexOf(".");
+  let whole = dot === -1 ? clean : clean.slice(0, dot);
+  whole = whole.replace(/^0+(?=\d)/, "").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return dot === -1 ? whole : whole + clean.slice(dot);
+}
+
+// what an amount field shows for a value (for inputs drawn as HTML)
+function amountInputText(value) {
+  if (typeof value === "number") value = isFinite(value) ? String(Math.round(value * 100) / 100) : "";
+  return groupAmountText(cleanAmountText(value));
+}
+
+(function () {
+  let isAmount = (el) => !!(el && el.classList && el.classList.contains("amount-input"));
+  let previous = $.valHooks.text;
+  $.valHooks.text = {
+    get: function (el) {
+      if (isAmount(el)) return cleanAmountText(el.value);
+      return previous && previous.get ? previous.get.apply(this, arguments) : undefined;
+    },
+    set: function (el, value) {
+      if (isAmount(el)) {
+        el.value = amountInputText(value);
+        return true;
+      }
+      return previous && previous.set ? previous.set.apply(this, arguments) : undefined;
+    },
+  };
+
+  // a short note under the field (or a red border inside tables)
+  function amountError(el, message) {
+    let $el = $(el);
+    let $group = $el.closest(".form-group");
+    clearTimeout(el._amountErrorTimer);
+    $el.addClass("amount-input-invalid");
+    let $note = $el.siblings(".price-input-error");
+    if (!$note.length && !$el.closest("td").length) {
+      let $anchor = $el.closest(".input-group");
+      if (!$anchor.length) $anchor = $el;
+      $note = $anchor.next(".amount-input-error");
+      if (!$note.length) $note = $('<small class="amount-input-error text-danger"></small>').insertAfter($anchor);
+    }
+    $note.text(message);
+    $group.addClass("has-error");
+    el._amountErrorTimer = setTimeout(function () {
+      $el.removeClass("amount-input-invalid");
+      $note.text("");
+      $group.removeClass("has-error");
+    }, 2500);
+  }
+
+  // capture phase: before the fields' own handlers, so they see clean values
+  document.addEventListener(
+    "keydown",
+    function (e) {
+      if (!isAmount(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key && e.key.length === 1 && !/[0-9.]/.test(e.key)) {
+        e.preventDefault();
+        amountError(e.target, "Only positive numbers are allowed.");
+      } else if (e.key === "." && e.target.value.indexOf(".") !== -1 && e.target.selectionStart === e.target.selectionEnd) {
+        e.preventDefault(); // one decimal point
+      }
+    },
+    true
+  );
+  document.addEventListener(
+    "input",
+    function (e) {
+      let el = e.target;
+      if (!isAmount(el)) return;
+      let before = el.value;
+      let clean = cleanAmountText(before);
+      let shown = groupAmountText(clean);
+      if (shown === before) return;
+      // keep the caret after the same digit it was after
+      let caret = el.selectionStart == null ? before.length : el.selectionStart;
+      let kept = before.slice(0, caret).replace(/[^0-9.]/g, "").length;
+      let pos = 0;
+      for (let seen = 0; pos < shown.length && seen < kept; pos++) if (/[0-9.]/.test(shown[pos])) seen++;
+      el.value = shown;
+      try { el.setSelectionRange(pos, pos); } catch (err) {}
+      let typedDigits = before.replace(/,/g, "");
+      if (e.inputType === "insertFromPaste" || e.inputType === "insertFromDrop") return; // pasted "Rs. 1,250.00": just cleaned
+      if (/[^0-9.]/.test(typedDigits)) amountError(el, "Only positive numbers are allowed.");
+      else if (typedDigits !== clean) amountError(el, "Up to 2 decimals.");
+    },
+    true
+  );
+})();
+
 let categories = [];
 // products on the POS sale grid, grouped by category + name so that
 // same-name items with different prices/barcodes share one tile; the user
@@ -2637,54 +2750,8 @@ if (!authedThisSession) {
     }
     $("#product_cost_price, #product_price").on("input", updateProductMarginHint);
 
-    // ---- Cost / Selling price: positive numbers only ----
-    // Keeps digits and a single decimal point (max 2 decimals). Anything else
-    // (letters, "-", "+", "e", symbols, pasted text) is removed as it's typed.
-    function cleanPriceText(value) {
-      // drop thousands separators, then keep the first number in the text, so
-      // pasting "Rs. 1,250.00" gives "1250.00" (not the "." from "Rs.")
-      let text = String(value).replace(/,/g, "");
-      let match = text.match(/\d+(\.\d*)?|\.\d+|^\.$/);
-      let cleaned = match ? match[0] : "";
-      let dot = cleaned.indexOf(".");
-      if (dot !== -1) cleaned = cleaned.slice(0, dot + 1) + cleaned.slice(dot + 1, dot + 3);
-      return cleaned;
-    }
-
-    function showPriceInputError(input, message) {
-      let $err = $(input).siblings(".price-input-error");
-      $(input).closest(".form-group").toggleClass("has-error", !!message);
-      $err.text(message || "");
-      clearTimeout(input._priceErrorTimer);
-      if (message) {
-        input._priceErrorTimer = setTimeout(() => showPriceInputError(input, ""), 2500);
-      }
-    }
-
-    $(".price-input")
-      .on("keydown", function (e) {
-        // block the characters number fields usually let through: - + e E ,
-        if (["-", "+", "e", "E", ","].includes(e.key)) {
-          e.preventDefault();
-          showPriceInputError(this, "Only positive numbers are allowed.");
-        }
-      })
-      .on("input", function () {
-        let before = this.value;
-        let cleaned = cleanPriceText(before);
-        if (cleaned !== before) {
-          let caret = this.selectionStart - (before.length - cleaned.length);
-          this.value = cleaned;
-          try { this.setSelectionRange(Math.max(0, caret), Math.max(0, caret)); } catch (e) {}
-          showPriceInputError(
-            this,
-            /[^0-9.]/.test(before)
-              ? "Only numbers are allowed."
-              : "Use one decimal point and up to 2 decimals."
-          );
-          updateProductMarginHint();
-        }
-      });
+    // Cost / Selling price: positive numbers only, shown with commas (the
+    // "amount-input" fields at the top of this file)
 
     // returns an error message, or "" if the cost/selling prices are valid
     function validateProductPrices() {
@@ -6485,8 +6552,8 @@ function renderGrnLines() {
             <td class="text-right nobr"><span class="grn-line-stock"></span>
               <br><small class="text-success grn-line-after"></small></td>
             <td><input type="number" class="form-control grn-line-qty" min="1" step="1" value="${txnHtml(l.quantity)}"></td>
-            <td><input type="number" class="form-control grn-line-cost" min="0" step="0.01" value="${txnHtml(l.unit_cost)}"></td>
-            <td><input type="number" class="form-control grn-line-sell" min="0" step="0.01" value="${txnHtml(l.selling_price)}"${
+            <td><input type="text" inputmode="decimal" autocomplete="off" class="form-control amount-input grn-line-cost" value="${txnHtml(amountInputText(l.unit_cost))}"></td>
+            <td><input type="text" inputmode="decimal" autocomplete="off" class="form-control amount-input grn-line-sell" value="${txnHtml(amountInputText(l.selling_price))}"${
               t.kind === "existing" ? " disabled" : ""
             }>
               <small class="grn-line-sell-hint"></small></td>
@@ -7806,7 +7873,7 @@ function renderPrnLines() {
             <td class="text-right nobr">${p.stock == 1 ? parseInt(p.quantity) || 0 : '<span class="text-muted">not tracked</span>'}
               <br><small class="text-danger prn-line-after"></small></td>
             <td><input type="number" class="form-control prn-line-qty" min="1" step="1" value="${txnHtml(l.quantity)}"></td>
-            <td><input type="number" class="form-control prn-line-cost" min="0" step="0.01" value="${txnHtml(l.unit_cost)}"></td>
+            <td><input type="text" inputmode="decimal" autocomplete="off" class="form-control amount-input prn-line-cost" value="${txnHtml(amountInputText(l.unit_cost))}"></td>
             <td class="text-right nobr grn-line-total"></td>
             <td><button type="button" class="btn btn-danger btn-sm prn-line-remove" title="Remove"><i class="fa fa-times"></i></button></td>
           </tr>`;
