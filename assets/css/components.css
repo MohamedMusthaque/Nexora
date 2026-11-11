@@ -5928,3 +5928,58 @@ body.transactions-mode #transactions_view .txn-page{
     animation-duration: 1.6s;
   }
 }
+
+/* ---- Tooltips (assets/js/tooltips.js) ---------------------------------------
+   One dark tooltip for every button: above it, or below when there is no
+   room; kept inside the window. */
+#appTooltip{
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 3100; /* above windows, their backdrops and the loading bar */
+  max-width: 260px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #36404a;
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: center;
+  white-space: normal;
+  word-wrap: break-word;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(3px);
+  transition: opacity 0.12s ease, transform 0.12s ease, visibility 0s linear 0.12s;
+}
+#appTooltip.below{
+  transform: translateY(-3px);
+}
+#appTooltip.visible{
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+#appTooltip .app-tooltip-arrow{
+  position: absolute;
+  bottom: -4px;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  background: #36404a;
+  transform: rotate(45deg);
+}
+#appTooltip.below .app-tooltip-arrow{
+  top: -4px;
+  bottom: auto;
+}
+@media (prefers-reduced-motion: reduce){
+  #appTooltip,
+  #appTooltip.below{
+    transform: none;
+  }
+}
