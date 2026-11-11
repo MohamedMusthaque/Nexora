@@ -4663,3 +4663,118 @@ body.accounts-mode #accounts_view .card-box{
 #accounts_view #accounts_ledger tr[data-party]{
   cursor: pointer;
 }
+
+/* ---- Expenses page: fixed to the window, only the table scrolls ----
+   Same as the Suppliers page: #expenses_view gets the window's remaining
+   height (pos.js: fitExpensesView) and the open tab's table fills what is
+   left below the header, tabs, filters and totals, scrolling up and down
+   with its headings kept in view. */
+body.expenses-mode{
+  overflow: hidden;
+}
+body.expenses-mode #expenses_view > .row,
+body.expenses-mode #expenses_view > .row > .col-md-12{
+  height: 100%;
+}
+body.expenses-mode #expenses_view .card-box{
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0;
+  overflow: auto; /* very short windows: the whole card scrolls instead */
+}
+body.expenses-mode #expenses_view .card-box > .expenses-header,
+body.expenses-mode #expenses_view .card-box > .expenses-tabs{
+  flex: 0 0 auto;
+}
+body.expenses-mode #expenses_view .card-box > .tab-content{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+body.expenses-mode #expenses_view .tab-content > .tab-pane.active{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+body.expenses-mode #expenses_view .tab-pane > :not(.dataTables_wrapper){
+  flex: 0 0 auto;
+}
+body.expenses-mode #expenses_view .tab-pane > .dataTables_wrapper{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+body.expenses-mode #expenses_view .dataTables_wrapper > .ph-toolbar,
+body.expenses-mode #expenses_view .dataTables_wrapper > .ph-footer{
+  flex: 0 0 auto;
+}
+body.expenses-mode #expenses_view .dataTables_wrapper > .ph-table-scroll{
+  flex: 1 1 auto;
+  min-height: 160px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border-bottom: 1px solid #e3e3e3;
+}
+body.expenses-mode #expenses_view .ph-table-scroll > table{
+  margin-top: 0 !important;   /* dataTables.bootstrap adds 6px above the table */
+  margin-bottom: 0 !important;
+}
+/* headings stay visible while the rows scroll */
+body.expenses-mode #expenses_view .ph-table-scroll > table > thead > tr > th{
+  /* !important: jquery.dataTables.min.css sets position: relative on sortable headings */
+  position: sticky !important;
+  top: 0;
+  z-index: 2;
+  background: #f6f8fa;
+  box-shadow: inset 0 -1px 0 #dfe3e8;
+}
+body.expenses-mode #expenses_view .ph-table-scroll::-webkit-scrollbar{
+  width: 8px;
+  height: 8px;
+}
+body.expenses-mode #expenses_view .ph-table-scroll::-webkit-scrollbar-thumb{
+  background: #cfd6dc;
+  border-radius: 4px;
+}
+/* more room for the table: tighter spacing above it */
+body.expenses-mode #expenses_view .card-box{
+  padding-top: 14px;
+  padding-bottom: 12px;
+}
+body.expenses-mode #expenses_view .expenses-header h3,
+body.expenses-mode #expenses_view .expenses-header h4{
+  margin-top: 0;
+  margin-bottom: 0;
+}
+body.expenses-mode #expenses_view .expenses-tabs{
+  margin-top: 6px;
+}
+body.expenses-mode #expenses_view .customer-tabs > li > a{
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+body.expenses-mode #expenses_view .customer-tab-content{
+  padding-top: 10px !important;
+}
+body.expenses-mode #expenses_view .expenses-filters{
+  margin-bottom: 10px;
+}
+body.expenses-mode #expenses_view .expense-tiles{
+  margin-bottom: 10px;
+}
+body.expenses-mode #expenses_view .expense-tile{
+  padding: 7px 12px;
+}
+body.expenses-mode #expenses_view .expense-tile .expense-value{
+  font-size: 19px;
+}
+body.expenses-mode #expenses_view .dataTables_wrapper > .ph-toolbar{
+  margin-bottom: 6px;
+}
+body.expenses-mode #expenses_view .card-box > .tab-content{
+  margin-bottom: 0; /* the theme adds 30px below tab contents */
+}

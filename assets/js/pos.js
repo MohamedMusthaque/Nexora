@@ -2674,6 +2674,7 @@ if (!authedThisSession) {
       if (page !== "pos") updateTransactionsStickyOffset();
       if (page === "suppliers") fitSuppliersView();
       if (page === "accounts") fitAccountsView();
+      if (page === "expenses") fitExpensesView();
     }
 
     $("#transactions").click(function () {
@@ -5622,6 +5623,20 @@ function renderExpenseTypes() {
   );
 }
 
+// The Expenses page is fixed to the window (like the Suppliers page): it gets
+// the height left below the toolbar and its tables scroll inside it
+// (body.expenses-mode in components.css). Run when the page opens and
+// whenever the window resizes.
+function fitExpensesView() {
+  let el = document.getElementById("expenses_view");
+  if (!el || !$(el).is(":visible")) return;
+  let top = el.getBoundingClientRect().top;
+  el.style.height = Math.max(window.innerHeight - top - 15, 320) + "px";
+  ["#expenseList", "#expenseTypeList"].forEach((sel) => {
+    if ($.fn.DataTable.isDataTable(sel)) $(sel).DataTable().columns.adjust();
+  });
+}
+
 // ---- add / edit an expense ----
 function openExpenseForm(expense) {
   $("#saveExpense").get(0).reset();
@@ -5703,6 +5718,10 @@ $(function () {
   $("#addExpenseBtn").on("click", function () {
     openExpenseForm(null);
   });
+  $(window).on("resize", fitExpensesView);
+  if (window.ResizeObserver && document.querySelector(".main-toolbar-row")) {
+    new ResizeObserver(fitExpensesView).observe(document.querySelector(".main-toolbar-row"));
+  }
   $("#addExpenseTypeBtn").on("click", function () {
     openExpenseTypeForm(null);
   });
