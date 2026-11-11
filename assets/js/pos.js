@@ -3072,12 +3072,16 @@ if (!authedThisSession) {
     $.fn.editCategory = function (index) {
       $("#categoryName").val(allCategories[index].name);
       $("#category_id").val(allCategories[index]._id);
+      $("#newCategory .modal-title").text("Edit Category");
+      $("#newCategorySub").text("Rename \u201c" + allCategories[index].name + "\u201d");
       openCategoryForm();
     };
 
     $("#addCategoryBtn").on("click", function () {
       $("#saveCategory").get(0).reset();
       $("#category_id").val("");
+      $("#newCategory .modal-title").text("New Category");
+      $("#newCategorySub").text("A name to group products on the till");
       openCategoryForm();
     });
 
@@ -9323,6 +9327,10 @@ $.fn.openSelectOrderModal = function (mode) {
   $("#selectOrderModalLabel").text(
     mode == "exchange" ? "Select Order to Exchange" : "Select Order to Return/Refund"
   );
+  $("#selectOrderModalSub").text(
+    mode == "exchange" ? "Find the bill with the items being exchanged" : "Find the bill the customer brought back"
+  );
+  $("#selectOrderModal .nx-hero-icon .fa").attr("class", "fa " + (mode == "exchange" ? "fa-exchange" : "fa-undo"));
   selectOrderDateFilter.reset();
   selectOrderSearchText = "";
   selectableOrders = [];
@@ -9479,6 +9487,12 @@ $.fn.openReturnModal = function (mode) {
   $("#returnModalLabel").text(
     mode == "exchange" ? "Exchange Items" : "Return / Refund"
   );
+  $("#returnModalSub").text(
+    mode == "exchange"
+      ? "Choose the items coming back; their value goes to the new bill"
+      : "Choose the items coming back and how the customer is paid"
+  );
+  $("#returnModal .nx-hero-icon .fa").attr("class", "fa " + (mode == "exchange" ? "fa-exchange" : "fa-undo"));
   $("#refundMethodGroup").toggle(mode != "exchange");
   $("#confirmReturnBtn").text(mode == "exchange" ? "Confirm Exchange" : "Confirm Return");
   $("#returnReason").val("");
