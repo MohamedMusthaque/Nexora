@@ -2572,15 +2572,18 @@ if (!authedThisSession) {
       $("#transactions_view").toggle(page === "transactions");
       $("#expenses_view").toggle(page === "expenses");
       $("#suppliers_view").toggle(page === "suppliers");
+      $("#accounts_view").toggle(page === "accounts");
       $("#pointofsale").toggle(page !== "pos");
       $("#transactions").toggleClass("nav-current", page === "transactions");
       $("#expensesNav").toggleClass("nav-current", page === "expenses");
       $("#suppliersNav").toggleClass("nav-current", page === "suppliers");
+      $("#accountsNav").toggleClass("nav-current", page === "accounts");
 
       $("body")
         .toggleClass("transactions-mode", page === "transactions")
         .toggleClass("expenses-mode", page === "expenses")
         .toggleClass("suppliers-mode", page === "suppliers")
+        .toggleClass("accounts-mode", page === "accounts")
         .removeClass("totals-compact");
       window.scrollTo(0, 0);
       if (page !== "pos") updateTransactionsStickyOffset();
@@ -2607,6 +2610,12 @@ if (!authedThisSession) {
       if (!canManageSuppliers()) return;
       showPage("suppliers");
       loadSuppliersPage();
+    });
+
+    $("#accountsNav").click(function () {
+      if (!canViewJournal()) return;
+      showPage("accounts");
+      loadAccountsPage();
     });
 
     $("#viewRefOrders").click(function () {
@@ -8231,7 +8240,9 @@ function canViewJournal() {
 
 function applyJournalPermission() {
   let allowed = canViewJournal();
-  $("#journalNav, #dayEndNav").toggle(allowed);
+  $("#journalNav, #dayEndNav, #accountsNav").toggle(allowed);
+  // permission taken away while the Accounts page is open: back to the till
+  if (!allowed && $("#accounts_view").is(":visible")) $("#pointofsale").trigger("click");
   if (!allowed && $("#journalModal").hasClass("in")) $("#journalModal").modal("hide");
   if (!allowed && $("#dayEndModal").hasClass("in")) $("#dayEndModal").modal("hide");
 }
@@ -10791,5 +10802,556 @@ $(function () {
           $btn.prop("disabled", false);
         });
     });
+  });
+});
+
+
+// ======================================================================
+// Accounts page: every transaction posted to the accounts it touches
+// (api/accounts.js) - money (Cash, Card, Bank Transfer), customer and
+// supplier credit and advances (balances carried over from day to day),
+// and what happened in the period (sales, returns, GRNs, PRNs, expenses,
+// stock adjustments, money transfers). Same permission as the Quick Journal.
+// ======================================================================
+let accountsData = null; // every account's totals for the period
+let accountsLedgerData = null; // the statement shown
+let accountsSelected = "overview";
+let accountsDateFilter = null;
+let accountsRequestId = 0;
+
+function loadAccountsPage() {
+  if (!accountsDateFilter) {
+    // this month to start with
+    accountsDateFilter = initDateRangeFilter("#accountsDateRange", loadAccounts, {
+      initial: { start: moment().startOf("month"), end: moment() },
+    });
+  }
+  loadAccounts();
+}
+
+function accountsRangeQuery() {
+  let range = accountsDateFilter && accountsDateFilter.getRange();
+  return range ? { from: range.start.format("YYYY-MM-DD"), to: range.end.format("YYYY-MM-DD") } : {};
+}
+
+function accountsPeriodText() {
+  let range = accountsDateFilter && accountsDateFilter.getRange();
+  if (!range) return "all dates";
+  return range.start.isSame(range.end, "day")
+    ? range.start.format("D MMM YYYY")
+    : range.start.format("D MMM YYYY") + " - " + range.end.format("D MMM YYYY");
+}
+
+function loadAccounts() {
+  let requestId = ++accountsRequestId;
+  $.get(api + "accounts", accountsRangeQuery())
+    .done(function (data) {
+      if (requestId !== accountsRequestId) return;
+      accountsData = data;
+      renderAccountsList();
+      let keep = accountsSelected.indexOf("by:") === 0 || accountsData.accounts.some((a) => a.id === accountsSelected);
+      showAccount(keep ? accountsSelected : "overview");
+    })
+    .fail(function (xhr) {
+      Swal.fire("Oops!", supError(xhr, "Could not load the accounts."), "warning");
+    });
+}
+
+function accountById(id) {
+  return accountsData && accountsData.accounts.find((a) => a.id === id);
+}
+
+// what an account shows in the list: the balance, or the period's total
+function accountValue(a) {
+  return a.type === "balance" ? a.closing : a.in;
+}
+
+function accountMoney(n, cls) {
+  return `<span class="${n < 0 ? "text-danger" : cls || ""}">${supMoney(n)}</span>`;
+}
+
+function renderAccountsList() {
+  let groups = [];
+  accountsData.accounts.forEach((a) => {
+    let g = groups.find((x) => x.name === a.group);
+    if (!g) groups.push((g = { name: a.group, accounts: [] }));
+    g.accounts.push(a);
+  });
+  let html = `<button type="button" class="accounts-item accounts-item-overview" data-account="overview">
+      <i class="fa fa-th-large"></i><span class="accounts-item-name">Overview</span></button>
+    <div class="accounts-group">Breakdowns</div>`;
+  Object.keys(PARTY_VIEWS).forEach((by) => {
+    let v = PARTY_VIEWS[by];
+    html += `<button type="button" class="accounts-item accounts-item-plain" data-account="by:${by}" title="${txnHtml(v.note)}">
+        <i class="fa ${v.icon}"></i><span class="accounts-item-name">${txnHtml(v.title)}</span></button>`;
+  });
+  groups.forEach((g) => {
+    html += `<div class="accounts-group">${txnHtml(g.name)}</div>`;
+    g.accounts.forEach((a) => {
+      let quiet = a.type === "activity" && !a.count;
+      html += `<button type="button" class="accounts-item${quiet ? " accounts-item-quiet" : ""}" data-account="${txnHtml(a.id)}" title="${txnHtml(a.note || "")}">
+          <i class="fa ${txnHtml(a.icon)}"></i>
+          <span class="accounts-item-name">${txnHtml(a.name)}</span>
+          <span class="accounts-item-value">${accountMoney(accountValue(a))}</span>
+        </button>`;
+    });
+  });
+  $("#accountsList").html(html);
+}
+
+function showAccount(id) {
+  accountsSelected = id;
+  // "by:customer" (every customer) or "by:customer:<key>" (one customer)
+  let party = id.indexOf("by:") === 0 ? id.split(":") : null;
+  let menuId = party ? "by:" + party[1] : id;
+  $("#accountsList .accounts-item").removeClass("active");
+  $(`#accountsList .accounts-item[data-account="${menuId}"]`).addClass("active");
+  if (id === "overview") renderAccountsOverview();
+  else if (party && party.length > 2) loadPartyStatement(party[1], party.slice(2).join(":"));
+  else if (party) loadParties(party[1]);
+  else loadAccountLedger(id);
+}
+
+// the statement / list table (#accountsLedger) with new columns
+function accountsShowTable(headHtml, rowsHtml, options, order) {
+  if ($.fn.DataTable.isDataTable("#accountsLedger")) $("#accountsLedger").DataTable().destroy();
+  $("#accountsLedgerHead").html(headHtml);
+  $("#accounts_ledger").html(rowsHtml);
+  $("#accountsLedger").DataTable(Object.assign(standardTableOptions(options), { order: order || [[0, "asc"]] }));
+  $("#accountsOverview").hide();
+  $("#accountsLedgerBox").show();
+}
+
+function accountsTile(title, value, note, cls) {
+  return `<div class="sup-tile ${cls || ""}"><h5>${title}</h5><div class="sup-value">${value}</div>${note ? `<small>${note}</small>` : ""}</div>`;
+}
+
+function renderAccountsOverview() {
+  let a = (id) => accountById(id) || { closing: 0, in: 0, count: 0 };
+  let money = accountsData.accounts.filter((x) => x.group === "Money" && x.type === "balance");
+  let moneyTotal = supRound(money.reduce((s, x) => s + x.closing, 0));
+  $("#accountsDetailHead").html(
+    `<h4><i class="fa fa-th-large"></i> Overview</h4><p>All accounts · ${txnHtml(accountsPeriodText())}</p>`
+  );
+  $("#accountsTiles").html(
+    accountsTile("MONEY", accountMoney(moneyTotal), money.map((x) => txnHtml(x.name) + " " + supMoney(x.closing)).join(" · "), "sup-tile-main") +
+      accountsTile("CUSTOMERS OWE YOU", supMoney(a("receivable").closing), "customer credit") +
+      accountsTile("YOU OWE SUPPLIERS", supMoney(a("payable").closing), "supplier credit") +
+      accountsTile("SALES", supMoney(a("sales").in), a("sales").count + (a("sales").count === 1 ? " bill" : " bills") + " in the period")
+  );
+
+  let row = (x) => `<tr class="accounts-row" data-account="${txnHtml(x.id)}">
+      <td><i class="fa ${txnHtml(x.icon)} text-muted"></i> <b>${txnHtml(x.name)}</b><br><small class="text-muted">${txnHtml(x.note || "")}</small></td>
+      <td class="text-right">${accountMoney(x.opening)}</td>
+      <td class="text-right accounts-in">${x.in ? "+" + supMoney(x.in) : '<span class="text-muted">-</span>'}</td>
+      <td class="text-right accounts-out">${x.out ? "-" + supMoney(x.out) : '<span class="text-muted">-</span>'}</td>
+      <td class="text-right"><b>${accountMoney(x.closing)}</b></td>
+    </tr>`;
+  let activityRow = (x) => `<tr class="accounts-row" data-account="${txnHtml(x.id)}">
+      <td><i class="fa ${txnHtml(x.icon)} text-muted"></i> <b>${txnHtml(x.name)}</b><br><small class="text-muted">${txnHtml(x.note || "")}</small></td>
+      <td class="text-right">${x.count || '<span class="text-muted">-</span>'}</td>
+      <td class="text-right"><b>${x.in ? supMoney(x.in) : '<span class="text-muted">-</span>'}</b></td>
+    </tr>`;
+  let balances = accountsData.accounts.filter((x) => x.type === "balance");
+  let activity = accountsData.accounts.filter((x) => x.type === "activity");
+  $("#accountsOverview").html(`
+    <h5 class="accounts-section-title">Balances <small>carried from day to day</small></h5>
+    <div class="accounts-table-wrap"><table class="table accounts-table">
+      <thead><tr><th>Account</th><th class="text-right">Opening</th><th class="text-right">In</th><th class="text-right">Out</th><th class="text-right">Closing</th></tr></thead>
+      <tbody>${balances.map(row).join("")}</tbody>
+    </table></div>
+    <h5 class="accounts-section-title">Activity <small>in ${txnHtml(accountsPeriodText())}</small></h5>
+    <div class="accounts-table-wrap"><table class="table accounts-table">
+      <thead><tr><th>Account</th><th class="text-right">Entries</th><th class="text-right">Total</th></tr></thead>
+      <tbody>${activity.map(activityRow).join("")}</tbody>
+    </table></div>
+    <p class="text-muted accounts-footnote"><i class="fa fa-info-circle"></i> Balances start from zero with the first record in the app; money held before that isn't included. Click an account to see its entries.</p>`);
+  $("#accountsLedgerBox").hide();
+  $("#accountsOverview").show();
+}
+
+function loadAccountLedger(id) {
+  let requestId = ++accountsRequestId;
+  $.get(api + "accounts/ledger", Object.assign({ account: id }, accountsRangeQuery()))
+    .done(function (data) {
+      if (requestId !== accountsRequestId) return;
+      accountsLedgerData = data;
+      renderAccountLedger();
+    })
+    .fail(function (xhr) {
+      Swal.fire("Oops!", supError(xhr, "Could not load the account."), "warning");
+    });
+}
+
+function renderAccountLedger() {
+  let d = accountsLedgerData;
+  let a = d.account;
+  let isBalance = a.type === "balance";
+  $("#accountsDetailHead").html(
+    `<h4><i class="fa ${txnHtml(a.icon)}"></i> ${txnHtml(a.name)}</h4><p>${txnHtml(a.note || "")} · ${txnHtml(accountsPeriodText())}</p>`
+  );
+  $("#accountsTiles").html(
+    isBalance
+      ? accountsTile("OPENING", accountMoney(d.opening), "at the start of the period") +
+          accountsTile("IN", "+" + supMoney(d.in), "", "accounts-tile-in") +
+          accountsTile("OUT", "-" + supMoney(d.out), "", "accounts-tile-out") +
+          accountsTile("CLOSING", accountMoney(d.closing), "at the end of the period", "sup-tile-main")
+      : accountsTile("ENTRIES", d.rows.length, "in the period") + accountsTile("TOTAL", supMoney(d.in), "in the period", "sup-tile-main")
+  );
+
+  let head =
+    `<tr><th>Date</th><th>Type</th><th>Reference</th><th>Customer / Supplier</th><th>Details</th>` +
+    (isBalance
+      ? `<th class="txn-num">In</th><th class="txn-num">Out</th><th class="txn-num">Balance</th>`
+      : `<th class="txn-num">Amount</th><th class="txn-num">Running Total</th>`) +
+    `<th>View</th></tr>`;
+  let canView = (p) => ["sale", "return", "exchange", "customer_credit_payment", "grn", "prn", "supplier_credit_payment", "supplier_advance", "adjustment", "transfer"].includes(p.kind) || (p.kind === "customer_advance" && (p.sale_id || p.receipt));
+  let rows = d.rows
+    .map((p, i) => {
+      let when = moment(p.at);
+      return `<tr>
+        <td class="nobr" data-order="${i}">${when.format("DD MMM YYYY")}${p.time_known ? `<br><small class="text-muted">${when.format("hh:mm A")}</small>` : ""}</td>
+        <td class="nobr" data-export="${txnHtml(p.type)}"><span class="label ${JOURNAL_TYPE_CSS[p.kind] || "label-default"}">${txnHtml(p.type)}</span></td>
+        <td>${txnHtml(p.reference)}</td>
+        <td>${txnHtml(p.party)}</td>
+        <td class="accounts-details" data-export="${txnHtml(p.details)}">${txnHtml(p.details)}${
+          p.method ? `${p.details ? "<br>" : ""}<small class="text-muted">${txnHtml(p.method)}${p.user ? " · by " + txnHtml(p.user) : ""}</small>` : ""
+        }</td>` +
+        (isBalance
+          ? `<td class="text-right nobr accounts-in" data-order="${p.in}">${p.in ? supMoney(p.in) : ""}</td>
+             <td class="text-right nobr accounts-out" data-order="${p.out}">${p.out ? supMoney(p.out) : ""}</td>`
+          : `<td class="text-right nobr" data-order="${p.in}">${supMoney(p.in)}</td>`) +
+        `<td class="text-right nobr" data-order="${p.balance}"><b>${accountMoney(p.balance)}</b></td>
+        <td>${canView(p) ? `<button type="button" class="btn btn-info btn-sm" onClick="$(this).viewAccountEntry(${i})" title="View"><i class="fa fa-search-plus"></i></button>` : ""}</td>
+      </tr>`;
+    })
+    .join("");
+
+  let last = isBalance ? 8 : 7;
+  accountsShowTable(head, rows, {
+    noun: "entries",
+    searchPlaceholder: "Search " + a.name + "...",
+    exportTitle: "Account - " + a.name,
+    exportColumns: Array.from({ length: last }, (x, i) => i),
+    sumColumns: isBalance ? [5, 6] : [5],
+    exportSubtitle: () =>
+      accountsPeriodText() +
+      (isBalance ? "   ·   Opening " + supMoney(d.opening) + "   ·   Closing " + supMoney(d.closing) : "   ·   Total " + supMoney(d.in)),
+    actionColumns: [last],
+    pageLength: 25,
+    emptyTable: "Nothing in this account in " + accountsPeriodText(),
+  });
+}
+
+// the bill / receipt / slip behind an entry
+$.fn.viewAccountEntry = function (index) {
+  let p = accountsLedgerData && accountsLedgerData.rows[index];
+  if (!p) return;
+  let fail = (xhr) => Swal.fire("Oops!", supError(xhr, "Could not load it. It may have been deleted."), "warning");
+  let showHtml = (html) => showSupplierBill(html);
+  if (p.kind === "sale" || p.kind === "return" || p.kind === "exchange" || (p.kind === "customer_advance" && p.sale_id)) {
+    let id = p.kind === "return" || p.kind === "exchange" ? p.order_id : p.sale_id || p.id;
+    $.get(api + encodeURIComponent(id))
+      .done((t) => $(document).viewTransaction(0, [t]))
+      .fail(fail);
+  } else if ((p.kind === "customer_credit_payment" || p.kind === "customer_advance") && p.receipt) {
+    showHtml(creditPaymentReceiptHtml(p.receipt));
+  } else if (p.kind === "grn") {
+    $.get(api + "suppliers/grn/" + p.id)
+      .done((g) => {
+        grnCache[g._id] = g;
+        showHtml(grnBillHtml(g));
+      })
+      .fail(fail);
+  } else if (p.kind === "prn") {
+    $.get(api + "suppliers/prn/" + p.id)
+      .done((r) => {
+        prnCache[r._id] = r;
+        showHtml(prnBillHtml(r));
+      })
+      .fail(fail);
+  } else if (p.kind === "supplier_credit_payment" || p.kind === "supplier_advance") {
+    $.get(api + "suppliers/transactions/" + p.supplier_id)
+      .done((data) => {
+        let pay = (data.payments || []).find((x) => x._id === p.id);
+        if (pay) showHtml(supplierPaymentBillHtml(pay));
+        else fail(null);
+      })
+      .fail(fail);
+  } else if (p.kind === "adjustment") {
+    $.get(api + "adjustments/adjustment/" + p.id)
+      .done((a) => showHtml(adjBillHtml(a)))
+      .fail(fail);
+  } else if (p.kind === "transfer") {
+    $.get(api + "transfers/transfer/" + p.id)
+      .done((t) => showHtml(transferSlipHtml(t)))
+      .fail(fail);
+  }
+};
+
+$(function () {
+  $("#accountsList").on("click", ".accounts-item", function () {
+    showAccount(String($(this).data("account")));
+  });
+  $("#accountsOverview").on("click", ".accounts-row", function () {
+    showAccount(String($(this).data("account")));
+  });
+  $("#accountsRefresh").on("click", loadAccounts);
+});
+
+
+// ---- Accounts: customer-wise, supplier-wise, expense-wise ------------------
+// (api/accounts.js /parties and /party) a list with one row per customer /
+// supplier / expense type; click a row for its statement.
+const PARTY_VIEWS = {
+  customer: { title: "Customer-wise", icon: "fa-users", one: "customer", many: "customers", note: "Sales, payments, credit and advances by customer" },
+  supplier: { title: "Supplier-wise", icon: "fa-industry", one: "supplier", many: "suppliers", note: "GRNs, PRNs, payments, credit and advances by supplier" },
+  expense: { title: "Expense-wise", icon: "fa-tags", one: "expense type", many: "expense types", note: "Expenses by expense type" },
+};
+let accountsPartiesData = null;
+
+// a customer's / supplier's balance: owed (due) or an advance held
+function partyBalanceHtml(n) {
+  if (!n) return '<span class="text-muted">0</span>';
+  return n > 0
+    ? `<span class="text-danger">${supMoney(n)}</span> <small class="text-muted">due</small>`
+    : `<span class="accounts-in">${supMoney(-n)}</span> <small class="text-muted">advance</small>`;
+}
+function partyBalanceText(n) {
+  if (!n) return "0";
+  return n > 0 ? supMoney(n) + " due" : supMoney(-n) + " advance";
+}
+function signedMoney(n) {
+  if (!n) return '<span class="text-muted">-</span>';
+  return n > 0 ? `<span class="accounts-in">+${supMoney(n)}</span>` : `<span class="accounts-out">-${supMoney(-n)}</span>`;
+}
+function dashMoney(n) {
+  return n ? supMoney(n) : '<span class="text-muted">-</span>';
+}
+
+function loadParties(by) {
+  let requestId = ++accountsRequestId;
+  $.get(api + "accounts/parties", Object.assign({ by: by }, accountsRangeQuery()))
+    .done(function (data) {
+      if (requestId !== accountsRequestId) return;
+      accountsPartiesData = data;
+      renderParties();
+    })
+    .fail(function (xhr) {
+      Swal.fire("Oops!", supError(xhr, "Could not load the list."), "warning");
+    });
+}
+
+function renderParties() {
+  let d = accountsPartiesData;
+  let v = PARTY_VIEWS[d.by];
+  let t = d.totals;
+  let n = d.parties.length;
+  $("#accountsDetailHead").html(
+    `<h4><i class="fa ${v.icon}"></i> ${txnHtml(v.title)}</h4><p>${txnHtml(v.note)} · ${txnHtml(accountsPeriodText())} · click a row for its statement</p>`
+  );
+  let open = (p) => `data-party="${txnHtml(d.by + ":" + p.key)}"`;
+  let nameCell = (p) =>
+    `<td data-export="${txnHtml(p.name)}"><b>${txnHtml(p.name)}</b>${
+      p.walk_in ? `<br><small class="text-muted">${d.by === "customer" ? "sales without a customer" : "GRNs from walk-in sellers"}</small>` : ""
+    }</td>`;
+  let action = `<td><button type="button" class="btn btn-info btn-sm" title="Statement"><i class="fa fa-file-text-o"></i></button></td>`;
+  let dash = '<span class="text-muted">-</span>';
+  let head;
+  let rows;
+  let options = {
+    noun: v.many,
+    searchPlaceholder: "Search " + v.many + "...",
+    exportTitle: v.title + " Transactions",
+    exportSubtitle: () => accountsPeriodText(),
+    pageLength: 25,
+    emptyTable: "No " + v.many + " with transactions in " + accountsPeriodText(),
+  };
+
+  if (d.by === "customer" || d.by === "supplier") {
+    let isCustomer = d.by === "customer";
+    let net = (p) => supRound(isCustomer ? p.money_in - p.money_out : p.money_out - p.money_in);
+    $("#accountsTiles").html(
+      isCustomer
+        ? accountsTile("CUSTOMERS", n, "with transactions or a balance") +
+            accountsTile("SALES", supMoney(t.sales), t.bills + (t.bills === 1 ? " bill" : " bills")) +
+            accountsTile("RECEIVED", supMoney(net(t)), "after refunds", "accounts-tile-in") +
+            accountsTile("CUSTOMERS OWE YOU", supMoney(t.owes), "advance held " + supMoney(t.advance), "sup-tile-main")
+        : accountsTile("SUPPLIERS", n, "with transactions or a balance") +
+            accountsTile("PURCHASES", supMoney(t.purchases), t.grns + (t.grns === 1 ? " GRN" : " GRNs")) +
+            accountsTile("PAID", supMoney(net(t)), "after refunds", "accounts-tile-out") +
+            accountsTile("YOU OWE SUPPLIERS", supMoney(t.owes), "advance paid " + supMoney(t.advance), "sup-tile-main")
+    );
+    head = isCustomer
+      ? `<tr><th>Customer</th><th class="txn-num">Bills</th><th class="txn-num">Sales</th><th class="txn-num">Returns</th>
+          <th class="txn-num" title="Money received from the customer, less refunds">Received</th><th class="txn-num">Owes You</th>
+          <th class="txn-num" title="Paid in advance, not used yet">Advance Held</th><th>Statement</th></tr>`
+      : `<tr><th>Supplier</th><th class="txn-num">GRNs</th><th class="txn-num">Purchases</th><th class="txn-num">Returns (PRN)</th>
+          <th class="txn-num" title="Money paid to the supplier, less refunds">Paid</th><th class="txn-num">You Owe</th>
+          <th class="txn-num" title="Paid in advance, not used by GRNs yet">Advance Paid</th><th>Statement</th></tr>`;
+    rows = d.parties
+      .map((p) => {
+        let count = isCustomer ? p.bills : p.grns;
+        let total = isCustomer ? p.sales : p.purchases;
+        return `<tr class="accounts-row" ${open(p)}>${nameCell(p)}
+        <td class="text-right">${count || dash}</td>
+        <td class="text-right nobr" data-order="${total}">${dashMoney(total)}</td>
+        <td class="text-right nobr" data-order="${p.returns}">${dashMoney(p.returns)}</td>
+        <td class="text-right nobr" data-order="${net(p)}">${dashMoney(net(p))}</td>
+        <td class="text-right nobr" data-order="${p.owes}">${p.owes ? `<b class="text-danger">${supMoney(p.owes)}</b>` : dash}</td>
+        <td class="text-right nobr" data-order="${p.advance}">${dashMoney(p.advance)}</td>${action}</tr>`;
+      })
+      .join("");
+    Object.assign(options, { exportColumns: [0, 1, 2, 3, 4, 5, 6], sumColumns: [1, 2, 3, 4, 5, 6], actionColumns: [7] });
+  } else {
+    let biggest = d.parties.slice().sort((a, b) => b.total - a.total)[0];
+    $("#accountsTiles").html(
+      accountsTile("EXPENSE TYPES", n, "used in the period") +
+        accountsTile("EXPENSES", t.count, t.count === 1 ? "entry" : "entries") +
+        accountsTile("BIGGEST", biggest ? txnHtml(biggest.name) : "-", biggest ? supMoney(biggest.total) : "") +
+        accountsTile("TOTAL EXPENSES", supMoney(t.total), "", "sup-tile-main")
+    );
+    head = `<tr><th>Expense Type</th><th class="txn-num">Entries</th><th class="txn-num">Total</th><th class="txn-num">Share</th>
+      <th>Paid By</th><th>Last</th><th>Statement</th></tr>`;
+    rows = d.parties
+      .map((p) => {
+        let share = t.total ? Math.round((p.total / t.total) * 1000) / 10 : 0;
+        let methods = Object.keys(p.methods).map((m) => txnHtml(m) + " " + supMoney(p.methods[m])).join(", ");
+        return `<tr class="accounts-row" ${open(p)}>${nameCell(p)}
+        <td class="text-right">${p.count}</td>
+        <td class="text-right nobr" data-order="${p.total}"><b>${supMoney(p.total)}</b></td>
+        <td class="text-right nobr" data-order="${share}" data-export="${share}%"><span class="accounts-share"><span style="width: ${Math.min(share, 100)}%"></span></span> ${share}%</td>
+        <td data-export="${methods}"><small>${methods}</small></td>
+        <td class="nobr" data-order="${txnHtml(p.last_at || "")}">${p.last_at ? moment(p.last_at).format("DD MMM YYYY") : ""}</td>${action}</tr>`;
+      })
+      .join("");
+    Object.assign(options, { exportColumns: [0, 1, 2, 3, 4, 5], sumColumns: [1, 2], actionColumns: [6] });
+  }
+  // biggest expense first; customers / suppliers by name
+  accountsShowTable(head, rows, options, d.by === "expense" ? [[2, "desc"]] : [[0, "asc"]]);
+}
+
+function loadPartyStatement(by, key) {
+  let requestId = ++accountsRequestId;
+  $.get(api + "accounts/party", Object.assign({ by: by, key: key }, accountsRangeQuery()))
+    .done(function (data) {
+      if (requestId !== accountsRequestId) return;
+      accountsLedgerData = data; // the View buttons read rows from here
+      renderPartyStatement();
+    })
+    .fail(function (xhr) {
+      if (requestId !== accountsRequestId) return;
+      // nothing for it in the new period: back to the list
+      if (xhr && xhr.status === 404) return showAccount("by:" + by);
+      Swal.fire("Oops!", supError(xhr, "Could not load the statement."), "warning");
+    });
+}
+
+function renderPartyStatement() {
+  let d = accountsLedgerData;
+  let v = PARTY_VIEWS[d.by];
+  let p = d.party;
+  let isExpense = d.by === "expense";
+  let isCustomer = d.by === "customer";
+  $("#accountsDetailHead").html(
+    `<a href="#" class="accounts-back" data-account="by:${d.by}"><i class="fa fa-angle-left"></i> All ${txnHtml(v.many)}</a>
+     <h4><i class="fa ${v.icon}"></i> ${txnHtml(p.name)}</h4>
+     <p>${txnHtml(v.one.charAt(0).toUpperCase() + v.one.slice(1))} statement · ${txnHtml(accountsPeriodText())}</p>`
+  );
+  if (isExpense) {
+    let methods = Object.keys(p.methods).map((m) => txnHtml(m) + " " + supMoney(p.methods[m])).join(" · ");
+    $("#accountsTiles").html(
+      accountsTile("ENTRIES", p.count, "in the period") +
+        accountsTile("PAID BY", methods || "-", "") +
+        accountsTile("TOTAL", supMoney(p.total), "in the period", "sup-tile-main")
+    );
+  } else {
+    let net = supRound(isCustomer ? p.money_in - p.money_out : p.money_out - p.money_in);
+    let returns = p.returns ? " · returns " + supMoney(p.returns) : "";
+    $("#accountsTiles").html(
+      accountsTile("OPENING BALANCE", partyBalanceHtml(p.opening_balance), "at the start of the period") +
+        (isCustomer
+          ? accountsTile("SALES", supMoney(p.sales), p.bills + (p.bills === 1 ? " bill" : " bills") + returns)
+          : accountsTile("PURCHASES", supMoney(p.purchases), p.grns + (p.grns === 1 ? " GRN" : " GRNs") + returns)) +
+        accountsTile(isCustomer ? "RECEIVED" : "PAID", supMoney(net), "after refunds", isCustomer ? "accounts-tile-in" : "accounts-tile-out") +
+        accountsTile(
+          "CLOSING BALANCE",
+          partyBalanceHtml(p.balance),
+          (isCustomer ? "owes you " : "you owe ") + supMoney(p.owes) + " · advance " + supMoney(p.advance),
+          "sup-tile-main"
+        )
+    );
+  }
+
+  let canView = (r) => r.kind !== "expense" && (r.kind !== "customer_advance" || r.sale_id || r.receipt);
+  let head;
+  let rows;
+  let options = {
+    noun: "entries",
+    searchPlaceholder: "Search " + p.name + "...",
+    exportTitle: v.title + " - " + p.name,
+    pageLength: 25,
+    emptyTable: "Nothing for " + p.name + " in " + accountsPeriodText(),
+  };
+  let dateCell = (r, i) => {
+    let when = moment(r.at);
+    return `<td class="nobr" data-order="${i}">${when.format("DD MMM YYYY")}${r.time_known ? `<br><small class="text-muted">${when.format("hh:mm A")}</small>` : ""}</td>`;
+  };
+
+  if (isExpense) {
+    head = `<tr><th>Date</th><th>Details</th><th>Method</th><th class="txn-num">Amount</th><th class="txn-num">Running Total</th></tr>`;
+    rows = d.rows
+      .map(
+        (r, i) => `<tr>${dateCell(r, i)}
+        <td class="accounts-details">${txnHtml(r.details)}${r.user ? `<br><small class="text-muted">by ${txnHtml(r.user)}</small>` : ""}</td>
+        <td>${txnHtml(r.method)}</td>
+        <td class="text-right nobr" data-order="${r.amount}">${supMoney(r.amount)}</td>
+        <td class="text-right nobr" data-order="${r.balance}"><b>${supMoney(r.balance)}</b></td></tr>`
+      )
+      .join("");
+    Object.assign(options, {
+      exportColumns: [0, 1, 2, 3, 4],
+      sumColumns: [3],
+      exportSubtitle: () => accountsPeriodText() + "   ·   Total " + supMoney(p.total),
+    });
+  } else {
+    head = `<tr><th>Date</th><th>Type</th><th>Reference</th><th>Details</th><th class="txn-num">Amount</th>
+      <th class="txn-num" title="${isCustomer ? "Money received from the customer (- refunded)" : "Money paid to the supplier (- refunded)"}">${isCustomer ? "Received" : "Paid"}</th>
+      <th class="txn-num" title="${isCustomer ? "Owed by the customer, or the advance held" : "Owed to the supplier, or the advance paid"}">Balance</th><th>View</th></tr>`;
+    rows = d.rows
+      .map((r, i) => {
+        let money = supRound(isCustomer ? r.money_in - r.money_out : r.money_out - r.money_in);
+        return `<tr>${dateCell(r, i)}
+        <td class="nobr" data-export="${txnHtml(r.type)}"><span class="label ${JOURNAL_TYPE_CSS[r.kind] || "label-default"}">${txnHtml(r.type)}</span></td>
+        <td>${txnHtml(r.reference)}</td>
+        <td class="accounts-details" data-export="${txnHtml(r.details)}">${txnHtml(r.details)}${
+          r.method ? `${r.details ? "<br>" : ""}<small class="text-muted">${txnHtml(r.method)}${r.user ? " · by " + txnHtml(r.user) : ""}</small>` : ""
+        }</td>
+        <td class="text-right nobr" data-order="${r.amount}">${supMoney(r.amount)}</td>
+        <td class="text-right nobr" data-order="${money}" data-export="${money}">${signedMoney(money)}</td>
+        <td class="text-right nobr" data-order="${r.balance}" data-export="${txnHtml(partyBalanceText(r.balance))}"><b>${partyBalanceHtml(r.balance)}</b></td>
+        <td>${canView(r) ? `<button type="button" class="btn btn-info btn-sm" onClick="$(this).viewAccountEntry(${i})" title="View"><i class="fa fa-search-plus"></i></button>` : ""}</td>
+      </tr>`;
+      })
+      .join("");
+    Object.assign(options, {
+      exportColumns: [0, 1, 2, 3, 4, 5, 6],
+      sumColumns: [5],
+      actionColumns: [7],
+      exportSubtitle: () =>
+        accountsPeriodText() + "   ·   Opening " + partyBalanceText(p.opening_balance) + "   ·   Closing " + partyBalanceText(p.balance),
+    });
+  }
+  accountsShowTable(head, rows, options);
+}
+
+$(function () {
+  // a row of the customer / supplier / expense list: its statement
+  $("#accounts_ledger").on("click", "tr[data-party]", function () {
+    showAccount("by:" + $(this).attr("data-party"));
+  });
+  $("#accountsDetailHead").on("click", ".accounts-back", function (e) {
+    e.preventDefault();
+    showAccount($(this).attr("data-account"));
   });
 });

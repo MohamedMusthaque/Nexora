@@ -91,14 +91,16 @@
    (pos.js). The summary boxes shrink (body.totals-compact) once scrolled. */
 body.transactions-mode,
 body.expenses-mode,
-body.suppliers-mode{
+body.suppliers-mode,
+body.accounts-mode{
   /* overflow-x: hidden on body would make it a scroll container and stop
      position: sticky from working; clip hides overflow the same way without that */
   overflow-x: clip;
 }
 body.transactions-mode .main-toolbar-row,
 body.expenses-mode .main-toolbar-row,
-body.suppliers-mode .main-toolbar-row{
+body.suppliers-mode .main-toolbar-row,
+body.accounts-mode .main-toolbar-row{
   position: sticky;
   top: 0;
   z-index: 1000;
@@ -4373,4 +4375,271 @@ body.suppliers-mode #suppliers_view .ph-table-scroll::-webkit-scrollbar-thumb{
 #dayEndModal .dayend-matrix .dayend-empty{
   padding: 14px 10px;
   text-align: center;
+}
+
+/* ---- Accounts page (#accounts_view) ---------------------------------------
+   Accounts            Period [this month v] [reload]
+   | Overview         | Cash                                        |
+   | MONEY            | [opening] [in] [out] [closing]              |
+   |   Cash   1,200   | date  type  ref  party  details  in out bal |
+   |   Card ...       |                                             |
+   The menu stays in view while the statement scrolls with the page. */
+#accounts_view .accounts-header{
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+#accounts_view .accounts-subtitle{
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #98a6ad;
+}
+#accounts_view .accounts-tools{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#accounts_view .accounts-tools label{
+  margin: 0;
+}
+#accounts_view .accounts-layout{
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+/* the menu */
+#accounts_view .accounts-list{
+  flex: 0 0 250px;
+  position: sticky;
+  top: calc(var(--toolbar-height, 64px) + 10px);
+  max-height: calc(100vh - var(--toolbar-height, 64px) - 30px);
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid #e9edf0;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+#accounts_view .accounts-group{
+  margin: 12px 8px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #98a6ad;
+}
+#accounts_view .accounts-item{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #4c5667;
+  text-align: left;
+  font-size: 13.5px;
+  transition: background 0.12s;
+}
+#accounts_view .accounts-item > .fa{
+  flex: 0 0 28px;
+  height: 28px;
+  line-height: 28px;
+  border-radius: 7px;
+  text-align: center;
+  background: #eef1f4;
+  color: #7a8794;
+}
+#accounts_view .accounts-item-name{
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#accounts_view .accounts-item-value{
+  flex: 0 0 auto;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+#accounts_view .accounts-item:hover{
+  background: #f0f3f5;
+}
+#accounts_view .accounts-item:focus{
+  outline: none;
+}
+#accounts_view .accounts-item.active{
+  background: rgba(95, 190, 170, 0.12);
+  border-left-color: #5fbeaa;
+  color: #2f8f7b;
+}
+#accounts_view .accounts-item.active > .fa{
+  background: #5fbeaa;
+  color: #fff;
+}
+#accounts_view .accounts-item-quiet{
+  opacity: 0.6;
+}
+#accounts_view .accounts-item-overview{
+  margin-bottom: 2px;
+}
+
+/* the open account */
+#accounts_view .accounts-detail{
+  flex: 1 1 auto;
+  min-width: 0;
+}
+#accounts_view .accounts-detail-head h4{
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #36404a;
+}
+#accounts_view .accounts-detail-head h4 > .fa{
+  color: #5fbeaa;
+  margin-right: 4px;
+}
+#accounts_view .accounts-detail-head p{
+  margin: 3px 0 14px;
+  font-size: 13px;
+  color: #98a6ad;
+}
+#accounts_view .accounts-tiles .sup-value{
+  font-size: 20px;
+}
+#accounts_view .accounts-tile-in .sup-value{
+  color: #3e9e8a;
+}
+#accounts_view .accounts-tile-out .sup-value{
+  color: #d84340;
+}
+#accounts_view .accounts-section-title{
+  margin: 18px 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #36404a;
+}
+#accounts_view .accounts-section-title:first-child{
+  margin-top: 4px;
+}
+#accounts_view .accounts-section-title small{
+  margin-left: 6px;
+  font-weight: normal;
+  color: #98a6ad;
+}
+#accounts_view .accounts-table-wrap{
+  border: 1px solid #e3e8ec;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+#accounts_view .accounts-table{
+  margin: 0;
+}
+#accounts_view .accounts-table > thead > tr > th{
+  background: #f5f7f9;
+  border-bottom: 1px solid #e3e8ec;
+  font-size: 12px;
+  color: #6c7a86;
+  white-space: nowrap;
+}
+#accounts_view .accounts-table > tbody > tr > td{
+  vertical-align: middle;
+}
+#accounts_view .accounts-table .accounts-row{
+  cursor: pointer;
+}
+#accounts_view .accounts-table .accounts-row:hover > td{
+  background: #f7faf9;
+}
+#accounts_view .accounts-in{
+  color: #3e9e8a;
+}
+#accounts_view .accounts-out{
+  color: #d84340;
+}
+#accounts_view .accounts-footnote{
+  margin: 12px 0 0;
+  font-size: 12.5px;
+}
+#accounts_view .accounts-details{
+  max-width: 340px;
+}
+#accounts_view .nobr{
+  white-space: nowrap;
+}
+@media (max-width: 900px){
+  #accounts_view .accounts-layout{
+    flex-direction: column;
+  }
+  #accounts_view .accounts-list{
+    position: static;
+    flex: 0 0 auto;
+    width: 100%;
+    max-height: none;
+  }
+}
+/* menu items: the name on one line, the amount below it (no cut-off names) */
+#accounts_view .accounts-item{
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: center;
+}
+#accounts_view .accounts-item > .fa{
+  grid-row: span 2;
+}
+#accounts_view .accounts-item-name{
+  white-space: normal;
+  line-height: 1.25;
+}
+#accounts_view .accounts-item-value{
+  grid-column: 2;
+  font-size: 12px;
+  line-height: 1.3;
+  color: #6c7a86;
+}
+#accounts_view .accounts-item.active .accounts-item-value{
+  color: #2f8f7b;
+}
+#accounts_view .accounts-item-overview > .fa,
+#accounts_view .accounts-item-plain > .fa{
+  grid-row: auto;
+}
+
+/* Customer-wise / Supplier-wise / Expense-wise (pos.js: renderParties, renderPartyStatement) */
+#accounts_view .accounts-back{
+  display: inline-block;
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #5fbeaa;
+}
+#accounts_view .accounts-back:hover{
+  color: #2f8f7b;
+  text-decoration: none;
+}
+#accounts_view .accounts-share{
+  display: inline-block;
+  vertical-align: middle;
+  width: 60px;
+  height: 6px;
+  margin-right: 4px;
+  border-radius: 3px;
+  background: #eef1f4;
+  overflow: hidden;
+}
+#accounts_view .accounts-share > span{
+  display: block;
+  height: 100%;
+  background: #5fbeaa;
+}
+#accounts_view #accounts_ledger tr[data-party]{
+  cursor: pointer;
 }

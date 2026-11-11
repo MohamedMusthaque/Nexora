@@ -160,6 +160,11 @@
                                 <span class="btn-label"><i class="fa fa-calculator"></i></span><span class="tb-text">Day End</span>
                             </button>
 
+                            <!-- same permission as the Quick Journal (pos.js: applyJournalPermission) -->
+                            <button id="accountsNav" type="button" class="btn btn-default waves-effect waves-light" style="display: none;" title="Accounts: cash, card, bank, customer &amp; supplier credit, sales, GRNs, PRNs, expenses...">
+                                <span class="btn-label"><i class="fa fa-balance-scale"></i></span><span class="tb-text">Accounts</span>
+                            </button>
+
                             <button id="pointofsale" type="button" class="btn btn-default waves-effect waves-light" title="Back to the Point of Sale">
                                 <span class="btn-label"><i class="glyphicon glyphicon-shopping-cart"></i></span><span class="tb-text">Point of Sale</span>
                             </button>
@@ -709,6 +714,54 @@
                                 <tbody id="prn_list"></tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+   </div>
+
+
+   <!-- Accounts page (pos.js: "Accounts"): every transaction posted to the
+        accounts it touches - money (cash, card, bank), customer and supplier
+        credit and advances, sales, GRNs, PRNs, expenses, stock adjustments -->
+   <div id="accounts_view">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card-box accounts-box">
+                    <div class="accounts-header">
+                        <div>
+                            <h3 style="margin: 0;">Accounts</h3>
+                            <p class="accounts-subtitle">Every sale, payment, GRN, PRN, expense and transfer, in the accounts it affects</p>
+                        </div>
+                        <div class="accounts-tools">
+                            <label>Period</label>
+                            <div class="date-range-filter" id="accountsDateRange">
+                                <div class="date-range-input" title="The period to show">
+                                    <i class="fa fa-calendar"></i>&nbsp;
+                                    <span class="date-range-label">All dates</span>
+                                    <i class="fa fa-caret-down"></i>
+                                </div>
+                                <button type="button" class="btn btn-default date-range-clear" title="Show all dates" style="display: none;"><i class="fa fa-times"></i> Clear</button>
+                            </div>
+                            <button type="button" class="btn btn-default" id="accountsRefresh" title="Reload"><i class="fa fa-refresh"></i></button>
+                        </div>
+                    </div>
+                    <div class="accounts-layout">
+                        <!-- Overview + one item per account (pos.js: renderAccountsList) -->
+                        <nav class="accounts-list" id="accountsList"></nav>
+                        <section class="accounts-detail">
+                            <div class="accounts-detail-head" id="accountsDetailHead"></div>
+                            <div class="sup-tiles accounts-tiles" id="accountsTiles"></div>
+                            <!-- Overview: balances + the period's activity -->
+                            <div id="accountsOverview"></div>
+                            <!-- one account's statement -->
+                            <div id="accountsLedgerBox" style="display: none;">
+                                <table class="table table-bordered" id="accountsLedger" style="width: 100%;">
+                                    <thead id="accountsLedgerHead"></thead>
+                                    <tbody id="accounts_ledger"></tbody>
+                                </table>
+                            </div>
+                        </section>
                     </div>
                 </div>
             </div>
@@ -2220,7 +2273,7 @@
                             <span><input type="checkbox" name="perm_suppliers" id="perm_suppliers"> Manage Suppliers &amp; GRN </span>
                            </div>
                           <div class="form-group">
-                            <span><input type="checkbox" name="perm_journal" id="perm_journal"> View Quick Journal &amp; Day End </span>
+                            <span><input type="checkbox" name="perm_journal" id="perm_journal"> View Quick Journal, Day End &amp; Accounts </span>
                            </div>
                                 <div class="form-group">
                                     <span><input type="checkbox" name="perm_users" id="perm_users"> Manage Users and Permissions </span>

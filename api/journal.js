@@ -101,6 +101,7 @@ function buildEntries( data ) {
             group: "sale",
             type: isCredit ? "Credit Sale" : "Sale",
             id: t._id,
+            customer_id: t.customer && t.customer != 0 && t.customer.id != null ? t.customer.id : null,
             at: toJSONDate( t.date ),
             time_known: true,
             reference: reference,
@@ -122,6 +123,7 @@ function buildEntries( data ) {
                 type: "Customer Advance",
                 id: t._id, // opens the sale's bill
                 sale_id: t._id,
+                customer_id: t.customer && t.customer != 0 && t.customer.id != null ? t.customer.id : null,
                 at: toJSONDate( t.date ),
                 time_known: true,
                 reference: reference,
@@ -217,6 +219,7 @@ function buildEntries( data ) {
             group: "expense",
             type: "Expense",
             id: e._id,
+            expense_type_id: e.type_id,
             at: when.at,
             time_known: when.time_known,
             reference: e.type_name || "",
@@ -247,6 +250,7 @@ function buildEntries( data ) {
             group: "grn",
             type: "GRN",
             id: g._id,
+            supplier_id: g.walk_in ? 0 : g.supplier_id, // 0: a walk-in seller
             at: when.at,
             time_known: when.time_known,
             reference: g.grn_no || "",
@@ -323,6 +327,8 @@ function buildEntries( data ) {
             group: "grn",
             type: "Purchase Return",
             id: r._id,
+            supplier_id: r.walk_in ? 0 : r.supplier_id,
+            position_before: r.position_before != null ? num( r.position_before ) : null,
             at: when.at,
             time_known: when.time_known,
             reference: r.prn_no || "",
@@ -482,42 +488,56 @@ function buildSummary( entries ) {
     return s;
 }
 
+// Every entry dated fromDay..toDay (Date objects, whole days), oldest first.
+// Also used by the Accounts page (accounts.js). callback(err, entries, fromText, toText)
+function loadEntries( fromDay, toDay, callback ) {
+    let from = new Date( fromDay.getFullYear(), fromDay.getMonth(), fromDay.getDate(), 0, 0, 0, 0 );
+    let to = new Date( toDay.getFullYear(), toDay.getMonth(), toDay.getDate(), 23, 59, 59, 999 );
+    let fromText = dayText( fromDay );
+    let toText = dayText( toDay );
+    let fail = ( message ) => callback( new Error( message ) );
+
+    Transactions.journalData( from, to, function ( err, sales ) {
+        if ( err ) return fail( "Could not load the sales." );
+        Expenses.journalData( fromText, toText, function ( err, expenses ) {
+            if ( err ) return fail( "Could not load the expenses." );
+            Suppliers.journalData( fromText, toText, function ( err, purchases ) {
+                if ( err ) return fail( "Could not load the GRNs and supplier payments." );
+                Adjustments.findBetween( fromText, toText, function ( err, adjustments ) {
+                    if ( err ) return fail( "Could not load the stock adjustments." );
+                    Transfers.findBetween( fromText, toText, function ( err, transfers ) {
+                        if ( err ) return fail( "Could not load the money transfers." );
+                        let entries = buildEntries( {
+                            sales: sales.sales,
+                            returns: sales.returns,
+                            credit_payments: sales.credit_payments,
+                            expenses: expenses,
+                            grns: purchases.grns,
+                            supplier_payments: purchases.supplier_payments,
+                            prns: purchases.prns,
+                            adjustments: adjustments,
+                            transfers: transfers
+                        } );
+                        callback( null, entries, fromText, toText );
+                    } );
+                } );
+            } );
+        } );
+    } );
+}
+
+app.loadEntries = loadEntries;
+app.parseDay = parseDay;
+app.dayText = dayText;
+
 app.get( "/", function ( req, res ) {
     let fromDay = parseDay( req.query.from );
     let toDay = req.query.to ? parseDay( req.query.to ) : fromDay;
     if ( !fromDay || !toDay ) return res.status( 400 ).send( "Please choose a valid date." );
     if ( toDay < fromDay ) return res.status( 400 ).send( "The end date is before the start date." );
 
-    let from = new Date( fromDay.getFullYear(), fromDay.getMonth(), fromDay.getDate(), 0, 0, 0, 0 );
-    let to = new Date( toDay.getFullYear(), toDay.getMonth(), toDay.getDate(), 23, 59, 59, 999 );
-    let fromText = dayText( fromDay );
-    let toText = dayText( toDay );
-
-    Transactions.journalData( from, to, function ( err, sales ) {
-        if ( err ) return res.status( 500 ).send( "Could not load the sales." );
-        Expenses.journalData( fromText, toText, function ( err, expenses ) {
-            if ( err ) return res.status( 500 ).send( "Could not load the expenses." );
-            Suppliers.journalData( fromText, toText, function ( err, purchases ) {
-                if ( err ) return res.status( 500 ).send( "Could not load the GRNs and supplier payments." );
-                Adjustments.findBetween( fromText, toText, function ( err, adjustments ) {
-                if ( err ) return res.status( 500 ).send( "Could not load the stock adjustments." );
-                Transfers.findBetween( fromText, toText, function ( err, transfers ) {
-                if ( err ) return res.status( 500 ).send( "Could not load the money transfers." );
-                let entries = buildEntries( {
-                    sales: sales.sales,
-                    returns: sales.returns,
-                    credit_payments: sales.credit_payments,
-                    expenses: expenses,
-                    grns: purchases.grns,
-                    supplier_payments: purchases.supplier_payments,
-                    prns: purchases.prns,
-                    adjustments: adjustments,
-                    transfers: transfers
-                } );
-                res.send( { from: fromText, to: toText, entries: entries, summary: buildSummary( entries ) } );
-                } );
-                } );
-            } );
-        } );
+    loadEntries( fromDay, toDay, function ( err, entries, fromText, toText ) {
+        if ( err ) return res.status( 500 ).send( err.message );
+        res.send( { from: fromText, to: toText, entries: entries, summary: buildSummary( entries ) } );
     } );
 } );
