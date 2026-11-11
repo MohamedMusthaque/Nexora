@@ -1117,7 +1117,9 @@ if (!authedThisSession) {
             trackedVariants.length > 0
               ? `<span class="pos-tile-stock${low ? " pos-tile-stock-low" : ""}" title="In stock"><span class="stock">${low ? "Only" : "Stock"}</span> <span class="count">${stockLabel}</span></span>`
               : `<span class="pos-tile-stock pos-tile-stock-none" title="Stock isn't tracked for this product"><span class="count">No stock count</span></span>`;
-          let item_info = `<div class="box ${group.category}" onclick="$(this).selectVariant(${groupIndex})" title="${txnHtml(group.name)}">
+          // data-category: the category buttons filter on it (product-filter.js);
+          // a class can't be used, category ids are numbers
+          let item_info = `<div class="box" data-category="${txnHtml(String(group.category ?? ""))}" onclick="$(this).selectVariant(${groupIndex})" title="${txnHtml(group.name)}">
                       <div class="pos-tile">
                           <div class="pos-tile-picture">${picture}</div>
                           <div class="name pos-tile-name" id="product_name">${txnHtml(group.name)}</div>
@@ -1143,22 +1145,31 @@ if (!authedThisSession) {
     // Products and categories load in parallel, so this runs after either
     // finishes; otherwise buttons built before the category names arrive
     // end up with empty labels.
+    // Every category gets a button, also one whose products are all sold out
+    // (or that has none yet); "Uncategorized" is added only when products in
+    // stock have no category, or one that was deleted.
     function renderCategoryButtons() {
       let current = $("#categories .btn-categories.active").attr("id") || "all";
-      $("#categories").html(
-        `<button type="button" id="all" class="btn btn-categories btn-white waves-effect waves-light">All</button> `
-      );
+      let button = (id, label) =>
+        `<button type="button" id="${txnHtml(String(id))}" class="btn btn-categories btn-white waves-effect waves-light">${txnHtml(label)}</button> `;
 
-      categories.forEach((category) => {
-        let c = allCategories.find((ctg) => ctg._id == category);
-        let label = c ? c.name : "Uncategorized";
-
-        $("#categories").append(
-          `<button type="button" id="${category}" class="btn btn-categories btn-white waves-effect waves-light">${txnHtml(label)}</button> `
-        );
+      let known = (allCategories || []).map((c) => String(c._id));
+      let html = button("all", "All");
+      (allCategories || []).forEach((c) => {
+        html += button(c._id, c.name);
       });
+      if (categories.some((id) => !known.includes(String(id)))) {
+        html += button("uncategorized", "Uncategorized");
+      }
+      $("#categories").html(html);
+
       let $current = $("#categories .btn-categories").filter((i, b) => b.id === String(current));
-      ($current.length ? $current : $("#categories #all")).addClass("active");
+      if ($current.length && current !== "all") {
+        // the tiles were just rebuilt: show the open category's products again
+        $current.trigger("click");
+      } else {
+        $("#categories #all").addClass("active");
+      }
     }
 
     function loadCategories() {

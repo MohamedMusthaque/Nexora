@@ -1,21 +1,35 @@
 $(document).ready(function(){
 
+    // Category buttons (pos.js: renderCategoryButtons). Tiles carry their
+    // category id in data-category (ids are numbers, so not a class).
+    // "Uncategorized": tiles whose category has no button of its own.
     $('#categories').on('click', '.btn-categories', function(){
+        var id = String(this.id);
+        $('#parent .pos-cat-empty').remove();
 
-        if (this.id == 'all') {
+        if (id == 'all') {
             $('#parent > div').fadeIn(450);
         } else {
-            var $el = $('.' + this.id).fadeIn(450);
+            var known = $('#categories .btn-categories').map(function(){ return String(this.id); }).get();
+            var $el = $('#parent > .box').filter(function(){
+                var c = String($(this).attr('data-category') || '');
+                return id == 'uncategorized' ? known.indexOf(c) === -1 : c === id;
+            });
+            $el.fadeIn(450);
             $('#parent > div').not($el).hide();
+            if (!$el.length) {
+                $('#parent').append('<div class="pos-no-stock pos-cat-empty text-muted"><i class="fa fa-cubes"></i><br>No products in stock in this category.</div>');
+            }
         }
- 
+
         $("#categories .btn-categories").removeClass("active");
         $(this).addClass('active');
 
     });
 
- 
-    function searchProducts () {        
+
+    function searchProducts () {
+        $('#parent .pos-cat-empty').remove();
         $("#categories .btn-categories").removeClass("active");
         var matcher = new RegExp($("#search").val(), 'gi');
         $('.box').show().not(function(){
