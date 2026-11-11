@@ -373,3 +373,9 @@ input.amount-input.amount-input-invalid:focus{
   cursor: not-allowed;
   opacity: 1;
 }
+
+/* the till: the bill total stays on one line now that amounts have commas */
+#gross_price{
+  white-space: nowrap;
+  font-size: clamp(18px, 1.9vw, 26px);
+}

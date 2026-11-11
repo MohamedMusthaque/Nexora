@@ -77,6 +77,18 @@ function groupAmountText(clean) {
   return dot === -1 ? whole : whole + clean.slice(dot);
 }
 
+// Money as shown everywhere (lists, tiles, cart, bills, receipts, exports):
+// 2 decimals with thousands separators, 1234567.5 -> "1,234,567.50".
+// Only for showing: values sent to the server or used in sums stay plain.
+function moneyText(n) {
+  n = Number(n);
+  if (!isFinite(n)) n = 0;
+  let parts = Math.abs(n).toFixed(2).split(".");
+  let whole = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return (n < 0 && Math.abs(n) >= 0.005 ? "-" : "") + whole + "." + parts[1];
+}
+window.moneyText = moneyText; // product-filter.js (Pay screen) uses it too
+
 // what an amount field shows for a value (for inputs drawn as HTML)
 // A plain number from code (jQuery's .val() passes numbers as text) is
 // rounded to 2 decimals (1234.5678 -> 1,234.57); typed text is only trimmed.
@@ -1076,10 +1088,8 @@ if (!authedThisSession) {
           let maxPrice = Math.max(...prices);
           let priceLabel =
             minPrice === maxPrice
-              ? settings.symbol + minPrice.toFixed(2)
-              : `${settings.symbol}${minPrice.toFixed(
-                  2
-                )} - ${settings.symbol}${maxPrice.toFixed(2)}`;
+              ? settings.symbol + moneyText(minPrice)
+              : `${settings.symbol}${moneyText(minPrice)} - ${settings.symbol}${moneyText(maxPrice)}`;
 
           let trackedVariants = group.variants.filter((v) => v.stock == 1);
           let totalStock = trackedVariants.reduce(
@@ -1208,7 +1218,7 @@ if (!authedThisSession) {
                   ? `<br><small class="text-muted">${c.set ? txnHtml(c.set.references.join(", ")) + " · " : ""}${left !== null ? left + " left" : ""}</small>`
                   : ""
               }</span>
-              <span style="font-size: 16px;"><b>${settings.symbol}${(parseFloat(price) || 0).toFixed(2)}</b></span>
+              <span style="font-size: 16px;"><b>${settings.symbol}${moneyText((parseFloat(price) || 0))}</b></span>
             </button>`;
         })
         .join("");
@@ -1376,7 +1386,7 @@ if (!authedThisSession) {
           (set, i) => `<button type="button" class="btn btn-white btn-block variant-option" data-set="${i}"
               style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
               <span style="text-align:left;"><b>${txnHtml(set.code)}</b><br><small class="text-muted">${txnHtml(set.references.join(", "))} · ${set.qty_left} left</small></span>
-              <span style="font-size: 16px;"><b>${settings.symbol}${(parseFloat(set.price) || 0).toFixed(2)}</b></span>
+              <span style="font-size: 16px;"><b>${settings.symbol}${moneyText((parseFloat(set.price) || 0))}</b></span>
             </button>`
         )
         .join("");
@@ -1468,7 +1478,7 @@ if (!authedThisSession) {
         discount = 0;
       }
       total = total - discount;
-      $("#price").text(settings.symbol + total.toFixed(2));
+      $("#price").text(settings.symbol + moneyText(total));
 
       subTotal = total;
 
@@ -1485,7 +1495,7 @@ if (!authedThisSession) {
 
       orderTotal = grossTotal.toFixed(2);
 
-      $("#gross_price").text(settings.symbol + grossTotal.toFixed(2));
+      $("#gross_price").text(settings.symbol + moneyText(grossTotal));
       $("#payablePrice").val(grossTotal);
     };
 
@@ -1536,7 +1546,7 @@ if (!authedThisSession) {
               )
             ),
             $("<td>", {
-              text: settings.symbol + (data.price * data.quantity).toFixed(2),
+              text: settings.symbol + moneyText((data.price * data.quantity)),
             }),
             $("<td>").append(
               $("<button>", {
@@ -1563,7 +1573,7 @@ if (!authedThisSession) {
         if (set && (parseInt(item.quantity) || 0) >= set.qty_left) {
           Swal.fire(
             "No more stock at this price!",
-            `Only ${set.qty_left} left at ${settings.symbol}${(parseFloat(set.price) || 0).toFixed(2)} (${txnHtml(set.code)}). Ring up the rest at their own price.`,
+            `Only ${set.qty_left} left at ${settings.symbol}${moneyText((parseFloat(set.price) || 0))} (${txnHtml(set.code)}). Ring up the rest at their own price.`,
             "info"
           );
           return;
@@ -1663,7 +1673,7 @@ if (!authedThisSession) {
     let paymentAdvance = { customer: null, balance: 0, applied: 0, requestId: 0 };
 
     function advanceMoney(n) {
-      return settings.symbol + (parseFloat(n) || 0).toFixed(2);
+      return settings.symbol + moneyText((parseFloat(n) || 0));
     }
 
     // called when the Pay window opens
@@ -1840,7 +1850,7 @@ if (!authedThisSession) {
           item.quantity +
           "</td><td>" +
           settings.symbol +
-          parseFloat(item.price).toFixed(2) +
+          moneyText(parseFloat(item.price)) +
           "</td></tr>";
       });
 
@@ -1862,7 +1872,7 @@ if (!authedThisSession) {
       let change =
         $("#change").text() == ""
           ? ""
-          : parseFloat($("#change").text()).toFixed(2);
+          : parseFloat(String($("#change").text()).replace(/,/g, "")).toFixed(2);
       let refNumber = $("#refNumber").val();
       let orderNumber = holdOrder;
       let type = "";
@@ -1924,12 +1934,12 @@ if (!authedThisSession) {
         payment = `<tr>
                         <td>Advance used</td>
                         <td>:</td>
-                        <td>-${settings.symbol + advanceUsed.toFixed(2)}</td>
+                        <td>-${settings.symbol + moneyText(advanceUsed)}</td>
                     </tr>
                     <tr>
                         <td><b>Amount to pay</b></td>
                         <td>:</td>
-                        <td><b>${settings.symbol + Math.max((parseFloat(orderTotal) || 0) - advanceUsed, 0).toFixed(2)}</b></td>
+                        <td><b>${settings.symbol + moneyText(Math.max((parseFloat(orderTotal) || 0) - advanceUsed, 0))}</b></td>
                     </tr>`;
       }
       if (status == 3 && paid == "" && type === "Credit" && customer != 0) {
@@ -1937,7 +1947,7 @@ if (!authedThisSession) {
         payment = `<tr>
                         <td><b>On credit</b></td>
                         <td>:</td>
-                        <td><b>${settings.symbol + (parseFloat(orderTotal) || 0).toFixed(2)}</b></td>
+                        <td><b>${settings.symbol + moneyText((parseFloat(orderTotal) || 0))}</b></td>
                     </tr>
                     <tr>
                         <td>Method</td>
@@ -1951,24 +1961,24 @@ if (!authedThisSession) {
                         ? `<tr>
                         <td>Advance used</td>
                         <td>:</td>
-                        <td>-${settings.symbol + advanceUsed.toFixed(2)}</td>
+                        <td>-${settings.symbol + moneyText(advanceUsed)}</td>
                     </tr>
                     <tr>
                         <td><b>Amount to pay</b></td>
                         <td>:</td>
-                        <td><b>${settings.symbol + Math.max((parseFloat(orderTotal) || 0) - advanceUsed, 0).toFixed(2)}</b></td>
+                        <td><b>${settings.symbol + moneyText(Math.max((parseFloat(orderTotal) || 0) - advanceUsed, 0))}</b></td>
                     </tr>`
                         : ""
                     }                    <tr>
                         <td>Paid${creditPart > 0 ? " (" + type + ")" : ""}</td>
                         <td>:</td>
-                        <td>${settings.symbol + paid}</td>
+                        <td>${paid === "" || paid == null ? settings.symbol : settings.symbol + moneyText(paid)}</td>
                     </tr>${
                       creditPart > 0
                         ? `<tr>
                         <td><b>On credit</b></td>
                         <td>:</td>
-                        <td><b>${settings.symbol + creditPart.toFixed(2)}</b></td>
+                        <td><b>${settings.symbol + moneyText(creditPart)}</b></td>
                     </tr>`
                         : ""
                     }
@@ -1977,12 +1987,12 @@ if (!authedThisSession) {
                         ? `
                         <td><b>Balance due</b></td>
                         <td>:</td>
-                        <td><b>${settings.symbol + balanceDue.toFixed(2)}</b></td>`
+                        <td><b>${settings.symbol + moneyText(balanceDue)}</b></td>`
                         : `
                         <td>Change</td>
                         <td>:</td>
                         <td>${
-                          settings.symbol + Math.abs(change).toFixed(2)
+                          settings.symbol + moneyText(Math.abs(change))
                         }</td>`
                     }
                     </tr>${
@@ -1990,7 +2000,7 @@ if (!authedThisSession) {
                         ? `<tr>
                         <td>Saved as advance</td>
                         <td>:</td>
-                        <td>${settings.symbol + advanceDeposit.toFixed(2)}</td>
+                        <td>${settings.symbol + moneyText(advanceDeposit)}</td>
                     </tr>`
                         : ""
                     }
@@ -2003,7 +2013,7 @@ if (!authedThisSession) {
                         ? `<tr>
                         <td>Advance balance</td>
                         <td>:</td>
-                        <td>${settings.symbol + advanceAfter.toFixed(2)}</td>
+                        <td>${settings.symbol + moneyText(advanceAfter)}</td>
                     </tr>`
                         : ""
                     }`;
@@ -2013,9 +2023,7 @@ if (!authedThisSession) {
         tax_row = `<tr>
                     <td>Vat(${settings.percentage})% </td>
                     <td>:</td>
-                    <td>${settings.symbol}${parseFloat(totalVat).toFixed(
-          2
-        )}</td>
+                    <td>${settings.symbol}${moneyText(parseFloat(totalVat))}</td>
                 </tr>`;
       }
 
@@ -2087,14 +2095,14 @@ if (!authedThisSession) {
             <tr>                        
                 <td><b>Subtotal</b></td>
                 <td>:</td>
-                <td><b>${settings.symbol}${subTotal.toFixed(2)}</b></td>
+                <td><b>${settings.symbol}${moneyText(subTotal)}</b></td>
             </tr>
             <tr>
                 <td>Discount</td>
                 <td>:</td>
                 <td>${
                   discount > 0
-                    ? settings.symbol + parseFloat(discount).toFixed(2)
+                    ? settings.symbol + moneyText(parseFloat(discount))
                     : ""
                 }</td>
             </tr>
@@ -2105,9 +2113,7 @@ if (!authedThisSession) {
                 <td><h3>Total</h3></td>
                 <td><h3>:</h3></td>
                 <td>
-                    <h3>${settings.symbol}${parseFloat(orderTotal).toFixed(
-        2
-      )}</h3>
+                    <h3>${settings.symbol}${moneyText(parseFloat(orderTotal))}</h3>
                 </td>
             </tr>
             ${payment == 0 ? "" : payment}
@@ -2447,13 +2453,13 @@ if (!authedThisSession) {
     // advance: money paid in advance (optional) -> "Advance Rs. X"
     function creditLabel(customer, balance, advance) {
       let label = customer?.credit_type === "limited"
-        ? "Limit " + settings.symbol + parseFloat(customer.credit_limit || 0).toFixed(2)
+        ? "Limit " + settings.symbol + moneyText(parseFloat(customer.credit_limit || 0))
         : "Unlimited";
       if (balance > 0) {
-        label += '<br><small class="text-danger"><b>Due ' + settings.symbol + balance.toFixed(2) + "</b></small>";
+        label += '<br><small class="text-danger"><b>Due ' + settings.symbol + moneyText(balance) + "</b></small>";
       }
       if (advance > 0) {
-        label += '<br><small class="text-success"><b>Advance ' + settings.symbol + advance.toFixed(2) + "</b></small>";
+        label += '<br><small class="text-success"><b>Advance ' + settings.symbol + moneyText(advance) + "</b></small>";
       }
       return label;
     }
@@ -2494,10 +2500,10 @@ if (!authedThisSession) {
                   title: "Credit limit exceeded",
                   html: `${cust.name} does not have enough credit for this sale.<br><br>
                     <table style="margin: 0 auto; text-align: left;">
-                      <tr><td>Credit limit</td><td>&nbsp;:&nbsp;</td><td>${sym}${limit.toFixed(2)}</td></tr>
-                      <tr><td>Already on credit</td><td>&nbsp;:&nbsp;</td><td>${sym}${used.toFixed(2)}</td></tr>
-                      <tr><td>Available</td><td>&nbsp;:&nbsp;</td><td><b>${sym}${available.toFixed(2)}</b></td></tr>
-                      <tr><td>This sale</td><td>&nbsp;:&nbsp;</td><td>${sym}${total.toFixed(2)}</td></tr>
+                      <tr><td>Credit limit</td><td>&nbsp;:&nbsp;</td><td>${sym}${moneyText(limit)}</td></tr>
+                      <tr><td>Already on credit</td><td>&nbsp;:&nbsp;</td><td>${sym}${moneyText(used)}</td></tr>
+                      <tr><td>Available</td><td>&nbsp;:&nbsp;</td><td><b>${sym}${moneyText(available)}</b></td></tr>
+                      <tr><td>This sale</td><td>&nbsp;:&nbsp;</td><td>${sym}${moneyText(total)}</td></tr>
                     </table><br>
                     Please take another payment method or increase the customer's credit limit.`,
                 });
@@ -2753,7 +2759,7 @@ if (!authedThisSession) {
         hint =
           (profit < 0 ? "Loss per item: " : "Profit per item: ") +
           settings.symbol +
-          Math.abs(profit).toFixed(2) +
+          moneyText(Math.abs(profit)) +
           " (" +
           ((profit / price) * 100).toFixed(1) +
           "% margin)";
@@ -2927,8 +2933,8 @@ if (!authedThisSession) {
       const maxLength = 15;
 
       // Concatenate the truncated product name and price
-      const headerText = `${productName} - ${settings.symbol + price}`;
-      const headerText2 = `${productName}\n${settings.symbol + price}`;
+      const headerText = `${productName} - ${settings.symbol + moneyText(price)}`;
+      const headerText2 = `${productName}\n${settings.symbol + moneyText(price)}`;
 
       // Print the barcode using PrintJS
       printJS({
@@ -3416,7 +3422,7 @@ if (!authedThisSession) {
           trans.payment_type !== "Credit" && creditPartOf > 0
             ? '<span class="label label-success">' + trans.payment_type + "</span>" +
               ' <span class="label label-warning" title="Part of this bill was put on credit">+ Credit ' +
-              sym + creditPartOf.toFixed(2) + "</span>" + settleLabel
+              sym + moneyText(creditPartOf) + "</span>" + settleLabel
             : trans.payment_type === "Credit"
             ? '<span class="label label-warning">Credit</span>' +
               (settle === "settled"
@@ -3440,8 +3446,8 @@ if (!authedThisSession) {
             <td>${trans.order}${returnBadge}</td>
             <td class="nobr" data-order="${moment(trans.date).valueOf()}" data-export="${moment(trans.date).format("DD MMM YYYY, hh:mm A")}">${moment(trans.date).format("DD MMM YYYY")}<span class="ctxn-sub">${moment(trans.date).format("hh:mm A")}</span></td>
             <td class="text-right">${itemCount}</td>
-            <td class="nobr text-right">${sym + amount.toFixed(2)}</td>
-            <td class="nobr text-right">${trans.paid === "" || trans.paid == null ? "" : sym + parseFloat(trans.paid).toFixed(2)}</td>
+            <td class="nobr text-right">${sym + moneyText(amount)}</td>
+            <td class="nobr text-right">${trans.paid === "" || trans.paid == null ? "" : sym + moneyText(parseFloat(trans.paid))}</td>
             <td class="ctxn-method">${typeLabel}</td>
             <td>${trans.user || ""}</td>
             <td><button onClick="$(this).viewCustomerTransaction(${index})" class="btn btn-info btn-sm" title="View the bill"><i class="fa fa-search-plus"></i></button></td>
@@ -3450,9 +3456,9 @@ if (!authedThisSession) {
 
       $("#customerTxnCount").text(customerTransactions.length);
       $("#customerTabTxnCount").text(customerTransactions.length);
-      $("#customerTxnTotal").text(sym + total.toFixed(2));
-      $("#customerTxnPaid").text(sym + paidTotal.toFixed(2));
-      $("#customerTxnCredit").text(sym + creditTotal.toFixed(2));
+      $("#customerTxnTotal").text(sym + moneyText(total));
+      $("#customerTxnPaid").text(sym + moneyText(paidTotal));
+      $("#customerTxnCredit").text(sym + moneyText(creditTotal));
 
       // keep the chosen "Show N transactions" when the filters rebuild the table
       if ($.fn.DataTable.isDataTable("#customerTransactionsTable")) {
@@ -3543,7 +3549,7 @@ if (!authedThisSession) {
     let creditSaleStatus = {};
 
     function creditMoney(n) {
-      return (n < 0 ? "-" : "") + settings.symbol + Math.abs(n).toFixed(2);
+      return (n < 0 ? "-" : "") + settings.symbol + moneyText(Math.abs(n));
     }
 
     // sales + balance + payments for the open customer, then redraw everything
@@ -3949,10 +3955,10 @@ if (!authedThisSession) {
             e.no_cost ? '<span class="text-warning">no cost price: valued at 0</span>' : "",
           ].filter(Boolean).join(" · ");
         case "grn": {
-          let cost = (v) => (v === "" || v == null ? "not set" : sym + (parseFloat(v) || 0).toFixed(2));
+          let cost = (v) => (v === "" || v == null ? "not set" : sym + moneyText((parseFloat(v) || 0)));
           return [
             "From " + escapeHtml(e.supplier || ""),
-            e.selling_price != null ? `<b>sells at ${sym}${(parseFloat(e.selling_price) || 0).toFixed(2)}</b>` : "",
+            e.selling_price != null ? `<b>sells at ${sym}${moneyText((parseFloat(e.selling_price) || 0))}</b>` : "",
             e.payment_method ? "paid by " + escapeHtml(e.payment_method) : "",
             e.received_date ? "received " + moment(e.received_date, "YYYY-MM-DD").format("DD MMM YYYY") : "",
             `stock ${e.qty_before} → ${e.qty_after}`,
@@ -3970,7 +3976,7 @@ if (!authedThisSession) {
         case "created":
           return [
             e.qty_after != null ? "Opening stock " + e.qty_after : "Stock not tracked",
-            e.price != null ? "price " + sym + parseFloat(e.price).toFixed(2) : "",
+            e.price != null ? "price " + sym + moneyText(parseFloat(e.price)) : "",
           ].filter(Boolean).join(" · ");
         case "updated":
           return (e.changes || [])
@@ -3978,8 +3984,8 @@ if (!authedThisSession) {
               let from = c.from, to = c.to;
               if (c.field === "category") { from = historyCategoryName(from); to = historyCategoryName(to); }
               if (c.field === "price") {
-                from = sym + (parseFloat(from) || 0).toFixed(2);
-                to = sym + (parseFloat(to) || 0).toFixed(2);
+                from = sym + moneyText((parseFloat(from) || 0));
+                to = sym + moneyText((parseFloat(to) || 0));
               }
               return `${escapeHtml(c.label)}: ${escapeHtml(from)} → ${escapeHtml(to)}`;
             })
@@ -4027,10 +4033,10 @@ if (!authedThisSession) {
             <td><span class="label ${meta.css}">${meta.label}</span></td>
             <td>${e.reference != null ? escapeHtml(e.reference) : ""}</td>
             <td class="text-right">${qty}</td>
-            <td class="text-right nobr" data-export="${e.price != null && (meta.group !== "changes" || e.type === "adjustment") ? sym + parseFloat(e.price).toFixed(2) : ""}">${
-              e.price != null && (meta.group !== "changes" || e.type === "adjustment") ? sym + parseFloat(e.price).toFixed(2) : ""
+            <td class="text-right nobr" data-export="${e.price != null && (meta.group !== "changes" || e.type === "adjustment") ? sym + moneyText(parseFloat(e.price)) : ""}">${
+              e.price != null && (meta.group !== "changes" || e.type === "adjustment") ? sym + moneyText(parseFloat(e.price)) : ""
             }${e.type === "grn" || e.type === "prn" || e.type === "adjustment" ? '<br><small class="text-muted">unit cost</small>' : ""}</td>
-            <td class="text-right nobr">${e.amount != null ? sym + parseFloat(e.amount).toFixed(2) : ""}</td>
+            <td class="text-right nobr">${e.amount != null ? sym + moneyText(parseFloat(e.amount)) : ""}</td>
             <td>${productHistoryDetails(e)}</td>
             <td>${escapeHtml(e.user)}</td>
             <td>${canView ? `<button onClick="$(this).viewProductHistoryTransaction(${index})" class="btn btn-info btn-sm" title="View receipt"><i class="fa fa-search-plus"></i></button>` : ""}</td>
@@ -4039,7 +4045,7 @@ if (!authedThisSession) {
 
       let p = productHistoryProduct;
       $("#productHistUnits").text(unitsSold);
-      $("#productHistSales").text(sym + salesValue.toFixed(2));
+      $("#productHistSales").text(sym + moneyText(salesValue));
       $("#productHistReturned").text(returned);
       $("#productHistStock").text(p && p.stock == 1 ? p.quantity : "N/A");
 
@@ -4120,7 +4126,7 @@ if (!authedThisSession) {
       $.get(api + "inventory/batches/" + product._id).done(function (batches) {
         if (productHistoryProduct !== product || !(batches || []).length) return;
         let sym = settings.symbol;
-        let money = (v) => (v === null || v === undefined || v === "" ? "-" : sym + (parseFloat(v) || 0).toFixed(2));
+        let money = (v) => (v === null || v === undefined || v === "" ? "-" : sym + moneyText((parseFloat(v) || 0)));
         let current = batches.find((b) => b.qty_left > 0);
         let rows = batches
           .map((b) => {
@@ -4169,7 +4175,7 @@ if (!authedThisSession) {
       let left = parseInt($(this).data("left")) || 1;
       Swal.fire({
         title: "Print price labels",
-        html: `<b>${escapeHtml(product.name)}</b> · ${settings.symbol}${(parseFloat(price) || 0).toFixed(2)} · ${escapeHtml(code)}`,
+        html: `<b>${escapeHtml(product.name)}</b> · ${settings.symbol}${moneyText((parseFloat(price) || 0))} · ${escapeHtml(code)}`,
         input: "number",
         inputLabel: "How many labels?",
         inputValue: Math.max(left, 1),
@@ -4192,7 +4198,7 @@ if (!authedThisSession) {
       $("#productHistoryInfo").html(
         `Barcode: <b>${escapeHtml(product.barcode)}</b> &nbsp;·&nbsp; ` +
           `Category: <b>${escapeHtml(historyCategoryName(product.category))}</b> &nbsp;·&nbsp; ` +
-          `Price now: <b>${settings.symbol}${(parseFloat(product.price) || 0).toFixed(2)}</b> &nbsp;·&nbsp; ` +
+          `Price now: <b>${settings.symbol}${moneyText((parseFloat(product.price) || 0))}</b> &nbsp;·&nbsp; ` +
           `Stock tracking: <b>${product.stock == 1 ? "On" : "Off"}</b>`
       );
       loadProductBatches(product);
@@ -4257,8 +4263,8 @@ if (!authedThisSession) {
         if (sets.length < 2) return "";
         let others = sets.slice(1);
         return `<br><small class="text-muted" title="${escapeHtml(
-          sets.map((s) => s.code + ": " + settings.symbol + parseFloat(s.price).toFixed(2) + " (" + s.qty_left + " left)").join("\n")
-        )}">also ${others.map((s) => settings.symbol + parseFloat(s.price).toFixed(2)).join(", ")}</small>`;
+          sets.map((s) => s.code + ": " + settings.symbol + moneyText(parseFloat(s.price)) + " (" + s.qty_left + " left)").join("\n")
+        )}">also ${others.map((s) => settings.symbol + moneyText(parseFloat(s.price))).join(", ")}</small>`;
       } catch (e) {
         console.error("Price hint failed for product " + (product && product._id), e);
         return "";
@@ -4277,8 +4283,8 @@ if (!authedThisSession) {
               : img_path + product.img
           }" id="product_img"></td>
           <td>${product.name}</td>
-          <td>${product.cost_price !== undefined && product.cost_price !== "" ? settings.symbol + parseFloat(product.cost_price).toFixed(2) : '<span class="text-muted" title="No cost price yet">&mdash;</span>'}</td>
-          <td>${settings.symbol}${product.price}${productNextPriceHint(product)}</td>
+          <td>${product.cost_price !== undefined && product.cost_price !== "" ? settings.symbol + moneyText(parseFloat(product.cost_price)) : '<span class="text-muted" title="No cost price yet">&mdash;</span>'}</td>
+          <td>${settings.symbol}${moneyText(product.price)}${productNextPriceHint(product)}</td>
           <td>${product.stock == 1 ? product.quantity : "N/A"}</td>
           <td class="nobr">
           <span class="btn-group" style="display: flex;">
@@ -5311,7 +5317,7 @@ function computeProfit(transactions, returns, products) {
 
 function renderProfit(result) {
   let sym = settings?.symbol || "";
-  let money = (n) => (n < 0 ? "-" : "") + sym + Math.abs(n).toFixed(2);
+  let money = (n) => (n < 0 ? "-" : "") + sym + moneyText(Math.abs(n));
   let t = result.totals;
 
   // the Transactions tab's filters this profit follows (Profit is on its own tab)
@@ -5496,7 +5502,7 @@ function applyExpensesPermission() {
 
 function expenseMoney(n) {
   let sym = settings?.symbol || "";
-  return (n < 0 ? "-" : "") + sym + Math.abs(Number(n) || 0).toFixed(2);
+  return (n < 0 ? "-" : "") + sym + moneyText(Math.abs(Number(n) || 0));
 }
 
 function expenseTypeName(id) {
@@ -6026,7 +6032,7 @@ function stockToast(kind, message, timeout) {
 function supMoney(n) {
   let sym = settings?.symbol || "";
   n = Number(n) || 0;
-  return (n < 0 ? "-" : "") + sym + Math.abs(n).toFixed(2);
+  return (n < 0 ? "-" : "") + sym + moneyText(Math.abs(n));
 }
 
 function supDate(date) {
@@ -8838,12 +8844,12 @@ function loadTransactions() {
         let isPartial = trans?.payment_type !== "Credit" && remaining > 0;
         let remainingCell =
           remaining > 0
-            ? `<span class="txn-remaining" title="Put on the customer's credit">${remaining.toFixed(2)}</span>`
+            ? `<span class="txn-remaining" title="Put on the customer's credit">${moneyText(remaining)}</span>`
             : "";
         // amounts without the currency (it's in the column headings) to save width
         let num = (v) => {
           let n = parseFloat(v);
-          return isNaN(n) ? "" : n.toFixed(2);
+          return isNaN(n) ? "" : moneyText(n);
         };
         let changeAmount = Math.abs(parseFloat(trans?.change) || 0);
         let when = moment(trans?.date);
@@ -8868,10 +8874,10 @@ function loadTransactions() {
                                   trans?.paid == "" ? "" : num(trans?.paid)
                                 }${
                                   changeAmount > 0.004
-                                    ? `<small class="txn-sub">change ${changeAmount.toFixed(2)}</small>`
+                                    ? `<small class="txn-sub">change ${moneyText(changeAmount)}</small>`
                                     : ""
                                 }</td>
-                                <td class="txn-num">${changeAmount > 0.004 ? changeAmount.toFixed(2) : ""}</td>
+                                <td class="txn-num">${changeAmount > 0.004 ? moneyText(changeAmount) : ""}</td>
                                 <td class="txn-num">${remainingCell}</td>
                                 <td data-export="${txnHtml(
                                   trans?.payment_type === "Credit"
@@ -8886,7 +8892,7 @@ function loadTransactions() {
 
         if (counter == transactions?.length) {
           $("#total_sales #counter").text(
-            settings.symbol + parseFloat(sales).toFixed(2)
+            settings.symbol + moneyText(parseFloat(sales))
           );
           $("#total_transactions #counter").text(transact);
 
@@ -9012,7 +9018,7 @@ function loadSoldProducts() {
                 : "N/A"
             }</td>
             <td class="text-right nobr">${
-              settings.symbol + (item?.qty * parseFloat(item.price))?.toFixed(2)
+              settings.symbol + moneyText((item?.qty * parseFloat(item.price)))
             }</td>
             </tr>`;
 
@@ -9063,7 +9069,7 @@ $.fn.viewTransaction = function (index, source) {
       item.quantity +
       "</td><td>" +
       settings.symbol +
-      parseFloat(item.price).toFixed(2) +
+      moneyText(parseFloat(item.price)) +
       "</td></tr>";
   });
 
@@ -9090,24 +9096,24 @@ $.fn.viewTransaction = function (index, source) {
                     ? `<tr>
                     <td>Advance used</td>
                     <td>:</td>
-                    <td>-${settings.symbol + advUsed.toFixed(2)}</td>
+                    <td>-${settings.symbol + moneyText(advUsed)}</td>
                 </tr>
                 <tr>
                     <td><b>Amount to pay</b></td>
                     <td>:</td>
-                    <td><b>${settings.symbol + Math.max((parseFloat(trans?.total) || 0) - advUsed, 0).toFixed(2)}</b></td>
+                    <td><b>${settings.symbol + moneyText(Math.max((parseFloat(trans?.total) || 0) - advUsed, 0))}</b></td>
                 </tr>`
                     : ""
                 }                <tr>
                     <td>Paid${onCredit > 0 ? " (" + trans?.payment_type + ")" : ""}</td>
                     <td>:</td>
-                    <td>${settings.symbol + trans?.paid}</td>
+                    <td>${trans?.paid === "" || trans?.paid == null ? settings.symbol : settings.symbol + moneyText(trans.paid)}</td>
                 </tr>${
                   onCredit > 0
                     ? `<tr>
                     <td><b>On credit</b></td>
                     <td>:</td>
-                    <td><b>${settings.symbol + onCredit.toFixed(2)}</b></td>
+                    <td><b>${settings.symbol + moneyText(onCredit)}</b></td>
                 </tr>`
                     : ""
                 }
@@ -9116,14 +9122,14 @@ $.fn.viewTransaction = function (index, source) {
                     <td>:</td>
                     <td>${
                       settings.symbol +
-                      Math.abs(trans?.change).toFixed(2)
+                      moneyText(Math.abs(trans?.change))
                     }</td>
                 </tr>${
                   advKept > 0
                     ? `<tr>
                     <td>Saved as advance</td>
                     <td>:</td>
-                    <td>${settings.symbol + advKept.toFixed(2)}</td>
+                    <td>${settings.symbol + moneyText(advKept)}</td>
                 </tr>`
                     : ""
                 }
@@ -9136,7 +9142,7 @@ $.fn.viewTransaction = function (index, source) {
                     ? `<tr>
                     <td>Advance balance</td>
                     <td>:</td>
-                    <td>${settings.symbol + (parseFloat(advAfter) || 0).toFixed(2)}</td>
+                    <td>${settings.symbol + moneyText((parseFloat(advAfter) || 0))}</td>
                 </tr>`
                     : ""
                 }
@@ -9161,9 +9167,7 @@ $.fn.viewTransaction = function (index, source) {
     tax_row = `<tr>
                 <td>Vat(${settings.percentage})% </td>
                 <td>:</td>
-                <td>${settings.symbol}${parseFloat(
-      trans.tax
-    ).toFixed(2)}</td>
+                <td>${settings.symbol}${moneyText(parseFloat(trans.tax))}</td>
             </tr>`;
   }
 
@@ -9217,9 +9221,7 @@ $.fn.viewTransaction = function (index, source) {
         <tr>                        
             <td><b>Subtotal</b></td>
             <td>:</td>
-            <td><b>${settings.symbol}${
-    trans?.subtotal
-  }</b></td>
+            <td><b>${settings.symbol}${moneyText(trans?.subtotal)}</b></td>
         </tr>
         <tr>
             <td>Discount</td>
@@ -9227,7 +9229,7 @@ $.fn.viewTransaction = function (index, source) {
             <td>${
               discount > 0
                 ? settings.symbol +
-                  parseFloat(trans?.discount).toFixed(2)
+                  moneyText(parseFloat(trans?.discount))
                 : ""
             }</td>
         </tr>
@@ -9238,7 +9240,7 @@ $.fn.viewTransaction = function (index, source) {
             <td><h3>Total</h3></td>
             <td><h3>:</h3></td>
             <td>
-                <h3>${settings.symbol}${trans?.total}</h3>
+                <h3>${settings.symbol}${moneyText(trans?.total)}</h3>
             </td>
         </tr>
         ${payment == 0 ? "" : payment}
@@ -9285,7 +9287,7 @@ $.fn.viewTransaction = function (index, source) {
             return `<div class="bill-return">
                 <div class="bill-return-head">
                   <b>${ret.type == "exchange" ? "Exchange" : "Return"}</b>
-                  <span>${settings.symbol}${(parseFloat(ret.refund_amount) || 0).toFixed(2)}</span>
+                  <span>${settings.symbol}${moneyText((parseFloat(ret.refund_amount) || 0))}</span>
                 </div>
                 <div>${moment(ret.date).format("DD MMM YYYY, hh:mm A")}${ret.user ? " · " + txnHtml(ret.user) : ""}</div>
                 <div>${items}</div>
@@ -9390,7 +9392,7 @@ $.fn.renderSelectOrderList = function (orders) {
         <td>${selectOrderEscape(order.order)}${badge}${ref}</td>
         <td class="nobr" data-order="${moment(order.date).valueOf()}">${moment(order.date).format("DD MMM YYYY, hh:mm A")}</td>
         <td>${selectOrderEscape(customer)}</td>
-        <td class="text-right nobr" data-order="${total}">${sym}${total.toFixed(2)}</td>
+        <td class="text-right nobr" data-order="${total}">${sym}${moneyText(total)}</td>
         <td><button class="btn btn-info btn-sm" onclick="$(this).selectOrderForReturn('${order._id}')"><i class="fa fa-check"></i> Select</button></td>
       </tr>`;
   });
@@ -9544,7 +9546,7 @@ $.fn.openReturnModal = function (mode) {
                     <td>${item.quantity}</td>
                     <td>${returnedQty}</td>
                     <td><input type="number" class="form-control return-item-qty" data-line="${line}" min="0" max="${remaining}" value="0" ${remaining <= 0 ? "disabled" : ""}></td>
-                    <td>${settings.symbol}${parseFloat(item.price).toFixed(2)}</td>
+                    <td>${settings.symbol}${moneyText(parseFloat(item.price))}</td>
                 </tr>`;
     });
 
@@ -9630,13 +9632,13 @@ $.fn.submitReturn = function () {
 
         Swal.fire(
           "Items Returned!",
-          "Exchange credit of " + settings.symbol + parseFloat(response.refund_amount).toFixed(2) + " has been applied as a discount on the new sale. Adjust or clear it if not needed.",
+          "Exchange credit of " + settings.symbol + moneyText(parseFloat(response.refund_amount)) + " has been applied as a discount on the new sale. Adjust or clear it if not needed.",
           "success"
         );
       } else {
         Swal.fire(
           "Refunded!",
-          "Refund amount: " + settings.symbol + parseFloat(response.refund_amount).toFixed(2),
+          "Refund amount: " + settings.symbol + moneyText(parseFloat(response.refund_amount)),
           "success"
         );
       }
@@ -11059,7 +11061,7 @@ const ACCOUNTS_MENU_NAMES = { prn: "Purchase Returns" }; // the full name is on 
 // the menu's amounts: without the currency symbol, to fit on the line
 function accountMenuMoney(n) {
   n = Number(n) || 0;
-  let text = (n < 0 ? "-" : "") + Math.abs(n).toFixed(2);
+  let text = (n < 0 ? "-" : "") + moneyText(Math.abs(n));
   return n < 0 ? `<span class="text-danger">${text}</span>` : text;
 }
 
