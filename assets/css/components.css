@@ -2644,9 +2644,29 @@ ul.ColVis_collection li {
   flex-direction: column;
 }
 
-/* the navigation button of the page that is open is hidden (pos.js: showPage) */
-.top-toolbar .nav-current{
-  display: none !important;
+/* Toolbar buttons never move or disappear. The one that was clicked is
+   highlighted (pos.js: "toolbar highlight"):
+   .nav-current - the page that is open (Point of Sale, Transactions...)
+   .nav-pressed - a window opened from the toolbar, until it closes
+   Dark with a green ring, so it stands out on every button colour (the
+   theme already paints .btn-default green). */
+.top-toolbar .btn.nav-current,
+.top-toolbar .btn.nav-current:hover,
+.top-toolbar .btn.nav-current:focus,
+.top-toolbar .btn.nav-pressed,
+.top-toolbar .btn.nav-pressed:hover,
+.top-toolbar .btn.nav-pressed:focus{
+  position: relative;
+  z-index: 3; /* the ring isn't hidden under the next button of a group */
+  background: #36404a !important;
+  border-color: #36404a !important;
+  color: #fff !important;
+  box-shadow: 0 0 0 2px #ebeff2, 0 0 0 4px #5fbeaa !important;
+}
+.top-toolbar .btn.nav-current .btn-label,
+.top-toolbar .btn.nav-pressed .btn-label{
+  background: rgba(255, 255, 255, 0.12);
+  color: #5fbeaa;
 }
 
 /* ---- Expenses page ---- */

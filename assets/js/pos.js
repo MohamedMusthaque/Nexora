@@ -2690,8 +2690,9 @@ if (!authedThisSession) {
     }
 
     // switches between the Point of Sale, Transactions, Expenses and Suppliers pages.
-    // The open page's button is hidden with .nav-current (not .hide()), so
-    // buttons hidden by a permission stay hidden.
+    // The open page's button is highlighted with .nav-current (it is never
+    // hidden, so the toolbar doesn't shift); buttons hidden by a permission
+    // stay hidden.
     function showPage(page) {
       $("#pos_view").toggle(page === "pos");
       $("#transactions_view").toggle(page === "transactions");
@@ -2699,12 +2700,19 @@ if (!authedThisSession) {
       $("#suppliers_view").toggle(page === "suppliers");
       $("#accounts_view").toggle(page === "accounts");
       $("#journal_view").toggle(page === "journal");
-      $("#pointofsale").toggle(page !== "pos");
-      $("#transactions").toggleClass("nav-current", page === "transactions");
-      $("#expensesNav").toggleClass("nav-current", page === "expenses");
-      $("#suppliersNav").toggleClass("nav-current", page === "suppliers");
-      $("#accountsNav").toggleClass("nav-current", page === "accounts");
-      $("#journalNav").toggleClass("nav-current", page === "journal");
+      // every button stays where it is; the open page's one is highlighted
+      [
+        ["#pointofsale", "pos"],
+        ["#transactions", "transactions"],
+        ["#expensesNav", "expenses"],
+        ["#suppliersNav", "suppliers"],
+        ["#accountsNav", "accounts"],
+        ["#journalNav", "journal"],
+      ].forEach(([sel, p]) => {
+        $(sel)
+          .toggleClass("nav-current", page === p)
+          .attr("aria-current", page === p ? "page" : null);
+      });
 
       $("body")
         .toggleClass("transactions-mode", page === "transactions")
@@ -2721,6 +2729,33 @@ if (!authedThisSession) {
       if (page === "journal") fitJournalView();
       if (page === "transactions") fitTransactionsView();
     }
+
+    // ---- toolbar highlight: the clicked button shows it was clicked ----
+    // Page buttons keep .nav-current while their page is open (showPage).
+    // Any other toolbar button gets .nav-pressed: kept while the window it
+    // opened is open, dropped when the last window closes; a button that
+    // opens no window (e.g. Log out) shows it briefly.
+    let navPressTimer = null;
+    function clearNavPressed() {
+      clearTimeout(navPressTimer);
+      $(".top-toolbar .nav-pressed").removeClass("nav-pressed");
+    }
+    $(".top-toolbar").on("click", ".btn", function () {
+      clearNavPressed();
+      let $btn = $(this);
+      if ($btn.hasClass("nav-current")) return; // a page button: already highlighted
+      $btn.addClass("nav-pressed");
+      // no window opened (or it is still loading): let it go after a moment
+      navPressTimer = setTimeout(function () {
+        if (!$(".modal.in").length) clearNavPressed();
+      }, 1500);
+    });
+    $(document).on("hidden.bs.modal", ".modal", function () {
+      // windows can replace each other: only when none is left open
+      setTimeout(function () {
+        if (!$(".modal.in").length) clearNavPressed();
+      }, 50);
+    });
 
     $("#transactions").click(function () {
       loadTransactions();
