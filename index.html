@@ -705,7 +705,7 @@
                                         <th class="txn-num">Total</th>
                                         <th>Settled By</th>
                                         <th>Added By</th>
-                                        <th>Bill</th>
+                                        <th>View</th>
                                     </tr>
                                 </thead>
                                 <tbody id="prn_list"></tbody>
@@ -1912,16 +1912,42 @@
 
      <!-- Quick Journal: a day's sales, returns, payments, expenses and GRNs (pos.js: openJournal) -->
      <!-- One GRN's details (pos.js: showGrn) -->
-     <div id="grnViewModal" class="modal fade modal-fit" tabindex="-1" role="dialog" aria-labelledby="grnViewTitle" aria-hidden="true" style="display: none;">
+     <div id="grnViewModal" class="modal fade modal-fit nx-modal" tabindex="-1" role="dialog" aria-labelledby="grnViewTitle" aria-hidden="true" style="display: none;">
             <div class="modal-dialog modal-lg">
                 <div class="modal-content">
-                    <div class="modal-header">
+                    <div class="modal-header nx-hero">
                         <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-                        <button type="button" class="btn btn-default btn-sm pull-right" id="grnViewPrint" style="margin-right: 12px;" title="Print the GRN bill"><i class="fa fa-print"></i> Print Bill</button>
-                        <button type="button" class="btn btn-default btn-sm pull-right" id="grnViewLabels" style="margin-right: 8px;" title="Print barcode labels with the selling price of each product"><i class="fa fa-barcode"></i> Print Labels</button>
-                        <h4 class="modal-title" id="grnViewTitle">GRN</h4>
+                        <span class="nx-hero-icon"><i class="fa fa-truck"></i></span>
+                        <div class="nx-hero-text">
+                            <h4 class="modal-title" id="grnViewTitle">GRN</h4>
+                            <p class="nx-hero-sub" id="grnViewSub">Goods received</p>
+                        </div>
+                        <div class="nx-hero-actions">
+                            <button type="button" class="btn btn-default btn-sm" id="grnViewLabels" title="Print barcode labels with the selling price of each product"><i class="fa fa-barcode"></i> Print Labels</button>
+                            <button type="button" class="btn btn-default btn-sm" id="grnViewPrint" title="Print the GRN bill"><i class="fa fa-print"></i> Print Bill</button>
+                        </div>
                     </div>
                     <div class="modal-body" id="grnViewBody"></div>
+               </div>
+          </div>
+     </div>
+
+     <!-- One PRN's details, like the GRN details (pos.js: showPrn) -->
+     <div id="prnViewModal" class="modal fade modal-fit nx-modal" tabindex="-1" role="dialog" aria-labelledby="prnViewTitle" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header nx-hero">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                        <span class="nx-hero-icon"><i class="fa fa-reply"></i></span>
+                        <div class="nx-hero-text">
+                            <h4 class="modal-title" id="prnViewTitle">PRN</h4>
+                            <p class="nx-hero-sub" id="prnViewSub">Goods sent back</p>
+                        </div>
+                        <div class="nx-hero-actions">
+                            <button type="button" class="btn btn-default btn-sm" id="prnViewPrint" title="Print the PRN bill"><i class="fa fa-print"></i> Print Bill</button>
+                        </div>
+                    </div>
+                    <div class="modal-body" id="prnViewBody"></div>
                </div>
           </div>
      </div>

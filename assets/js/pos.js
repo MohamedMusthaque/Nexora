@@ -6805,7 +6805,8 @@ function printPriceLabels(labels) {
 
 function showGrn(grn) {
   grnViewing = grn;
-  $("#grnViewTitle").html(`<i class="fa fa-truck"></i> ${txnHtml(grn.grn_no)}`);
+  $("#grnViewTitle").text(grn.grn_no || "GRN");
+  $("#grnViewSub").text((grn.supplier_name || "") + " · received " + supDate(grn.received_date));
   $("#grnViewBody").html(grnDetailsHtml(grn));
   supSwapModal("#supplierTransactionsModal", "#grnViewModal", null);
 }
@@ -7186,7 +7187,8 @@ function renderSupplierTransactions() {
         <td data-export="${txnHtml(prnSettledText(r.refund_method))}">${prnSettledHtml(r.refund_method)}</td>
         <td class="text-right nobr" data-export="-${supMoney(r.total)}">-${supMoney(r.total)}</td>
         ${balanceCell(position)}
-        <td><button onClick="$(this).viewPrn(${r._id})" class="btn btn-default btn-sm" title="PRN bill"><i class="fa fa-print"></i></button></td>
+        <td class="nobr"><button onClick="$(this).prnDetails(${r._id})" class="btn btn-info btn-sm" title="View PRN"><i class="fa fa-search-plus"></i></button>
+          <button onClick="$(this).viewPrn(${r._id})" class="btn btn-default btn-sm" title="PRN bill"><i class="fa fa-print"></i></button></td>
       </tr>`;
     }
     let p = e.p;
@@ -7714,7 +7716,8 @@ function renderPrns() {
         <td class="text-right nobr" data-order="${Number(r.total) || 0}">${supMoney(r.total)}</td>
         <td data-export="${txnHtml(prnSettledText(r.refund_method))}">${prnSettledHtml(r.refund_method)}</td>
         <td>${txnHtml(r.created_by || "")}</td>
-        <td><button onClick="$(this).viewPrn(${r._id})" class="btn btn-info btn-sm" title="PRN bill"><i class="fa fa-print"></i></button></td>
+        <td class="nobr"><button onClick="$(this).prnDetails(${r._id})" class="btn btn-info btn-sm" title="View PRN"><i class="fa fa-search-plus"></i></button>
+          <button onClick="$(this).viewPrn(${r._id})" class="btn btn-default btn-sm" title="PRN bill"><i class="fa fa-print"></i></button></td>
       </tr>`
     )
     .join("");
@@ -8166,6 +8169,85 @@ function prnBillHtml(r) {
     billEnd()
   );
 }
+
+// ---- PRN details (like the GRN details): the PRN list and the supplier window ----
+let prnViewing = null; // the PRN open in the PRN details window (its Print Bill button)
+
+function prnDetailsHtml(r) {
+  let items = (r.items || [])
+    .map(
+      (i) => `<tr>
+        <td>${txnHtml(i.product_name)}${i.barcode ? `<br><small class="text-muted">${txnHtml(i.barcode)}</small>` : ""}</td>
+        <td class="text-right">${i.quantity}</td>
+        <td class="text-right nobr">${supMoney(i.unit_cost)}</td>
+        <td class="text-right nobr">${supMoney(i.total)}</td>
+      </tr>`
+    )
+    .join("");
+  let meta = [
+    ["PRN No", `<b>${txnHtml(r.prn_no)}</b>`],
+    ["Returned", supDate(r.return_date)],
+    ["Returned To", txnHtml(r.supplier_name) + (r.walk_in ? ' <span class="label label-default">Walk-in</span>' : "")],
+    ["Settled By", prnSettledHtml(r.refund_method)],
+    ["Against GRN", r.grn_ref ? txnHtml(r.grn_ref) : '<span class="text-muted">-</span>'],
+  ];
+  // what the return did to the supplier's balance (saved with the PRN)
+  if (!r.walk_in && r.position_after != null) {
+    meta.push([
+      "Supplier Balance",
+      (r.position_before != null ? supBillPositionText(r.position_before) + " &rarr; " : "") +
+        `<b>${supBillPositionText(r.position_after)}</b>`,
+    ]);
+  }
+  meta.push(["Added By", txnHtml(r.created_by || "-") + `<br><small>${moment(r.created_at).format("DD MMM YYYY, hh:mm A")}</small>`]);
+  if (r.note) meta.push(["Reason", txnHtml(r.note)]);
+
+  return `<div class="grn-view-meta">${meta
+      .map((m) => `<div><small>${m[0].toUpperCase()}</small>${m[1]}</div>`)
+      .join("")}</div>
+    <div class="modal-fit-scroll grn-view-scroll">
+    <table class="table table-bordered">
+      <thead><tr><th>Product</th><th class="txn-num">Quantity</th><th class="txn-num">Unit Cost</th><th class="txn-num">Line Total</th></tr></thead>
+      <tbody>${items}</tbody>
+      <tfoot><tr>
+        <th class="text-right">Total</th>
+        <th class="text-right">${r.total_quantity || 0}</th>
+        <th></th>
+        <th class="text-right nobr">${supMoney(r.total)}</th>
+      </tr></tfoot>
+    </table>
+    </div>`;
+}
+
+function showPrn(r) {
+  prnViewing = r;
+  $("#prnViewTitle").text(r.prn_no || "PRN");
+  $("#prnViewSub").text((r.supplier_name || "") + " · returned " + supDate(r.return_date));
+  $("#prnViewBody").html(prnDetailsHtml(r));
+  // from the supplier window: it steps aside and comes back when this closes
+  supSwapModal("#supplierTransactionsModal", "#prnViewModal", null);
+}
+
+$.fn.prnDetails = function (id) {
+  if (prnCache[id]) return showPrn(prnCache[id]);
+  $.get(api + "suppliers/prn/" + id)
+    .done(function (r) {
+      prnCache[r._id] = r;
+      showPrn(r);
+    })
+    .fail(function (xhr) {
+      Swal.fire("Oops!", supError(xhr, "Could not load the PRN."), "warning");
+    });
+};
+
+$(function () {
+  // PRN details window: print its bill straight away (same printing as the bill window)
+  $("#prnViewPrint").on("click", function () {
+    if (!prnViewing) return;
+    receipt = prnBillHtml(prnViewing);
+    $(this).print();
+  });
+});
 
 // PRN bill: from the PRN list, the supplier window and the Quick Journal
 $.fn.viewPrn = function (id) {
