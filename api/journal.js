@@ -4,6 +4,7 @@ const bodyParser = require( "body-parser" );
 const Transactions = require( "./transactions" );
 const Expenses = require( "./expenses" );
 const Suppliers = require( "./suppliers" );
+const Adjustments = require( "./adjustments" );
 
 app.use( bodyParser.json() );
 
@@ -340,6 +341,33 @@ function buildEntries( data ) {
         } );
     } );
 
+    // stock adjustments: stock written off (expired, damaged, lost...) or
+    // found, valued at cost; they move no money
+    ( data.adjustments || [] ).forEach( ( a ) => {
+        let when = dayAt( a.date, a.created_at );
+        let out = a.direction === "out";
+        entries.push( {
+            kind: "adjustment",
+            group: "stock",
+            type: out ? "Stock Written Off" : "Stock Added",
+            id: a._id,
+            at: when.at,
+            time_known: when.time_known,
+            reference: a.adj_no || "",
+            party: a.reason || "",
+            details: [
+                ( a.items || [] ).map( ( i ) => ( i.product_name || "" ) + " x" + ( parseInt( i.quantity ) || 0 ) ).join( ", " ),
+                a.note || ""
+            ].filter( Boolean ).join( "; " ),
+            method: "No money",
+            amount: round2( a.total_value ),
+            money_in: 0,
+            money_out: 0,
+            on_credit: 0,
+            user: a.created_by || ""
+        } );
+    } );
+
     entries.sort( ( a, b ) => String( a.at ).localeCompare( String( b.at ) ) );
     return entries;
 }
@@ -357,6 +385,8 @@ function buildSummary( entries ) {
         credit_paid: group(), // settling suppliers' credit
         advance_paid: group(), // paying suppliers in advance
         prns: Object.assign( group(), { refunded: 0, credited: 0 } ), // goods sent back to suppliers
+        written_off: group(), // stock adjustments out (at cost)
+        stock_added: group(), // stock adjustments in (at cost)
         advance_used: { customers: 0, suppliers: 0 }, // moves no money that day
         methods: {},
         money_in: 0,
@@ -377,7 +407,8 @@ function buildSummary( entries ) {
             grn: "grns",
             supplier_credit_payment: "credit_paid",
             supplier_advance: "advance_paid",
-            prn: "prns"
+            prn: "prns",
+            adjustment: e.type === "Stock Added" ? "stock_added" : "written_off"
         }[e.kind];
         s[key].count++;
         s[key].total += e.amount;
@@ -432,6 +463,8 @@ app.get( "/", function ( req, res ) {
             if ( err ) return res.status( 500 ).send( "Could not load the expenses." );
             Suppliers.journalData( fromText, toText, function ( err, purchases ) {
                 if ( err ) return res.status( 500 ).send( "Could not load the GRNs and supplier payments." );
+                Adjustments.findBetween( fromText, toText, function ( err, adjustments ) {
+                if ( err ) return res.status( 500 ).send( "Could not load the stock adjustments." );
                 let entries = buildEntries( {
                     sales: sales.sales,
                     returns: sales.returns,
@@ -439,9 +472,11 @@ app.get( "/", function ( req, res ) {
                     expenses: expenses,
                     grns: purchases.grns,
                     supplier_payments: purchases.supplier_payments,
-                    prns: purchases.prns
+                    prns: purchases.prns,
+                    adjustments: adjustments
                 } );
                 res.send( { from: fromText, to: toText, entries: entries, summary: buildSummary( entries ) } );
+                } );
             } );
         } );
     } );

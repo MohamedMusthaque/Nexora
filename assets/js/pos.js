@@ -3819,6 +3819,7 @@ if (!authedThisSession) {
       grn: { label: "Goods received", css: "label-success", group: "purchases" },
       prn: { label: "Returned to supplier", css: "label-danger", group: "purchases" },
       stock_adjustment: { label: "Stock adjustment", css: "label-info", group: "changes" },
+      adjustment: { label: "Stock adjusted", css: "label-inverse", group: "changes" },
       updated: { label: "Product edited", css: "label-primary", group: "changes" },
       created: { label: "Created", css: "label-primary", group: "changes" },
       deleted: { label: "Deleted", css: "label-inverse", group: "changes" },
@@ -3862,6 +3863,14 @@ if (!authedThisSession) {
           ].filter(Boolean).join(" · ");
         case "stock_adjustment":
           return `Stock ${e.qty_before} → ${e.qty_after}`;
+        case "adjustment":
+          return [
+            "<b>" + escapeHtml(e.reason || "") + "</b>",
+            (e.batches || []).length ? "from " + e.batches.map((b) => escapeHtml(b.reference) + " ×" + b.qty).join(", ") : "",
+            e.adjustment_date ? moment(e.adjustment_date, "YYYY-MM-DD").format("DD MMM YYYY") : "",
+            `stock ${e.qty_before} → ${e.qty_after}`,
+            e.no_cost ? '<span class="text-warning">no cost price: valued at 0</span>' : "",
+          ].filter(Boolean).join(" · ");
         case "grn": {
           let cost = (v) => (v === "" || v == null ? "not set" : sym + (parseFloat(v) || 0).toFixed(2));
           return [
@@ -3941,9 +3950,9 @@ if (!authedThisSession) {
             <td><span class="label ${meta.css}">${meta.label}</span></td>
             <td>${e.reference != null ? escapeHtml(e.reference) : ""}</td>
             <td class="text-right">${qty}</td>
-            <td class="text-right nobr" data-export="${e.price != null && meta.group !== "changes" ? sym + parseFloat(e.price).toFixed(2) : ""}">${
-              e.price != null && meta.group !== "changes" ? sym + parseFloat(e.price).toFixed(2) : ""
-            }${e.type === "grn" || e.type === "prn" ? '<br><small class="text-muted">unit cost</small>' : ""}</td>
+            <td class="text-right nobr" data-export="${e.price != null && (meta.group !== "changes" || e.type === "adjustment") ? sym + parseFloat(e.price).toFixed(2) : ""}">${
+              e.price != null && (meta.group !== "changes" || e.type === "adjustment") ? sym + parseFloat(e.price).toFixed(2) : ""
+            }${e.type === "grn" || e.type === "prn" || e.type === "adjustment" ? '<br><small class="text-muted">unit cost</small>' : ""}</td>
             <td class="text-right nobr">${e.amount != null ? sym + parseFloat(e.amount).toFixed(2) : ""}</td>
             <td>${productHistoryDetails(e)}</td>
             <td>${escapeHtml(e.user)}</td>
@@ -4202,6 +4211,7 @@ if (!authedThisSession) {
         product.price
       }')" class="btn btn-dark btn-sm" title="Print barcode"><i class="fa fa-print"></i></button>
             <button onClick="$(this).viewProductHistory(${product._id})" class="btn btn-info btn-sm" title="History"><i class="fa fa-history"></i></button>
+            ${product.stock == 1 ? `<button onClick="$(this).adjustProductStock(${product._id})" class="btn btn-default btn-sm" title="Adjust stock (expired, damaged, lost, stock count...)"><i class="fa fa-sliders"></i></button>` : ""}
             <button onClick="$(this).editProduct(${index})" class="btn btn-warning btn-sm"><i class="fa fa-edit"></i></button>
             <button onClick="$(this).deleteProduct(${product._id}, '${
         product.img
@@ -8200,6 +8210,7 @@ const JOURNAL_TYPE_CSS = {
   supplier_credit_payment: "label-warning",
   supplier_advance: "label-warning",
   prn: "label-danger",
+  adjustment: "label-inverse",
 };
 
 function canViewJournal() {
@@ -8312,6 +8323,7 @@ function journalViewButton(e, index) {
     supplier_credit_payment: "Payment bill",
     supplier_advance: "Payment bill",
     prn: "PRN bill",
+    adjustment: "Adjustment note",
   }[e.kind];
   if (!title) return "";
   return `<button onClick="$(this).viewJournalEntry(${index})" class="btn btn-info btn-sm" title="${title}"><i class="fa fa-search-plus"></i></button>`;
@@ -8410,6 +8422,13 @@ $.fn.viewJournalEntry = function (index) {
         journalShowBill(() => showSupplierBill(prnBillHtml(r)));
       })
       .fail(fail);
+  } else if (e.kind === "adjustment") {
+    $.get(api + "adjustments/adjustment/" + e.id)
+      .done(function (a) {
+        adjCache[a._id] = a;
+        journalShowBill(() => showSupplierBill(adjBillHtml(a)));
+      })
+      .fail(fail);
   } else if (e.kind === "grn") {
     $.get(api + "suppliers/grn/" + e.id)
       .done(function (g) {
@@ -8482,6 +8501,13 @@ function journalPrintHtml() {
         ${row("Credit paid to suppliers (" + s.credit_paid.count + ")", supMoney(s.credit_paid.total))}
         ${row("Advance paid to suppliers (" + s.advance_paid.count + ")", supMoney(s.advance_paid.total))}
         ${row("Expenses (" + s.expenses.count + ")", supMoney(s.expenses.total))}
+        ${
+          (s.written_off && s.written_off.count) || (s.stock_added && s.stock_added.count)
+            ? heading("STOCK ADJUSTMENTS (at cost, no money moved)") +
+              (s.written_off.count ? row("Written off (" + s.written_off.count + ")", supMoney(s.written_off.total)) : "") +
+              (s.stock_added.count ? row("Stock added (" + s.stock_added.count + ")", supMoney(s.stock_added.total)) : "")
+            : ""
+        }
         ${
           s.advance_used.customers > 0 || s.advance_used.suppliers > 0
             ? heading("ADVANCES USED (no money moved)") +
@@ -9590,3 +9616,684 @@ $("#quit").click(function () {
     }
   });
 });
+
+
+// ======================================================================
+// Stock adjustments: stock that leaves without a sale or a supplier return
+// (expired, damaged, lost, stolen, used in the shop, short in a stock count),
+// or stock found that wasn't on record. Products window > Stock Adjustments;
+// saving an adjustment moves the stock (api/adjustments.js) and values it at
+// cost: the units' batch cost, else the product's cost price.
+// ======================================================================
+// the same reasons as api/adjustments.js
+const ADJ_REASONS = {
+  out: ["Expired", "Damaged", "Lost / Missing", "Theft", "Own / Staff use", "Stock count shortage", "Other"],
+  in: ["Stock count surplus", "Found", "Other"],
+};
+let allAdjustments = [];
+let adjCache = {}; // id -> adjustment
+let adjDateFilter = null;
+let adjProducts = []; // products offered in the form (the ones that track stock)
+let adjLines = []; // lines of the adjustment being entered
+let adjPreselect = null; // product to start the form with ("Adjust stock" on a product)
+
+function loadAdjustments() {
+  $.get(api + "adjustments")
+    .done(function (list) {
+      allAdjustments = list || [];
+      allAdjustments.forEach((a) => (adjCache[a._id] = a));
+      renderAdjustments();
+    })
+    .fail(function () {
+      $("#adj_list").html('<tr><td colspan="8">Could not load the stock adjustments.</td></tr>');
+    });
+}
+
+function adjTypeHtml(a) {
+  return a.direction === "out"
+    ? '<span class="label label-danger"><i class="fa fa-arrow-down"></i> Stock out</span>'
+    : '<span class="label label-success"><i class="fa fa-arrow-up"></i> Stock in</span>';
+}
+
+function filteredAdjustments() {
+  let type = $("#adjTypeFilter").val();
+  let reason = $("#adjReasonFilter").val();
+  return allAdjustments.filter(
+    (a) =>
+      (!adjDateFilter || adjDateFilter.matches(a.date)) &&
+      (!type || a.direction === type) &&
+      (!reason || a.reason === reason)
+  );
+}
+
+function adjExportSubtitle() {
+  let parts = [$("#adjDateRange .date-range-label").text() || "All dates"];
+  if ($("#adjTypeFilter").val()) parts.push($("#adjTypeFilter option:selected").text());
+  if ($("#adjReasonFilter").val()) parts.push($("#adjReasonFilter option:selected").text());
+  return parts.join("  ·  ");
+}
+
+function renderAdjustments() {
+  let list = filteredAdjustments();
+  let outValue = 0, outUnits = 0, inValue = 0, inUnits = 0;
+  let byReason = {};
+  list.forEach((a) => {
+    let value = Number(a.total_value) || 0;
+    let units = Number(a.total_quantity) || 0;
+    if (a.direction === "out") {
+      outValue += value;
+      outUnits += units;
+      let r = (byReason[a.reason] = byReason[a.reason] || { value: 0, units: 0 });
+      r.value += value;
+      r.units += units;
+    } else {
+      inValue += value;
+      inUnits += units;
+    }
+  });
+  // the reason that cost the most (by units when nothing has a cost)
+  let top = Object.keys(byReason).sort(
+    (x, y) => byReason[y].value - byReason[x].value || byReason[y].units - byReason[x].units
+  )[0];
+  $("#adjOutValue").text(supMoney(outValue));
+  $("#adjOutNote").text("at cost · " + outUnits + (outUnits === 1 ? " unit" : " units"));
+  $("#adjInValue").text(supMoney(inValue));
+  $("#adjInNote").text("at cost · " + inUnits + (inUnits === 1 ? " unit" : " units"));
+  $("#adjTopReason").text(top || "-").attr("title", top || "");
+  $("#adjTopReasonNote").text(
+    top ? supMoney(byReason[top].value) + " · " + byReason[top].units + " units" : "for stock taken out"
+  );
+  $("#adjCount").text(list.length);
+  $("#adjTabCount").text(allAdjustments.length);
+
+  let rows = list
+    .map((a) => {
+      let items = a.items || [];
+      // one entry per product (lines from different batches added up)
+      let perProduct = [];
+      items.forEach((i) => {
+        let e = perProduct.find((x) => x.id === i.product_id);
+        if (e) e.qty += Number(i.quantity) || 0;
+        else perProduct.push({ id: i.product_id, name: i.product_name, qty: Number(i.quantity) || 0 });
+      });
+      let names = perProduct.map((i) => txnHtml(i.name) + " ×" + i.qty);
+      let shown = names.slice(0, 3).join(", ") + (names.length > 3 ? ` <span class="text-muted">and ${names.length - 3} more</span>` : "");
+      let sign = a.direction === "out" ? "-" : "+";
+      return `<tr>
+        <td class="nobr" data-order="${Number(a.seq) || 0}"><b>${txnHtml(a.adj_no)}</b></td>
+        <td class="nobr" data-order="${txnHtml(a.date)}">${supDate(a.date)}</td>
+        <td data-export="${txnHtml((a.direction === "out" ? "Stock out: " : "Stock in: ") + a.reason)}">${adjTypeHtml(a)} ${txnHtml(a.reason)}${
+          a.note ? `<br><small class="text-muted">${txnHtml(a.note)}</small>` : ""
+        }</td>
+        <td data-export="${txnHtml(perProduct.map((i) => i.name + " x" + i.qty).join(", "))}">${shown}</td>
+        <td class="text-right" data-order="${(a.direction === "out" ? -1 : 1) * (Number(a.total_quantity) || 0)}">
+          <b class="${a.direction === "out" ? "text-danger" : "text-success"}">${sign}${a.total_quantity || 0}</b></td>
+        <td class="text-right nobr" data-order="${Number(a.total_value) || 0}">${supMoney(a.total_value)}${
+          a.no_cost ? ' <i class="fa fa-exclamation-circle text-warning" title="Some products had no cost price: valued at 0"></i>' : ""
+        }</td>
+        <td>${txnHtml(a.created_by || "")}</td>
+        <td><button type="button" onClick="$(this).viewAdjustment(${a._id})" class="btn btn-info btn-sm" title="Adjustment note"><i class="fa fa-print"></i></button></td>
+      </tr>`;
+    })
+    .join("");
+
+  if ($.fn.DataTable.isDataTable("#adjList")) $("#adjList").DataTable().destroy();
+  $("#adj_list").html(rows);
+  $("#adjList").DataTable(
+    Object.assign(
+      standardTableOptions({
+        noun: "adjustments",
+        searchPlaceholder: "Search adjustments...",
+        exportTitle: "Stock Adjustments",
+        exportColumns: [0, 1, 2, 3, 4, 5, 6],
+        sumColumns: [5],
+        exportSubtitle: adjExportSubtitle,
+        actionColumns: [7],
+        emptyTable: allAdjustments.length
+          ? "No adjustments match the filters"
+          : "No stock adjustments yet - click New Adjustment when stock expires, gets damaged or goes missing",
+      }),
+      { order: [[1, "desc"], [0, "desc"]] }
+    )
+  );
+}
+
+// ---- the form ----
+function adjDirection() {
+  return $("input[name=adjDirection]:checked").val() === "in" ? "in" : "out";
+}
+
+function adjProduct(id) {
+  return adjProducts.find((p) => String(p._id) === String(id));
+}
+
+function adjNum(v) {
+  if (v === "" || v === null || v === undefined) return null;
+  let n = parseFloat(v);
+  return isFinite(n) ? n : null;
+}
+
+function adjStock(p) {
+  return parseInt(p && p.quantity) || 0;
+}
+
+// how many of a product (or of one of its batches) the lines already take
+function adjQtyOf(productId, batchId, exceptLine) {
+  return adjLines.reduce(
+    (s, l) =>
+      s +
+      (l !== exceptLine && String(l.product_id) === String(productId) && (batchId === undefined || String(l.batch_id) === String(batchId))
+        ? Number(l.quantity) || 0
+        : 0),
+    0
+  );
+}
+
+function adjBatchText(b) {
+  let cost = adjNum(b.unit_cost);
+  return b.reference + " · " + b.qty_left + " left" + (cost === null ? "" : " · cost " + supMoney(cost));
+}
+
+// What each line will move and what it's worth (the same rules as the
+// server: stock out takes the batch picked first, then the oldest; stock in
+// goes into the batch picked, else the batch being sold now). Per line:
+// { value, unit_cost, no_cost, from: [{ reference, qty }] } or null.
+function adjEstimate() {
+  let out = adjDirection() === "out";
+  let left = {}; // batch id -> what is left of it after the lines above
+  return adjLines.map((l) => {
+    let qty = Number(l.quantity);
+    if (!Number.isInteger(qty) || qty < 1) return null;
+    let p = adjProduct(l.product_id) || {};
+    let batches = p.batches || [];
+    let cost = adjNum(p.cost_price);
+    let costOf = (b) => (adjNum(b.unit_cost) !== null ? adjNum(b.unit_cost) : cost);
+    let picked = l.batch_id != null ? batches.find((b) => String(b._id) === String(l.batch_id)) : null;
+    let moved = [];
+    if (batches.length) {
+      if (out) {
+        let remaining = qty;
+        let take = (b) => {
+          let have = left[b._id] !== undefined ? left[b._id] : b.qty_left;
+          let n = Math.min(have, remaining);
+          if (n <= 0) return;
+          left[b._id] = have - n;
+          remaining -= n;
+          let m = moved.find((x) => x.b === b);
+          if (m) m.qty += n;
+          else moved.push({ b: b, qty: n });
+        };
+        if (picked) take(picked);
+        batches.forEach((b) => {
+          if (remaining > 0) take(b);
+        });
+      } else {
+        moved.push({ b: picked || batches[0], qty: qty });
+      }
+    }
+    let inBatches = moved.reduce((s, m) => s + m.qty, 0);
+    let noCost = moved.some((m) => costOf(m.b) === null) || (qty > inBatches && cost === null);
+    let value = supRound(moved.reduce((s, m) => s + m.qty * (costOf(m.b) || 0), 0) + Math.max(qty - inBatches, 0) * (cost || 0));
+    return { value: value, unit_cost: supRound(value / qty), no_cost: noCost, from: moved.map((m) => ({ reference: m.b.reference, qty: m.qty })) };
+  });
+}
+
+// a line taking out more than there is: the message, or ""
+function adjStockProblem(l) {
+  if (adjDirection() !== "out") return "";
+  let p = adjProduct(l.product_id);
+  if (!p) return "";
+  let stock = adjStock(p);
+  let total = adjQtyOf(l.product_id);
+  if (total > stock) return `Only ${Math.max(stock, 0)} of "${p.name}" in stock, but the lines take out ${total}.`;
+  if (l.batch_id != null) {
+    let b = (p.batches || []).find((x) => String(x._id) === String(l.batch_id));
+    let fromBatch = adjQtyOf(l.product_id, l.batch_id);
+    if (b && fromBatch > b.qty_left) return `Only ${b.qty_left} of "${p.name}" left in ${b.reference}, but the lines take ${fromBatch} from it.`;
+  }
+  return "";
+}
+
+function adjLineValid(l) {
+  return Number.isInteger(Number(l.quantity)) && Number(l.quantity) >= 1;
+}
+
+function fillAdjReasons() {
+  let dir = adjDirection();
+  let current = $("#adjReason").val();
+  $("#adjReason").html(
+    `<option value="">Choose a reason...</option>` +
+      ADJ_REASONS[dir].map((r) => `<option value="${txnHtml(r)}">${txnHtml(r)}</option>`).join("")
+  );
+  if (ADJ_REASONS[dir].includes(current)) $("#adjReason").val(current);
+  updateAdjNoteHint();
+}
+
+function updateAdjNoteHint() {
+  let other = $("#adjReason").val() === "Other";
+  $("#adjNoteHint").text(other ? "(required: say what happened)" : "(optional)").toggleClass("text-danger", other).toggleClass("text-muted", !other);
+}
+
+function fillAdjProductOptions() {
+  let out = adjDirection() === "out";
+  $("#adjProduct").html(
+    `<option value=""></option>` +
+      adjProducts
+        .map((p) => {
+          let barcode = p.barcode != null && String(p.barcode) !== "NaN" ? String(p.barcode) : "";
+          let cost = adjNum(p.cost_price);
+          let parts = ["stock " + adjStock(p), cost === null ? "no cost yet" : "cost " + supMoney(cost)];
+          if (barcode) parts.push(barcode);
+          let none = out && adjStock(p) < 1;
+          return `<option value="${p._id}"${none ? " disabled" : ""}>${txnHtml(p.name)} — ${txnHtml(parts.join(" · "))}</option>`;
+        })
+        .join("")
+  );
+  if ($("#adjProduct").data("chosen")) $("#adjProduct").trigger("chosen:updated");
+}
+
+// the batch list follows the product: only offered when it has several
+function fillAdjBatchOptions() {
+  let p = adjProduct($("#adjProduct").val());
+  let batches = (p && p.batches) || [];
+  let out = adjDirection() === "out";
+  let first = out ? "Oldest first" : "Batch selling now";
+  $("#adjBatch")
+    .html(`<option value="">${first}</option>` + (batches.length > 1 ? batches.map((b) => `<option value="${b._id}">${txnHtml(adjBatchText(b))}</option>`).join("") : ""))
+    .prop("disabled", batches.length < 2)
+    .attr("title", batches.length > 1 ? "Pick the delivery the units come from (e.g. the one that expired)" : "This product has one batch (or none)");
+}
+
+function updateAdjTotals() {
+  let est = adjEstimate();
+  let out = adjDirection() === "out";
+  let qty = 0, total = 0, noCost = false;
+  adjLines.forEach((l, i) => {
+    let e = est[i];
+    let $row = $(`#adj_lines tr[data-index="${i}"]`);
+    let p = adjProduct(l.product_id);
+    if (e) {
+      qty += Number(l.quantity);
+      total += e.value;
+      noCost = noCost || e.no_cost;
+    }
+    $row.find(".adj-line-cost").html(e ? (e.no_cost ? '<span class="text-warning" title="No cost price yet: valued at 0">' + supMoney(e.unit_cost) + "</span>" : supMoney(e.unit_cost)) : "-");
+    $row.find(".grn-line-total").text(e ? supMoney(e.value) : "-");
+    $row.find(".adj-line-from").text(e && e.from.length ? e.from.map((f) => f.reference + " ×" + f.qty).join(", ") : "");
+    let problem = adjStockProblem(l);
+    $row.find(".prn-line-after").html(
+      p && adjLineValid(l)
+        ? problem
+          ? `<span class="text-danger" title="${txnHtml(problem)}">not enough</span>`
+          : `<span class="${out ? "text-danger" : "text-success"}">→ ${adjStock(p) + (out ? -1 : 1) * adjQtyOf(l.product_id)}</span>`
+        : ""
+    );
+  });
+  total = supRound(total);
+  $("#adjTotalQty").text(qty ? (out ? "-" : "+") + qty : "0");
+  $("#adjTotal").text(supMoney(total));
+  let $info = $(".adj-info");
+  if (!qty) {
+    $info.hide();
+    return;
+  }
+  $info
+    .removeClass("alert-warning alert-success")
+    .addClass(out ? "alert-warning" : "alert-success")
+    .html(
+      `<i class="fa fa-info-circle"></i> ` +
+        (out
+          ? `Stock goes <b>down</b> by ${qty} ${qty === 1 ? "unit" : "units"}: <b>${supMoney(total)}</b> written off at cost.`
+          : `Stock goes <b>up</b> by ${qty} ${qty === 1 ? "unit" : "units"}, worth <b>${supMoney(total)}</b> at cost.`) +
+        (noCost ? " Products without a cost price count as 0." : "")
+    )
+    .show();
+}
+
+function renderAdjLines() {
+  if (!adjLines.length) {
+    $("#adj_lines").html(
+      `<tr class="grn-empty"><td colspan="7">No products yet. Choose a product above, enter the quantity, then click Add.</td></tr>`
+    );
+  } else {
+    $("#adj_lines").html(
+      adjLines
+        .map((l, i) => {
+          let p = adjProduct(l.product_id) || {};
+          let code = p.barcode != null && String(p.barcode) !== "NaN" ? String(p.barcode) : "";
+          let b = l.batch_id != null ? (p.batches || []).find((x) => String(x._id) === String(l.batch_id)) : null;
+          return `<tr data-index="${i}">
+            <td><b>${txnHtml(l.name)}</b>${code ? `<br><small class="text-muted">${txnHtml(code)}</small>` : ""}</td>
+            <td class="text-right nobr">${adjStock(p)}<br><small class="prn-line-after"></small></td>
+            <td class="adj-line-batch">${b ? txnHtml(b.reference) : '<span class="text-muted">' + (adjDirection() === "out" ? "Oldest first" : "Selling now") + "</span>"}
+              <br><small class="text-muted adj-line-from"></small></td>
+            <td><input type="number" class="form-control adj-line-qty" min="1" step="1" value="${txnHtml(l.quantity)}"></td>
+            <td class="text-right nobr adj-line-cost"></td>
+            <td class="text-right nobr grn-line-total"></td>
+            <td><button type="button" class="btn btn-danger btn-sm adj-line-remove" title="Remove"><i class="fa fa-times"></i></button></td>
+          </tr>`;
+        })
+        .join("")
+    );
+  }
+  updateAdjTotals();
+}
+
+function addAdjLine() {
+  let p = adjProduct($("#adjProduct").val());
+  let qty = Number($("#adjQty").val());
+  let batchId = $("#adjBatch").val() ? Number($("#adjBatch").val()) : null;
+  if (!p) {
+    Swal.fire("Oops!", "Please choose a product.", "warning");
+    return;
+  }
+  if (!Number.isInteger(qty) || qty < 1) {
+    Swal.fire("Oops!", "Please enter the quantity (a whole number of at least 1).", "warning");
+    return;
+  }
+  if (adjDirection() === "out") {
+    let already = adjQtyOf(p._id);
+    if (already + qty > adjStock(p)) {
+      Swal.fire("Not enough stock", `Only ${Math.max(adjStock(p), 0)} of "${p.name}" in stock` + (already ? ` (${already} already on this adjustment).` : "."), "warning");
+      return;
+    }
+    let b = batchId != null ? (p.batches || []).find((x) => x._id === batchId) : null;
+    if (b && adjQtyOf(p._id, batchId) + qty > b.qty_left) {
+      Swal.fire("Not that many in this batch", `Only ${b.qty_left} of "${p.name}" left in ${b.reference}.`, "warning");
+      return;
+    }
+  }
+  let existing = adjLines.find((l) => String(l.product_id) === String(p._id) && String(l.batch_id) === String(batchId));
+  if (existing) existing.quantity = (Number(existing.quantity) || 0) + qty;
+  else adjLines.push({ product_id: p._id, name: p.name, batch_id: batchId, quantity: qty });
+
+  $("#adjProduct").val("").trigger("chosen:updated");
+  $("#adjQty").val("");
+  fillAdjBatchOptions();
+  renderAdjLines();
+  $("#adjProduct").trigger("chosen:activate");
+}
+
+// from the Stock Adjustments tab, or "Adjust stock" on a product
+function openAdjForm(productId) {
+  $.get(api + "inventory/products")
+    .done(function (products) {
+      adjProducts = (products || [])
+        .filter((p) => p.stock == 1)
+        .sort(
+          (a, b) =>
+            String(a.name || "").localeCompare(String(b.name || "")) ||
+            (parseFloat(a.cost_price) || 0) - (parseFloat(b.cost_price) || 0)
+        );
+      if (!adjProducts.length) {
+        Swal.fire("Nothing to adjust", "No product tracks stock. Turn on stock tracking in a product to adjust its stock.", "info");
+        return;
+      }
+      adjPreselect = productId != null ? productId : null;
+      prepareAdjForm();
+      // the Products window steps aside and comes back when the form closes
+      supSwapModal("#Products", "#adjModal", loadAdjustments);
+    })
+    .fail(function () {
+      Swal.fire("Oops!", "Could not load the products.", "warning");
+    });
+}
+
+function prepareAdjForm() {
+  adjLines = [];
+  $("#saveAdj").get(0).reset();
+  $("#adjNote").val("");
+  $("input[name=adjDirection][value=out]").prop("checked", true);
+  $("#adjDate").val(moment().format("YYYY-MM-DD"));
+  $("#adjDate").attr("max", moment().format("YYYY-MM-DD"));
+  updateAdjTypeUi();
+  fillAdjReasons();
+  fillAdjProductOptions();
+  fillAdjBatchOptions();
+  renderAdjLines();
+}
+
+function updateAdjTypeUi() {
+  let out = adjDirection() === "out";
+  $("#adjModal .adj-type").removeClass("active");
+  $("#adjModal .adj-type-" + (out ? "out" : "in")).addClass("active");
+}
+
+// the note: printed like the PRN bill
+function adjBillHtml(a) {
+  let out = a.direction === "out";
+  let items = (a.items || [])
+    .map(
+      (i) => `<tr>
+        <td>${txnHtml(i.product_name)}${
+          (i.batches || []).length ? `<br><small>${i.batches.map((b) => txnHtml(b.reference) + " ×" + b.qty).join(", ")}</small>` : ""
+        }</td>
+        <td style="padding: 0 6px; vertical-align: top;">${out ? "-" : "+"}${i.quantity}</td>
+        <td style="padding: 0 6px; white-space: nowrap; vertical-align: top;">${i.unit_cost != null ? supMoney(i.unit_cost) : "-"}</td>
+        <td style="text-align: right; white-space: nowrap; vertical-align: top;">${i.value != null ? supMoney(i.value) : "-"}</td>
+      </tr>`
+    )
+    .join("");
+  return `<div style="font-size: 10px;">
+    ${supBillHeader("STOCK ADJUSTMENT")}
+    <p>
+      Adj. No : <b>${txnHtml(a.adj_no)}</b> <br>
+      Type : <b>${out ? "Stock out (written off at cost)" : "Stock in (at cost)"}</b> <br>
+      Reason : ${txnHtml(a.reason)} <br>
+      Date : ${supDate(a.date)} <br>
+      Adjusted by : ${txnHtml(a.created_by || "-")} <br>
+      Entered : ${moment(a.created_at).format("DD MMM YYYY HH:mm:ss")}
+    </p>
+    <hr>
+    <table width="100%">
+      <thead style="text-align: left;">
+        <tr><th>Item</th><th style="padding: 0 6px;">Qty</th><th style="padding: 0 6px;">Cost</th><th style="text-align: right;">Value</th></tr>
+      </thead>
+      <tbody>
+        ${items}
+        <tr><td colspan="4"><hr style="margin: 4px 0;"></td></tr>
+        ${supBillRow("Products / Units", (a.item_count || (a.items || []).length) + " / " + (out ? "-" : "+") + (a.total_quantity || 0))}
+        ${supBillRow("Total", supMoney(a.total_value), true)}
+      </tbody>
+    </table>
+    ${a.note ? "<p>Note : " + txnHtml(a.note) + "</p>" : ""}
+    ${a.no_cost ? "<p>Products without a cost price are valued at 0.</p>" : ""}
+    <hr>
+    ${supBillSignatures("Adjusted by", "Checked by")}
+  </div>`;
+}
+
+// the note in the bill window; over the Products window it takes its place
+// and the Products window comes back when the note is closed
+function adjShowBill(html) {
+  receipt = html;
+  $("#viewTransaction").html(html);
+  if ($("#Products").hasClass("in")) supSwapModal("#Products", "#orderModal", null);
+  else $("#orderModal").modal("show");
+}
+
+// after saving: the form closes, the Products window comes back (when the
+// form came from it), then the note comes up, ready to print
+function adjShowBillAfterSave(html) {
+  $("#adjModal").one("hidden.bs.modal", function () {
+    let $p = $("#Products");
+    let m = $p.data("bs.modal");
+    if (m && m.isShown && !$p.hasClass("in")) $p.one("shown.bs.modal", () => adjShowBill(html));
+    else adjShowBill(html);
+  });
+  $("#adjModal").modal("hide");
+}
+
+$.fn.viewAdjustment = function (id) {
+  if (adjCache[id]) return adjShowBill(adjBillHtml(adjCache[id]));
+  $.get(api + "adjustments/adjustment/" + id)
+    .done(function (a) {
+      adjCache[a._id] = a;
+      adjShowBill(adjBillHtml(a));
+    })
+    .fail(function (xhr) {
+      Swal.fire("Oops!", supError(xhr, "Could not load the adjustment."), "warning");
+    });
+};
+
+// "Adjust stock" on a product in the Products window
+$.fn.adjustProductStock = function (productId) {
+  openAdjForm(productId);
+};
+
+$(function () {
+  adjDateFilter = initDateRangeFilter("#adjDateRange", renderAdjustments);
+  let reasons = ADJ_REASONS.out.concat(ADJ_REASONS.in.filter((r) => !ADJ_REASONS.out.includes(r)));
+  $("#adjReasonFilter").append(reasons.map((r) => `<option value="${txnHtml(r)}">${txnHtml(r)}</option>`).join(""));
+  $("#adjTypeFilter, #adjReasonFilter").on("change", renderAdjustments);
+
+  // the list loads with the Products window, and is measured when its tab opens
+  $("#productModal").on("click", loadAdjustments);
+  $('#Products .products-tabs a[href="#productsTabAdjustments"]').on("shown.bs.tab", function () {
+    if ($.fn.DataTable.isDataTable("#adjList")) $("#adjList").DataTable().columns.adjust();
+  });
+
+  $("#newAdjBtn").on("click", function () {
+    openAdjForm(null);
+  });
+
+  $("input[name=adjDirection]").on("change", function () {
+    updateAdjTypeUi();
+    fillAdjReasons();
+    let keep = $("#adjProduct").val();
+    fillAdjProductOptions();
+    let p = adjProduct(keep);
+    if (p && !(adjDirection() === "out" && adjStock(p) < 1)) $("#adjProduct").val(keep).trigger("chosen:updated");
+    fillAdjBatchOptions();
+    renderAdjLines();
+  });
+  $("#adjReason").on("change", updateAdjNoteHint);
+
+  $("#adjModal").on("shown.bs.modal", function () {
+    if (!$("#adjProduct").data("chosen")) {
+      $("#adjProduct").chosen({ width: "100%", search_contains: true, no_results_text: "No product matches" });
+    }
+    $("#adjProduct").trigger("chosen:updated");
+    if (adjPreselect != null && adjProduct(adjPreselect)) {
+      $("#adjProduct").val(String(adjPreselect)).trigger("chosen:updated");
+      fillAdjBatchOptions();
+      adjPreselect = null;
+      $("#adjQty").trigger("focus");
+    } else {
+      $("#adjProduct").trigger("chosen:activate");
+    }
+  });
+
+  $("#adjProduct").on("change", function () {
+    fillAdjBatchOptions();
+    if (adjProduct($(this).val())) setTimeout(() => $("#adjQty").trigger("focus"), 0);
+  });
+  $("#adjAddLine").on("click", addAdjLine);
+  $("#adjQty").on("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault(); // add the line, don't save
+      addAdjLine();
+    }
+  });
+
+  $("#adj_lines")
+    .on("input", ".adj-line-qty", function () {
+      let line = adjLines[parseInt($(this).closest("tr").data("index"))];
+      if (!line) return;
+      let val = $.trim($(this).val());
+      line.quantity = val === "" ? "" : Number(val);
+      updateAdjTotals();
+    })
+    .on("keydown", "input", function (e) {
+      if (e.key === "Enter") e.preventDefault();
+    })
+    .on("click", ".adj-line-remove", function () {
+      adjLines.splice(parseInt($(this).closest("tr").data("index")), 1);
+      renderAdjLines();
+    });
+
+  $("#saveAdj").on("submit", function (e) {
+    e.preventDefault();
+    let dir = adjDirection();
+    let reason = $("#adjReason").val();
+    let date = $("#adjDate").val();
+    let note = $.trim($("#adjNote").val());
+    if (!reason) {
+      Swal.fire("Oops!", "Please choose the reason.", "warning");
+      return;
+    }
+    if (!date) {
+      Swal.fire("Oops!", "Please enter the date.", "warning");
+      return;
+    }
+    if (!adjLines.length) {
+      Swal.fire("Oops!", "Please add at least one product.", "warning");
+      return;
+    }
+    let bad = adjLines.find((l) => !adjLineValid(l));
+    if (bad) {
+      Swal.fire("Oops!", `Please check "${bad.name}": the quantity must be a whole number of at least 1.`, "warning");
+      return;
+    }
+    let stockProblem = adjLines.map(adjStockProblem).find(Boolean);
+    if (stockProblem) {
+      Swal.fire("Not enough stock", stockProblem, "warning");
+      return;
+    }
+    if (reason === "Other" && !note) {
+      Swal.fire("Oops!", "Please write what happened in the note (the reason is \"Other\").", "warning");
+      $("#adjNote").trigger("focus");
+      return;
+    }
+
+    let est = adjEstimate();
+    let total = supRound(est.reduce((s, x) => s + (x ? x.value : 0), 0));
+    let units = adjLines.reduce((s, l) => s + Number(l.quantity), 0);
+    let out = dir === "out";
+    let payload = {
+      direction: dir,
+      reason: reason,
+      date: date,
+      note: note,
+      created_by: user?.fullname || "",
+      created_by_id: user?._id || "",
+      items: adjLines.map((l) => ({ product_id: l.product_id, quantity: Number(l.quantity), batch_id: l.batch_id })),
+    };
+
+    Swal.fire({
+      title: "Save this adjustment?",
+      icon: "question",
+      html: `<p><b>${out ? "Stock out" : "Stock in"}</b> · ${txnHtml(reason)} · ${supDate(date)}</p>
+        <p>${adjLines.length} ${adjLines.length === 1 ? "product" : "products"}, ${out ? "-" : "+"}${units} units · <b>${supMoney(total)}</b> at cost</p>
+        <p class="text-muted" style="font-size: 13px;">The stock of these products goes ${out ? "down" : "up"} by these quantities. A saved adjustment can't be changed; a mistake is put right with another adjustment.</p>`,
+      showCancelButton: true,
+      confirmButtonText: "Save Adjustment",
+      confirmButtonColor: out ? "#d33" : "#5fbeaa",
+    }).then(function (result) {
+      if (!result.value) return;
+      let $btn = $("#submitAdj").prop("disabled", true);
+      $.ajax({ url: api + "adjustments", type: "POST", contentType: "application/json", data: JSON.stringify(payload) })
+        .done(function (a) {
+          adjCache[a._id] = a;
+          showAdjustmentsTabOnReturn();
+          adjShowBillAfterSave(adjBillHtml(a));
+          $(document).trigger("products:changed"); // new stock on the till and in Products
+        })
+        .fail(function (xhr) {
+          Swal.fire("Oops!", supError(xhr, "Could not save the adjustment."), "warning");
+          if (xhr && xhr.status >= 500) {
+            loadAdjustments();
+            $(document).trigger("products:changed");
+          }
+        })
+        .always(function () {
+          $btn.prop("disabled", false);
+        });
+    });
+  });
+});
+
+// after saving, the Products window comes back on the Stock Adjustments tab
+function showAdjustmentsTabOnReturn() {
+  $('#Products .products-tabs a[href="#productsTabAdjustments"]').tab("show");
+}

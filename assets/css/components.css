@@ -2832,7 +2832,8 @@ ul.ColVis_collection li {
 
 /* GRN form: [product ......][qty][unit cost][Add] */
 #grnModal .grn-add-bar,
-#prnModal .grn-add-bar{
+#prnModal .grn-add-bar,
+#adjModal .grn-add-bar{
   display: flex;
   align-items: flex-end;
   gap: 10px;
@@ -2843,44 +2844,53 @@ ul.ColVis_collection li {
   background: #fafbfc;
 }
 #grnModal .grn-add-bar label,
-#prnModal .grn-add-bar label{
+#prnModal .grn-add-bar label,
+#adjModal .grn-add-bar label{
   display: block;
   margin-bottom: 4px;
 }
 #grnModal .grn-add-product,
-#prnModal .grn-add-product{
+#prnModal .grn-add-product,
+#adjModal .grn-add-product{
   flex: 1 1 auto;
   min-width: 0;
 }
 #grnModal .grn-add-qty,
-#prnModal .grn-add-qty{
+#prnModal .grn-add-qty,
+#adjModal .grn-add-qty{
   flex: 0 0 110px;
 }
 #grnModal .grn-add-cost,
-#prnModal .grn-add-cost{
+#prnModal .grn-add-cost,
+#adjModal .grn-add-cost{
   flex: 0 0 140px;
 }
 #grnModal .grn-add-btn,
-#prnModal .grn-add-btn{
+#prnModal .grn-add-btn,
+#adjModal .grn-add-btn{
   flex: 0 0 auto;
 }
 #grnModal .chosen-container-single .chosen-single,
-#prnModal .chosen-container-single .chosen-single{
+#prnModal .chosen-container-single .chosen-single,
+#adjModal .chosen-container-single .chosen-single{
   height: 34px;
   line-height: 32px;
 }
 #grnModal .grn-lines input.form-control,
-#prnModal .grn-lines input.form-control{
+#prnModal .grn-lines input.form-control,
+#adjModal .grn-lines input.form-control{
   text-align: right;
   height: 30px;
   padding: 4px 8px;
 }
 #grnModal .grn-lines td,
-#prnModal .grn-lines td{
+#prnModal .grn-lines td,
+#adjModal .grn-lines td{
   vertical-align: middle;
 }
 #grnModal .grn-lines .grn-empty td,
-#prnModal .grn-lines .grn-empty td{
+#prnModal .grn-lines .grn-empty td,
+#adjModal .grn-lines .grn-empty td{
   text-align: center;
   color: #98a6ad;
   padding: 18px;
@@ -2933,64 +2943,78 @@ ul.ColVis_collection li {
    place and only the lines table shrinks and scrolls (no scrolling of the
    whole window). The body isn't clipped, so the product / GRN lists can
    still open over the table. */
-#prnModal .modal-dialog{
+#prnModal .modal-dialog,
+#adjModal .modal-dialog{
   margin-top: 24px;
   margin-bottom: 24px;
 }
-#prnModal .modal-content{
+#prnModal .modal-content,
+#adjModal .modal-content{
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 48px);
 }
-#prnModal .modal-content > .modal-header{
+#prnModal .modal-content > .modal-header,
+#adjModal .modal-content > .modal-header{
   flex: 0 0 auto;
 }
-#prnModal .modal-content > .modal-body{
+#prnModal .modal-content > .modal-body,
+#adjModal .modal-content > .modal-body{
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-#prnModal #savePrn{
+#prnModal #savePrn,
+#adjModal #saveAdj{
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-#prnModal #savePrn > *{
+#prnModal #savePrn > *,
+#adjModal #saveAdj > *{
   flex: 0 0 auto;
 }
-#prnModal #savePrn > .grn-lines-scroll{
+#prnModal #savePrn > .grn-lines-scroll,
+#adjModal #saveAdj > .grn-lines-scroll{
   flex: 0 1 auto; /* as tall as its lines, shrinking to what is left */
   min-height: 110px;
   max-height: none;
 }
 /* slimmer heading and Total rows, so a short window still shows the lines */
 #prnModal .grn-lines-scroll > .grn-lines > thead > tr > th,
-#prnModal .grn-lines-scroll > .grn-lines > tfoot > tr > th{
+#prnModal .grn-lines-scroll > .grn-lines > tfoot > tr > th,
+#adjModal .grn-lines-scroll > .grn-lines > thead > tr > th,
+#adjModal .grn-lines-scroll > .grn-lines > tfoot > tr > th{
   padding-top: 7px;
   padding-bottom: 7px;
 }
 /* the Save button: a footer below the body, never pushed off the window */
-#prnModal .modal-content > .prn-footer{
+#prnModal .modal-content > .prn-footer,
+#adjModal .modal-content > .prn-footer{
   flex: 0 0 auto;
   padding: 10px 15px 12px;
   text-align: left;
   background: #fafbfc;
   border-radius: 0 0 6px 6px;
 }
-#prnModal .prn-footer .form-group{
+#prnModal .prn-footer .form-group,
+#adjModal .prn-footer .form-group{
   margin-bottom: 0;
 }
-#prnModal .prn-footer .help-block{
+#prnModal .prn-footer .help-block,
+#adjModal .prn-footer .help-block{
   margin: 3px 0 0;
   font-size: 12px;
 }
 /* the button lines up with the fields, below their labels */
-#prnModal .prn-save-col{
+#prnModal .prn-save-col,
+#adjModal .prn-save-col{
   padding-top: 25px;
 }
-#prnModal .prn-save-col .btn{
+#prnModal .prn-save-col .btn,
+#adjModal .prn-save-col .btn{
   height: 34px;
   padding-left: 6px;
   padding-right: 6px;
@@ -2998,15 +3022,18 @@ ul.ColVis_collection li {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-#prnModal .modal-body #savePrn > :last-child{
+#prnModal .modal-body #savePrn > :last-child,
+#adjModal .modal-body #saveAdj > :last-child{
   margin-bottom: 0;
 }
 /* the GRN and balance notes: one compact row, side by side */
-#prnModal .prn-notes{
+#prnModal .prn-notes,
+#adjModal .prn-notes{
   display: flex;
   gap: 10px;
 }
-#prnModal .prn-notes > .alert{
+#prnModal .prn-notes > .alert,
+#adjModal .prn-notes > .alert{
   flex: 1 1 0;
   min-width: 0;
   margin-bottom: 12px;
@@ -3015,40 +3042,48 @@ ul.ColVis_collection li {
   line-height: 1.4;
 }
 @media (max-height: 700px){
-  #prnModal .modal-dialog{
+  #prnModal .modal-dialog,
+  #adjModal .modal-dialog{
     margin-top: 8px;
     margin-bottom: 8px;
   }
-  #prnModal .modal-content{
+  #prnModal .modal-content,
+  #adjModal .modal-content{
     max-height: calc(100vh - 16px);
   }
-  #prnModal .modal-header{
+  #prnModal .modal-header,
+  #adjModal .modal-header{
     padding-top: 10px;
     padding-bottom: 10px;
   }
-  #prnModal .form-group{
+  #prnModal .form-group,
+  #adjModal .form-group{
     margin-bottom: 10px;
   }
-  #prnModal #savePrn > .grn-lines-scroll{
+  #prnModal #savePrn > .grn-lines-scroll,
+  #adjModal #saveAdj > .grn-lines-scroll{
     min-height: 90px;
   }
 }
 /* a very short window: rather than hide fields, the body scrolls (the Save
    button stays put in the footer) */
 @media (max-height: 560px){
-  #prnModal .modal-content > .modal-body{
+  #prnModal .modal-content > .modal-body,
+  #adjModal .modal-content > .modal-body{
     overflow-y: auto;
   }
 }
 
 /* PRN form, top row: Return To, the walk-in seller's name (when shown),
    Return Date, and the GRN No taking the rest of the row */
-#prnModal .prn-top-row{
+#prnModal .prn-top-row,
+#adjModal .prn-top-row{
   display: flex;
   gap: 15px;
   align-items: flex-start;
 }
-#prnModal .prn-top-row > .form-group{
+#prnModal .prn-top-row > .form-group,
+#adjModal .prn-top-row > .form-group{
   min-width: 0;
 }
 #prnModal .prn-top-row > .prn-supplier-group{
@@ -3057,23 +3092,27 @@ ul.ColVis_collection li {
 #prnModal .prn-top-row > .prn-walkin-group{
   flex: 0 0 150px;
 }
-#prnModal .prn-top-row > .prn-date-group{
+#prnModal .prn-top-row > .prn-date-group,
+#adjModal .prn-top-row > .prn-date-group{
   flex: 0 0 150px;
 }
 #prnModal .prn-top-row > .prn-grn-group{
   flex: 1 1 0;
 }
-#prnModal .prn-top-row label{
+#prnModal .prn-top-row label,
+#adjModal .prn-top-row label{
   display: block;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 @media (max-width: 767px){
-  #prnModal .prn-top-row{
+  #prnModal .prn-top-row,
+  #adjModal .prn-top-row{
     flex-wrap: wrap;
   }
-  #prnModal .prn-top-row > .form-group{
+  #prnModal .prn-top-row > .form-group,
+  #adjModal .prn-top-row > .form-group{
     flex: 1 1 100%;
   }
 }
@@ -3133,17 +3172,20 @@ ul.ColVis_collection li {
 
 /* GRN form: the new product's barcode (add bar and lines) */
 #grnModal .grn-add-barcode,
-#prnModal .grn-add-barcode{
+#prnModal .grn-add-barcode,
+#adjModal .grn-add-barcode{
   flex: 0 0 260px;
 }
 /* with the New Barcode field shown, the bar wraps: the product search keeps
    its room and the barcode + Add move to a second row */
 #grnModal .grn-add-bar,
-#prnModal .grn-add-bar{
+#prnModal .grn-add-bar,
+#adjModal .grn-add-bar{
   flex-wrap: wrap;
 }
 #grnModal .grn-add-product,
-#prnModal .grn-add-product{
+#prnModal .grn-add-product,
+#adjModal .grn-add-product{
   min-width: 240px;
 }
 #grnModal .grn-line-barcode-box .btn{
@@ -3154,7 +3196,8 @@ ul.ColVis_collection li {
   max-width: 260px !important;
 }
 #grnModal .grn-add-barcode .input-group-addon,
-#prnModal .grn-add-barcode .input-group-addon{
+#prnModal .grn-add-barcode .input-group-addon,
+#adjModal .grn-add-barcode .input-group-addon{
   padding: 6px 8px;
 }
 #grnModal .grn-line-barcode-box{
@@ -3331,7 +3374,8 @@ ul.ColVis_collection li {
 /* GRN form: the product lines scroll in their own box, so the payment fields
    and Save button stay in reach; headings and the Total row stay visible */
 #grnModal .grn-lines-scroll,
-#prnModal .grn-lines-scroll{
+#prnModal .grn-lines-scroll,
+#adjModal .grn-lines-scroll{
   max-height: max(220px, calc(100vh - 560px));
   overflow-y: auto;
   overflow-x: auto;
@@ -3340,12 +3384,14 @@ ul.ColVis_collection li {
   border-radius: 4px;
 }
 #grnModal .grn-lines-scroll > .grn-lines,
-#prnModal .grn-lines-scroll > .grn-lines{
+#prnModal .grn-lines-scroll > .grn-lines,
+#adjModal .grn-lines-scroll > .grn-lines{
   margin-bottom: 0;
   border: none;
 }
 #grnModal .grn-lines-scroll > .grn-lines > thead > tr > th,
-#prnModal .grn-lines-scroll > .grn-lines > thead > tr > th{
+#prnModal .grn-lines-scroll > .grn-lines > thead > tr > th,
+#adjModal .grn-lines-scroll > .grn-lines > thead > tr > th{
   position: sticky;
   top: 0;
   z-index: 2;
@@ -3353,7 +3399,8 @@ ul.ColVis_collection li {
   box-shadow: inset 0 -1px 0 #dfe3e8;
 }
 #grnModal .grn-lines-scroll > .grn-lines > tfoot > tr > th,
-#prnModal .grn-lines-scroll > .grn-lines > tfoot > tr > th{
+#prnModal .grn-lines-scroll > .grn-lines > tfoot > tr > th,
+#adjModal .grn-lines-scroll > .grn-lines > tfoot > tr > th{
   position: sticky;
   bottom: 0;
   z-index: 2;
@@ -3361,12 +3408,14 @@ ul.ColVis_collection li {
   box-shadow: inset 0 1px 0 #dfe3e8;
 }
 #grnModal .grn-lines-scroll::-webkit-scrollbar,
-#prnModal .grn-lines-scroll::-webkit-scrollbar{
+#prnModal .grn-lines-scroll::-webkit-scrollbar,
+#adjModal .grn-lines-scroll::-webkit-scrollbar{
   width: 8px;
   height: 8px;
 }
 #grnModal .grn-lines-scroll::-webkit-scrollbar-thumb,
-#prnModal .grn-lines-scroll::-webkit-scrollbar-thumb{
+#prnModal .grn-lines-scroll::-webkit-scrollbar-thumb,
+#adjModal .grn-lines-scroll::-webkit-scrollbar-thumb{
   background: #cfd6dc;
   border-radius: 4px;
 }
@@ -3907,4 +3956,120 @@ body.suppliers-mode #suppliers_view .ph-table-scroll::-webkit-scrollbar-thumb{
     flex: 0 0 auto;
     width: 100%;
   }
+}
+
+/* ---- Stock adjustments ---------------------------------------------------
+   The form shares the PRN form's layout (#adjModal is added to those rules
+   above); these are its own parts. */
+#adjModal .prn-top-row > .adj-type-group{
+  flex: 0 0 190px;
+}
+#adjModal .prn-top-row > .adj-reason-group{
+  flex: 1 1 0;
+}
+/* Down / Up: two big buttons */
+#adjModal .adj-type-toggle{
+  display: flex;
+  height: 38px; /* as tall as the Reason and Date fields beside it */
+  border: 1px solid #d3d9de;
+  border-radius: 4px;
+  overflow: hidden;
+}
+#adjModal .adj-type-toggle .adj-type{
+  flex: 1 1 0;
+  margin: 0;
+  position: relative;
+  cursor: pointer;
+  font-weight: 600;
+  overflow: visible;
+  white-space: nowrap;
+}
+#adjModal .adj-type-toggle .adj-type + .adj-type{
+  border-left: 1px solid #d3d9de;
+}
+#adjModal .adj-type-toggle input{
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+#adjModal .adj-type-toggle span{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  color: #7a8794;
+  background: #fff;
+  transition: background 0.15s, color 0.15s;
+}
+#adjModal .adj-type-toggle .adj-type:hover span{
+  background: #f5f7f9;
+}
+#adjModal .adj-type-out.active span{
+  background: #f05050;
+  color: #fff;
+}
+#adjModal .adj-type-in.active span{
+  background: #5fbeaa;
+  color: #fff;
+}
+#adjModal .adj-type-toggle input:focus-visible + span{
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.25);
+}
+/* the batch picker in the add bar */
+#adjModal .adj-add-batch{
+  flex: 0 0 230px;
+  min-width: 0;
+}
+#adjModal .adj-add-batch select:disabled{
+  background: #f5f7f9;
+  color: #98a6ad;
+  cursor: not-allowed;
+}
+#adjModal .adj-line-batch{
+  font-size: 13px;
+}
+#adjModal .prn-notes > .adj-info{
+  margin-bottom: 12px;
+}
+
+/* the Stock Adjustments tab in the Products window */
+#Products .adj-filters{
+  margin-bottom: 12px;
+}
+#Products .adj-filters label{
+  margin: 0 0 0 8px;
+}
+#Products .adj-filters #newAdjBtn{
+  margin-right: 6px;
+}
+#Products .adj-filters select.form-control{
+  width: auto;
+  min-width: 140px;
+}
+#Products .tab-pane > .adj-tiles{
+  flex: 0 0 auto;
+}
+#Products .adj-tile-loss{
+  border-color: #f5c6c4;
+  background: #fff8f7;
+}
+#Products .adj-tile-loss .sup-value{
+  color: #d84340;
+}
+#Products .adj-top-reason{
+  font-size: 18px;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#Products #productsTabAdjustments > .dataTables_wrapper{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#adjList .nobr{
+  white-space: nowrap;
 }

@@ -839,6 +839,132 @@ app.returnGoods = function (items, info, callback) {
   });
 };
 
+// ---- Stock adjustments (see adjustments.js): stock lost, expired, damaged,
+// used in the shop, or found in a stock count ----
+// A line taking stock out comes out of the batch picked (items[].batch_id,
+// e.g. the delivery that expired) first, then the oldest batches. A line
+// adding stock goes into the batch picked, else the batch being sold now.
+// Each line is valued at the cost of the units it moved (the batch's unit
+// cost, else the product's cost price) and logged in the product history as
+// an "adjustment" event.
+// items: [{ product_id, quantity, batch_id? }]
+// info: { direction: "out" | "in", adjustment_id, reference, reason, date,
+//         user, user_id }
+// callback(err, results) - results[i] for items[i]:
+//   { qty_before, qty_after, unit_cost, value, no_cost, batches: [{ batch_id, reference, qty, unit_cost }] }
+app.adjustStock = function (items, info, callback) {
+  let who = { user: info.user, user_id: info.user_id };
+  let out = info.direction === "out";
+  let results = [];
+  let touched = {};
+  inStockSeries(function (done) {
+    async.eachOfSeries(
+      items,
+      function (item, index, next) {
+        results[index] = null;
+        inventoryDB.findOne({ _id: parseInt(item.product_id) }, function (err, product) {
+          if (err) return next(err);
+          if (!product) return next(); // deleted meanwhile
+          let qty = parseInt(item.quantity) || 0;
+          let qtyBefore = parseInt(product.quantity) || 0;
+          let qtyAfter = out ? qtyBefore - qty : qtyBefore + qty;
+          let productCost = numOrNull(product.cost_price);
+          productBatches(product._id, function (err, batches) {
+            if (err) return next(err);
+            let changed = [];
+            let moved = []; // [{ batch_id, reference, qty, unit_cost }]
+            let picked = item.batch_id != null ? batches.find((b) => String(b._id) === String(item.batch_id)) : null;
+            let costOf = (b) => (b && b.unit_cost !== null && b.unit_cost !== undefined ? Number(b.unit_cost) : productCost);
+            if (product.stock == 1 && batches.length) {
+              if (out) {
+                let remaining = qty;
+                let take = function (b) {
+                  let n = Math.min(b.qty_left, remaining);
+                  if (n <= 0) return;
+                  b.qty_left -= n;
+                  remaining -= n;
+                  changed.push(b);
+                  let m = moved.find((x) => x.batch_id === b._id);
+                  if (m) m.qty += n;
+                  else moved.push({ batch_id: b._id, reference: b.reference, qty: n, unit_cost: costOf(b) });
+                };
+                if (picked) take(picked);
+                batches.forEach((b) => {
+                  if (remaining > 0) take(b);
+                });
+              } else {
+                // into the batch picked, else the batch being sold now
+                let target = picked || batches.find((b) => b.qty_left > 0) || batches[batches.length - 1];
+                target.qty_left += qty;
+                changed.push(target);
+                moved.push({ batch_id: target._id, reference: target.reference, qty: qty, unit_cost: costOf(target) });
+              }
+              touched[product._id] = true;
+            }
+            // value: the units' batch costs; units outside any batch at the product's cost price
+            let inBatches = moved.reduce((s, m) => s + m.qty, 0);
+            let noCost = moved.some((m) => m.unit_cost === null) || (qty > inBatches && productCost === null);
+            let value = moved.reduce((s, m) => s + m.qty * (m.unit_cost || 0), 0) + Math.max(qty - inBatches, 0) * (productCost || 0);
+            value = Math.round(value * 100) / 100;
+            let unitCost = qty ? Math.round((value / qty) * 100) / 100 : 0;
+            saveBatchQuantities(changed, function (err) {
+              if (err) return next(err);
+              inventoryDB.update({ _id: product._id }, { $set: { quantity: qtyAfter } }, {}, function (err) {
+                if (err) return next(err);
+                results[index] = {
+                  qty_before: qtyBefore,
+                  qty_after: qtyAfter,
+                  unit_cost: unitCost,
+                  value: value,
+                  no_cost: noCost,
+                  batches: moved,
+                };
+                logHistory([
+                  historyEntry(product, "adjustment", {
+                    qty_change: out ? -qty : qty,
+                    qty_before: qtyBefore,
+                    qty_after: qtyAfter,
+                    price: unitCost, // the cost per unit
+                    amount: value,
+                    no_cost: noCost,
+                    direction: info.direction,
+                    reason: info.reason,
+                    reference: info.reference,
+                    adjustment_id: info.adjustment_id,
+                    adjustment_date: info.date,
+                    batches: moved.map((m) => ({ batch_id: m.batch_id, reference: m.reference, qty: m.qty })),
+                  }, who),
+                ]);
+                next();
+              });
+            });
+          });
+        });
+      },
+      function (err) {
+        if (err) {
+          done();
+          return callback(err, results);
+        }
+        // a batch emptied (or refilled): the right price takes over
+        async.eachSeries(
+          Object.keys(touched),
+          function (id, next) {
+            reconcileProduct(id, who, function (err) {
+              if (err) console.error("Batch update after stock adjustment failed:", err);
+              next();
+            });
+          },
+          function () {
+            done();
+            callback(null, results);
+          }
+        );
+      }
+    );
+  });
+};
+
 // A return puts stock back: into the batches the sold units came from
 // (items[].batches, from the sale) where known, otherwise into the batch
 // being sold now. items: [{ id, quantity, batches? }]
