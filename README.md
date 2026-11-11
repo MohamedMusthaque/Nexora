@@ -6,7 +6,7 @@
 
   **A modern, offline-first desktop Point of Sale system for shops, canteens and small businesses, built with Electron and Node.js. It can back up to Google Drive automatically.**
 
-  [![Version](https://img.shields.io/badge/Version-1.0.1-success.svg)](#-release-notes)
+  [![Version](https://img.shields.io/badge/Version-1.1.0-success.svg)](#-release-notes)
   [![Node.js Version](https://img.shields.io/badge/Node.js-%3E%3D16.14.0-brightgreen.svg)](https://nodejs.org/)
   [![Electron Version](https://img.shields.io/badge/Electron-43.4-blue.svg)](https://www.electronjs.org/)
   [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#-building--packaging)
@@ -409,7 +409,7 @@ On a new machine the app opens the **Welcome** screen. Create the administrator 
 
 ## 📦 Building & Packaging
 
-The version number comes from `package.json` (currently **1.0.1**). To build the Windows installer and portable zip:
+The version number comes from `package.json` (currently **1.1.0**). To build the Windows installer and portable zip:
 
 ```bash
 npx electron-builder --win --publish never
@@ -569,7 +569,7 @@ The setup screen only shows when the app finds **no user accounts** in its data 
 ### Build fails with `Device or resource busy` / `EBUSY`
 A file in the build output is locked, often by OneDrive sync or antivirus when the project is inside a OneDrive folder.
 ```bash
-npx electron-builder --win --publish never --config.directories.output=dist-1.0.1
+npx electron-builder --win --publish never --config.directories.output=dist-1.1.0
 ```
 Or pause OneDrive sync, restart the PC and delete the old `dist/` folder.
 
@@ -577,7 +577,7 @@ Or pause OneDrive sync, restart the PC and delete the old `dist/` folder.
 
 ## 📝 Release Notes
 
-### Unreleased (next version)
+### 1.1.0
 
 **☁️ Google Drive Backup**
 - Sign in with Google, then backups upload automatically whenever the internet is connected. Offline backups wait on the PC and go up when the connection returns.

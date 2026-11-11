@@ -2,7 +2,7 @@
 /node_modules
 assets/plugins/jquery-ui/node_modules/
 
-# Build output (dist, dist-1.0.1, dist-final, dist-pub, ...)
+# Build output (dist, dist-1.1.0, dist-final, dist-pub, ...)
 dist/
 dist-*/
 /release-builds/
