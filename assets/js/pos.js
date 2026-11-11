@@ -903,6 +903,7 @@ if (!authedThisSession) {
 
         let delay = 0;
         allProducts?.forEach((product) => {
+          if (product.stock != 1) return; // doesn't track stock: no stock warnings
           if (product.quantity <= 5 && product.quantity > 2) {
             notiflix.Notify.init({
               position: "right-bottom",
@@ -951,9 +952,13 @@ if (!authedThisSession) {
 
         // group products with the same name inside the same category so
         // they share one tile; each group's variants keep their own price,
-        // barcode and stock, picked via a popup when the tile is clicked
+        // barcode and stock, picked via a popup when the tile is clicked.
+        // Only what can be sold shows: a product that tracks stock and has
+        // none left has no tile (and no price in a tile's price range or
+        // price list); products that don't track stock always show.
         let groupsByKey = {};
         data.forEach((item) => {
+          if (item.stock == 1 && !((parseInt(item.quantity) || 0) > 0)) return;
           if (!categories.includes(item.category)) {
             categories.push(item.category);
           }
@@ -1021,6 +1026,12 @@ if (!authedThisSession) {
                   </div>`;
           $("#parent").append(item_info);
         });
+
+        if (!posProductGroups.length && data.length) {
+          $("#parent").html(
+            `<div class="pos-no-stock text-muted"><i class="fa fa-cubes"></i><br>No products in stock.<br><small>Receive goods (GRN) or update the stock in Products.</small></div>`
+          );
+        }
 
         renderCategoryButtons();
       });

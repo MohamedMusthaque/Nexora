@@ -326,3 +326,15 @@ margin-right: 30px;
   font-size: 32px;
   width: 100%;
 }
+/* the till when nothing is in stock (pos.js: loadProducts) */
+#parent .pos-no-stock{
+  grid-column: 1 / -1;
+  padding: 60px 20px;
+  text-align: center;
+  font-size: 16px;
+}
+#parent .pos-no-stock .fa{
+  font-size: 40px;
+  margin-bottom: 10px;
+  color: #c3cbd2;
+}
