@@ -78,9 +78,13 @@ function groupAmountText(clean) {
 }
 
 // what an amount field shows for a value (for inputs drawn as HTML)
+// A plain number from code (jQuery's .val() passes numbers as text) is
+// rounded to 2 decimals (1234.5678 -> 1,234.57); typed text is only trimmed.
 function amountInputText(value) {
-  if (typeof value === "number") value = isFinite(value) ? String(Math.round(value * 100) / 100) : "";
-  return groupAmountText(cleanAmountText(value));
+  if (typeof value === "number") value = isFinite(value) ? String(value) : "";
+  let text = String(value == null ? "" : value).trim();
+  if (/^\d+\.\d{3,}$/.test(text)) text = String(Math.round(parseFloat(text) * 100) / 100);
+  return groupAmountText(cleanAmountText(text));
 }
 
 (function () {

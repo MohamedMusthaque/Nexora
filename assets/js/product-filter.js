@@ -103,14 +103,20 @@ $(document).ready(function(){
         if(isDueInput){
             $("#refNumber").val($("#refNumber").val()+""+value)
         }else{
-            $("#payment").val($("#payment").val()+""+value);
+            // #payment is an amount field (pos.js): .val() is the plain number,
+            // shown with commas; at most 2 decimals
+            var current = $("#payment").val();
+            if (/\.\d{2}$/.test(current)) return;
+            $("#payment").val(current+""+value);
             $(this).calculateChange();
         }
     }
 
 
     $.fn.digits = function(){
-        $("#payment").val($("#payment").val()+".");
+        var current = $("#payment").val();
+        if (current.indexOf(".") !== -1) return; // one decimal point
+        $("#payment").val(current+".");
         $(this).calculateChange();
     }
 
