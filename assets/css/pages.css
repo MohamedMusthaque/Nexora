@@ -3,16 +3,6 @@
   display: none;
 }
 
-#card-box tr {display: block; }
-#card-box th, #card-box td:first-child{ width: 10px; }
-#card-box th, #card-box td:nth-child(2){ width: 150px; }
-
-#cartTable tbody { 
-  display: block; 
-  height: calc(100vh - 425px);
-  overflow: auto;
-}
-
 /* the till's product tiles: a grid, so every tile in a row is the same
    height whatever its name or price (a long name or a price range used to
    make one tile taller, and the next row's floats caught on it) */
@@ -378,4 +368,636 @@ input.amount-input.amount-input-invalid:focus{
 #gross_price{
   white-space: nowrap;
   font-size: clamp(18px, 1.9vw, 26px);
+}
+
+/* ---- Point of Sale (#pos_view) ---------------------------------------------
+   | Current Bill            [Clear] | [search......] (All)(Drink)(Soap)  |
+   | [customer v] [+]                | [tile][tile][tile][tile][tile]     |
+   | [barcode ................. ok]  | [tile][tile]...  (scrolls)         |
+   | item  [- 2 +]  Rs. 400.00   x   |                                    |
+   | Items / Subtotal / Discount     |                                    |
+   | TOTAL               Rs. 12,240  |                                    |
+   | [print] [Cancel] [Hold] [ PAY ] |                                    |
+   Both panels fill the window; the cart and the product grid scroll. */
+#pos_view .pos-row{
+  display: flex;
+  flex-wrap: wrap;
+}
+#pos_view .pos-bill,
+#pos_view .pos-products{
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--toolbar-height, 64px) - 34px);
+  min-height: 460px;
+  margin-bottom: 0;
+  padding: 16px 18px;
+  border: 1px solid #e3e8ec;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(54, 64, 74, 0.05);
+}
+
+/* ---- the bill ---- */
+#pos_view .pos-bill-head{
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+#pos_view .pos-bill-head h4{
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #36404a;
+}
+#pos_view .pos-bill-head h4 > .fa{
+  color: #5fbeaa;
+  margin-right: 4px;
+}
+#pos_view .pos-bill-count{
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 9px;
+  border-radius: 10px;
+  background: #eef7f5;
+  color: #3e9e8a;
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: 2px;
+}
+#pos_view .pos-clear{
+  padding: 4px 10px;
+  border: 1px solid #f3c4c3 !important;
+  border-radius: 6px;
+  background: #fff !important;
+  color: #d84340 !important;
+  font-size: 12.5px;
+}
+#pos_view .pos-clear:hover{
+  background: #fdf1f1 !important;
+}
+
+#pos_view .pos-customer{
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+#pos_view .pos-customer-select{
+  flex: 1 1 auto;
+  min-width: 0;
+}
+#pos_view .pos-customer-select .chosen-container{
+  width: 100% !important;
+}
+#pos_view .pos-customer-select .chosen-container-single .chosen-single,
+#pos_view .pos-customer-select select.form-control{
+  height: 40px;
+  line-height: 38px;
+  border: 1px solid #dfe5ea;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: none;
+  font-size: 14px;
+}
+#pos_view .pos-customer-select .chosen-container-single .chosen-single div b{
+  background-position-y: 10px;
+}
+#pos_view .pos-add-customer{
+  flex: 0 0 42px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: #81c868 !important;
+  color: #fff !important;
+  font-size: 15px;
+}
+
+#pos_view .pos-scan{
+  flex: 0 0 auto;
+  position: relative;
+  margin-bottom: 10px;
+}
+#pos_view .pos-scan .form-control{
+  height: 40px;
+  padding-left: 38px;
+  padding-right: 38px;
+  border: 1px solid #dfe5ea;
+  border-radius: 8px;
+  background: #f9fbfc;
+}
+#pos_view .pos-scan .form-control:focus{
+  background: #fff;
+  border-color: #5fbeaa;
+  box-shadow: 0 0 0 3px rgba(95, 190, 170, 0.15);
+}
+#pos_view .pos-scan-icon{
+  position: absolute;
+  left: 13px;
+  top: 12px;
+  color: #98a6ad;
+  font-size: 16px;
+}
+#pos_view .pos-scan-status{
+  position: absolute;
+  right: 12px;
+  top: 11px;
+  color: #b4bec6;
+}
+#pos_view .pos-scan-status .glyphicon-ok{
+  color: #5fbeaa;
+}
+
+/* the items */
+#pos_view .pos-cart{
+  flex: 1 1 auto;
+  min-height: 90px;
+  overflow-y: auto;
+  border: 1px solid #eef1f4;
+  border-radius: 8px;
+}
+#pos_view #cartTable{
+  width: 100%;
+  table-layout: fixed;
+}
+#pos_view #cartTable > thead > tr > th{
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 10px;
+  border-bottom: 1px solid #eef1f4;
+  background: #f6f8fa;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #8a97a3;
+}
+#pos_view #cartTable > thead > tr > th:nth-child(2){ width: 112px; }
+#pos_view #cartTable > thead > tr > th:nth-child(3){ width: 108px; }
+#pos_view #cartTable > thead > tr > th:nth-child(4){ width: 38px; }
+#pos_view #cartTable > tbody > tr > td{
+  padding: 8px 10px;
+  border-top: 1px solid #f1f3f5;
+  vertical-align: middle;
+}
+#pos_view #cartTable > tbody > tr:first-child > td{
+  border-top: none;
+}
+#pos_view .pos-line{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+#pos_view .pos-line-picture{
+  flex: 0 0 36px;
+  height: 36px;
+}
+#pos_view .pos-line-photo,
+#pos_view .pos-line-initial{
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+#pos_view .pos-line-initial,
+#pos_view .pos-tile-initial{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: hsl(var(--tile-hue, 168), 55%, 92%);
+  color: hsl(var(--tile-hue, 168), 45%, 38%);
+  font-weight: 700;
+}
+#pos_view .pos-line-initial{
+  font-size: 15px;
+}
+#pos_view .pos-line-text{
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+#pos_view .pos-line-name{
+  font-weight: 600;
+  color: #36404a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#pos_view .pos-line-unit{
+  font-size: 11.5px;
+  color: #98a6ad;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#pos_view .pos-stepper{
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #dfe5ea;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+#pos_view .pos-step{
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  background: #f4f7f9;
+  color: #4c5667;
+  font-size: 11px;
+}
+#pos_view .pos-step:hover{
+  background: #e6f4f1;
+  color: #3e9e8a;
+}
+#pos_view .pos-stepper .cart-quantity-form{
+  width: 38px !important;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-left: 1px solid #eef1f4;
+  border-right: 1px solid #eef1f4;
+  text-align: center;
+  font-weight: 600;
+  color: #36404a;
+  outline: none;
+}
+#pos_view .pos-line-total{
+  text-align: right;
+  font-weight: 700;
+  color: #36404a;
+  white-space: nowrap;
+}
+#pos_view .pos-line-remove{
+  text-align: center;
+  padding-left: 0 !important;
+  padding-right: 6px !important;
+}
+#pos_view .pos-remove{
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #c3ccd3;
+}
+#pos_view .pos-remove:hover{
+  background: #fdecec;
+  color: #d84340;
+}
+#pos_view .pos-cart-empty > td{
+  padding: 34px 10px !important;
+  text-align: center;
+  color: #98a6ad;
+}
+#pos_view .pos-cart-empty .fa{
+  font-size: 28px;
+  color: #d5dde3;
+  margin-bottom: 6px;
+}
+
+/* totals */
+#pos_view .pos-summary{
+  flex: 0 0 auto;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #f6f8fa;
+}
+#pos_view .pos-summary-row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 26px;
+  font-size: 13.5px;
+  color: #6c7a86;
+}
+#pos_view .pos-summary-row > span:last-child{
+  font-weight: 600;
+  color: #36404a;
+}
+#pos_view .pos-summary-discount label{
+  margin: 0;
+  font-weight: normal;
+}
+#pos_view .pos-summary-discount .form-control{
+  width: 130px;
+  height: 30px;
+  padding: 4px 10px;
+  border: 1px solid #dfe5ea;
+  border-radius: 6px;
+  text-align: right;
+}
+#pos_view .pos-summary-total{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed #d5dde3;
+  color: #36404a;
+  font-weight: 700;
+  font-size: 15px;
+}
+#pos_view .pos-summary-total small{
+  display: block;
+  font-size: 11px;
+  font-weight: normal;
+  color: #98a6ad;
+}
+#pos_view .pos-summary-total #gross_price{
+  margin: 0;
+  font-size: clamp(20px, 2vw, 28px);
+  font-weight: 800;
+  color: #3e9e8a;
+  white-space: nowrap;
+}
+
+/* buttons */
+#pos_view .pos-actions{
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 44px 1fr 1fr 1.6fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+#pos_view .pos-btn{
+  height: 46px;
+  padding: 0 8px;
+  border: none !important;
+  border-radius: 8px;
+  color: #fff !important;
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: none;
+}
+#pos_view .pos-btn > .fa{
+  margin-right: 4px;
+}
+#pos_view .pos-btn-print{ background: #34d3eb !important; }
+#pos_view .pos-btn-print > .fa{ margin: 0; }
+#pos_view .pos-btn-cancel{ background: #f05050 !important; }
+#pos_view .pos-btn-hold{ background: #5fbeaa !important; }
+#pos_view .pos-btn-pay{
+  background: #81c868 !important;
+  font-size: 17px;
+  letter-spacing: 0.3px;
+}
+#pos_view .pos-btn:hover{
+  filter: brightness(0.95);
+}
+
+/* ---- the products ---- */
+#pos_view .pos-products-head{
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eef1f4;
+}
+#pos_view .pos-search{
+  flex: 1 1 240px;
+  max-width: 340px;
+  position: relative;
+}
+#pos_view .pos-search .fa{
+  position: absolute;
+  left: 13px;
+  top: 12px;
+  color: #98a6ad;
+}
+#pos_view .pos-search .form-control{
+  height: 40px;
+  padding-left: 36px;
+  border: 1px solid #dfe5ea;
+  border-radius: 20px;
+  background: #f9fbfc;
+}
+#pos_view .pos-search .form-control:focus{
+  background: #fff;
+  border-color: #5fbeaa;
+  box-shadow: 0 0 0 3px rgba(95, 190, 170, 0.15);
+}
+/* the category pills wrap onto more lines when they don't fit */
+#pos_view .pos-categories{
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 0;
+}
+#pos_view .pos-categories .btn-categories{
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 16px;
+  margin: 0;
+  border: 1px solid #dfe5ea !important;
+  border-radius: 17px;
+  background: #fff !important;
+  color: #4c5667 !important;
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: none;
+}
+#pos_view .pos-categories .btn-categories:hover{
+  border-color: #5fbeaa !important;
+  color: #3e9e8a !important;
+}
+#pos_view .pos-categories .btn-categories.active{
+  border-color: #5fbeaa !important;
+  background: #5fbeaa !important;
+  color: #fff !important;
+}
+
+/* the grid of tiles */
+#pos_view #parent{
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 12px;
+  padding: 2px 4px 10px 2px;
+}
+#pos_view #parent::-webkit-scrollbar-thumb{
+  background-color: #d5dde3;
+}
+#pos_view #parent .box{
+  padding: 0;
+  border: 1px solid #e3e8ec;
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+}
+#pos_view #parent .box:hover{
+  border-color: #5fbeaa;
+  box-shadow: 0 6px 16px rgba(62, 158, 138, 0.14);
+  transform: translateY(-1px);
+}
+#pos_view #parent .box:active{
+  transform: translateY(0);
+}
+#pos_view .pos-tile{
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 10px 10px;
+  text-align: center;
+}
+#pos_view .pos-tile-picture{
+  width: 64px;
+  height: 64px;
+  margin-bottom: 8px;
+}
+#pos_view .pos-tile-photo,
+#pos_view .pos-tile-initial{
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  object-fit: cover;
+}
+#pos_view .pos-tile-initial{
+  font-size: 26px;
+}
+#pos_view #parent .box .pos-tile-name{
+  height: 38px;
+  width: 100%;
+  margin: 0 0 6px;
+  border: none;
+  line-height: 19px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #36404a;
+}
+#pos_view .pos-tile-stock{
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 1px 8px;
+  border-radius: 9px;
+  background: #f1f4f6;
+  color: #6c7a86;
+  font-size: 11.5px;
+}
+#pos_view .pos-tile-stock .stock{
+  font-size: inherit;
+}
+#pos_view .pos-tile-stock .count{
+  font-weight: 700;
+}
+#pos_view .pos-tile-stock-low{
+  background: #fff4e0;
+  color: #c97f12;
+}
+#pos_view .pos-tile-stock-none{
+  background: transparent;
+  color: #b4bec6;
+}
+#pos_view .pos-tile-stock-none .count{
+  font-weight: normal;
+}
+/* the price: at the bottom of every tile, on one line */
+#pos_view .pos-tile-price{
+  margin-top: auto;
+  width: 100%;
+  padding: 6px 4px;
+  border-radius: 8px;
+  background: #eef7f5;
+  color: #2f8f7b;
+  font-size: 15.5px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#pos_view .pos-tile-cur{
+  margin-right: 2px;
+  font-size: 0.78em;
+  font-weight: 700;
+  opacity: 0.85;
+}
+/* a price range may take two lines rather than be cut off */
+#pos_view .pos-tile-price-range{
+  font-size: 13.5px;
+  white-space: normal;
+  overflow: visible;
+}
+#pos_view .pos-tile-price-range .pos-tile-dash{
+  display: inline-block;
+}
+#pos_view .pos-tile-dash{
+  margin: 0 3px;
+  opacity: 0.7;
+}
+#pos_view .pos-tile-prices{
+  margin-top: 3px;
+  font-size: 11px;
+  color: #98a6ad;
+}
+#pos_view #parent .pos-no-stock{
+  grid-column: 1 / -1;
+  margin-top: 40px;
+  font-size: 14px;
+  text-align: center;
+}
+
+/* narrower windows: the bill and products stack */
+@media (max-width: 991px){
+  #pos_view .pos-bill,
+  #pos_view .pos-products{
+    height: auto;
+    min-height: 0;
+    margin-bottom: 16px;
+  }
+  #pos_view .pos-cart{
+    max-height: 320px;
+  }
+  #pos_view #parent{
+    height: 520px;
+  }
+  #pos_view .pos-search{
+    flex-basis: 200px;
+  }
+}
+@media (max-width: 1280px){
+  #pos_view .pos-search{
+    flex: 1 1 100%;
+    max-width: none;
+  }
+}
+/* the bill column is narrow here: no picture on the lines, tighter columns */
+@media (max-width: 1365px){
+  #pos_view .pos-line-picture{
+    display: none;
+  }
+  #pos_view #cartTable > thead > tr > th:nth-child(2){ width: 100px; }
+  #pos_view #cartTable > thead > tr > th:nth-child(3){ width: 96px; }
+  #pos_view #cartTable > thead > tr > th:nth-child(4){ width: 30px; }
+  #pos_view #cartTable > tbody > tr > td{
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  #pos_view .pos-step{
+    width: 26px;
+  }
+  #pos_view .pos-stepper .cart-quantity-form{
+    width: 34px !important;
+  }
+}
+/* the cart before anything was added (the rows are drawn by renderTable) */
+#pos_view .pos-cart:has(#cartTable > tbody:empty)::after{
+  content: "No items yet \2014  tap a product or scan a barcode";
+  display: block;
+  padding: 34px 10px;
+  text-align: center;
+  color: #98a6ad;
 }

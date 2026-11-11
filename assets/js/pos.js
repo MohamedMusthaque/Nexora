@@ -177,6 +177,13 @@ function amountInputText(value) {
   );
 })();
 
+// a steady colour (hue) per product name, for tiles and bill lines without a picture
+function posTileHue(name) {
+  let h = 0;
+  for (const ch of String(name || "")) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return h;
+}
+
 let categories = [];
 // products on the POS sale grid, grouped by category + name so that
 // same-name items with different prices/barcodes share one tile; the user
@@ -1086,10 +1093,11 @@ if (!authedThisSession) {
           });
           let minPrice = Math.min(...prices);
           let maxPrice = Math.max(...prices);
+          // one price, or the range ("Rs. 200.00 – 250.00", the symbol once)
           let priceLabel =
             minPrice === maxPrice
-              ? settings.symbol + moneyText(minPrice)
-              : `${settings.symbol}${moneyText(minPrice)} - ${settings.symbol}${moneyText(maxPrice)}`;
+              ? `<span class="pos-tile-cur">${txnHtml(settings.symbol)}</span>${moneyText(minPrice)}`
+              : `<span class="pos-tile-cur">${txnHtml(settings.symbol)}</span>${moneyText(minPrice)}<span class="pos-tile-dash">–</span>${moneyText(maxPrice)}`;
 
           let trackedVariants = group.variants.filter((v) => v.stock == 1);
           let totalStock = trackedVariants.reduce(
@@ -1098,25 +1106,25 @@ if (!authedThisSession) {
           );
           let stockLabel = trackedVariants.length > 0 ? totalStock : "N/A";
 
-          let item_info = `<div class="col-lg-2 box ${group.category}"
-                          onclick="$(this).selectVariant(${groupIndex})">
-                      <div class="widget-panel widget-style-2 ">
-                      <div id="image"><img src="${
-                        representative.img == ""
-                          ? "./assets/images/default.jpg"
-                          : img_path + representative.img
-                      }" id="product_img" alt=""></div>
-                                  <div class="text-muted m-t-5 text-center">
-                                  <div class="name" id="product_name">${
-                                    group.name
-                                  }</div>
-                                  <span class="sku">${
-                                    priceCount > 1
-                                      ? priceCount + " prices"
-                                      : representative.sku || ""
-                                  }</span>
-                                  <span class="stock">STOCK </span><span class="count">${stockLabel}</span></div>
-                                  <sp class="text-success text-center"><b data-plugin="counterup">${priceLabel}</b> </sp>
+          // the picture, or the name's first letter on a colour of its own
+          let picture = representative.img
+            ? `<img src="${img_path + representative.img}" class="pos-tile-photo" alt="">`
+            : `<span class="pos-tile-initial" style="--tile-hue: ${posTileHue(group.name)}">${txnHtml(
+                String(group.name || "?").trim().charAt(0).toUpperCase() || "?"
+              )}</span>`;
+          let low = trackedVariants.length > 0 && totalStock <= 5;
+          let stockBadge =
+            trackedVariants.length > 0
+              ? `<span class="pos-tile-stock${low ? " pos-tile-stock-low" : ""}" title="In stock"><span class="stock">${low ? "Only" : "Stock"}</span> <span class="count">${stockLabel}</span></span>`
+              : `<span class="pos-tile-stock pos-tile-stock-none" title="Stock isn't tracked for this product"><span class="count">No stock count</span></span>`;
+          let item_info = `<div class="box ${group.category}" onclick="$(this).selectVariant(${groupIndex})" title="${txnHtml(group.name)}">
+                      <div class="pos-tile">
+                          <div class="pos-tile-picture">${picture}</div>
+                          <div class="name pos-tile-name" id="product_name">${txnHtml(group.name)}</div>
+                          <span class="sku">${txnHtml(priceCount > 1 ? priceCount + " prices" : representative.sku || "")}</span>
+                          ${stockBadge}
+                          <div class="pos-tile-price${priceCount > 1 ? " pos-tile-price-range" : ""}">${priceLabel}</div>
+                          ${priceCount > 1 ? `<div class="pos-tile-prices">${priceCount} prices</div>` : ""}
                       </div>
                   </div>`;
           $("#parent").append(item_info);
@@ -1136,6 +1144,7 @@ if (!authedThisSession) {
     // finishes; otherwise buttons built before the category names arrive
     // end up with empty labels.
     function renderCategoryButtons() {
+      let current = $("#categories .btn-categories.active").attr("id") || "all";
       $("#categories").html(
         `<button type="button" id="all" class="btn btn-categories btn-white waves-effect waves-light">All</button> `
       );
@@ -1145,9 +1154,11 @@ if (!authedThisSession) {
         let label = c ? c.name : "Uncategorized";
 
         $("#categories").append(
-          `<button type="button" id="${category}" class="btn btn-categories btn-white waves-effect waves-light">${label}</button> `
+          `<button type="button" id="${category}" class="btn btn-categories btn-white waves-effect waves-light">${txnHtml(label)}</button> `
         );
       });
+      let $current = $("#categories .btn-categories").filter((i, b) => b.id === String(current));
+      ($current.length ? $current : $("#categories #all")).addClass("active");
     }
 
     function loadCategories() {
@@ -1469,6 +1480,8 @@ if (!authedThisSession) {
       let total = 0;
       let grossTotal;
       $("#total").text(cart.length);
+      let units = cart.reduce((n, c) => n + (parseInt(c.quantity) || 0), 0);
+      $("#posBillCount").text(units + (units === 1 ? " item" : " items"));
       $.each(cart, function (index, data) {
         total += data.quantity * data.price;
       });
@@ -1503,60 +1516,70 @@ if (!authedThisSession) {
       $("#cartTable > tbody").empty();
       $(this).calculateCart();
       $.each(cartList, function (index, data) {
+        let name = String(data.product_name || "");
+        let picture = data.img
+          ? $("<img>", { src: img_path + data.img, class: "pos-line-photo", alt: "" })
+          : $("<span>", {
+              class: "pos-line-initial",
+              style: "--tile-hue: " + posTileHue(name),
+              text: name.trim().charAt(0).toUpperCase() || "?",
+            });
         $("#cartTable > tbody").append(
           $("<tr>").append(
-            $("<td>", { text: index + 1 }),
-            $("<td>").append(
-              $("<span>", { text: data.product_name }),
-              data.batch_code ? [$("<br>"), $("<small>", { class: "text-muted", text: data.batch_code })] : []
-            ),
-            $("<td>").append(
-              $("<div>", { id: "image", class: "cart-image-wrapper" }).append(
-                $("<img>", {
-                  src:
-                    data.img == ""
-                      ? "./assets/images/default.jpg"
-                      : img_path + data.img,
-                  id: "product_img",
-                  alt: "",
-                  class: "cart-image",
-                })
-              )
-            ),
-            $("<td>").append(
-              $("<div>", { class: "input-group" }).append(
-                $("<div>", { class: "input-group-btn btn-xs" }).append(
-                  $("<button>", {
-                    class: "btn btn-default btn-xs increase-btn",
-                    onclick: "$(this).qtDecrement(" + index + ")",
-                  }).append($("<i>", { class: "fa fa-minus" }))
-                ),
-                $("<input>", {
-                  class: "cart-quantity-form",
-
-                  value: data.quantity,
-                  onInput: "$(this).qtInput(" + index + ")",
-                }),
-                $("<div>", { class: "input-group-btn btn-xs" }).append(
-                  $("<button>", {
-                    class: "btn btn-default btn-xs increase-btn",
-                    onclick: "$(this).qtIncrement(" + index + ")",
-                  }).append($("<i>", { class: "fa fa-plus" }))
+            $("<td>", { class: "pos-line-item" }).append(
+              $("<div>", { class: "pos-line" }).append(
+                $("<div>", { class: "pos-line-picture" }).append(picture),
+                $("<div>", { class: "pos-line-text" }).append(
+                  $("<span>", { class: "pos-line-name", text: name, title: name }),
+                  $("<small>", {
+                    class: "pos-line-unit",
+                    text: settings.symbol + moneyText(data.price) + " each" + (data.batch_code ? " · " + data.batch_code : ""),
+                  })
                 )
               )
             ),
+            $("<td>", { class: "pos-line-qty" }).append(
+              $("<div>", { class: "pos-stepper" }).append(
+                $("<button>", {
+                  type: "button",
+                  class: "pos-step",
+                  title: "One less",
+                  onclick: "$(this).qtDecrement(" + index + ")",
+                }).append($("<i>", { class: "fa fa-minus" })),
+                $("<input>", {
+                  class: "cart-quantity-form",
+                  value: data.quantity,
+                  inputmode: "numeric",
+                  onInput: "$(this).qtInput(" + index + ")",
+                }),
+                $("<button>", {
+                  type: "button",
+                  class: "pos-step",
+                  title: "One more",
+                  onclick: "$(this).qtIncrement(" + index + ")",
+                }).append($("<i>", { class: "fa fa-plus" }))
+              )
+            ),
             $("<td>", {
-              text: settings.symbol + moneyText((data.price * data.quantity)),
+              class: "pos-line-total",
+              text: settings.symbol + moneyText(data.price * data.quantity),
             }),
-            $("<td>").append(
+            $("<td>", { class: "pos-line-remove" }).append(
               $("<button>", {
-                class: "btn btn-danger btn-xs",
+                type: "button",
+                class: "pos-remove",
+                title: "Remove",
                 onclick: "$(this).deleteFromCart(" + index + ")",
               }).append($("<i>", { class: "fa fa-times" }))
             )
           )
         );
       });
+      if (!cartList.length) {
+        $("#cartTable > tbody").html(
+          '<tr class="pos-cart-empty"><td colspan="4"><i class="fa fa-shopping-basket"></i><br>No items yet<br><small>Tap a product or scan a barcode</small></td></tr>'
+        );
+      }
     };
 
     $.fn.deleteFromCart = function (index) {
