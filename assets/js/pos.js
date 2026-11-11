@@ -2586,8 +2586,8 @@ if (!authedThisSession) {
       });
     });
 
-    // updating customer details
-    $("#editCustomer").on("submit", function (e) {
+    // updating customer details (the form inside the #editCustomer window)
+    $("#editCustomerForm").on("submit", function (e) {
       e.preventDefault();
 
       let credit = readCreditFields("#creditTypeEdit", "#creditLimitEdit");
@@ -3304,6 +3304,7 @@ if (!authedThisSession) {
 
       // $(".perms").show();
 
+      $("#editCustomerSub").text(allCustomers[index].name || "Name, contact and credit");
       $("#customer_id_edit").val(allCustomers[index]._id);
       $("#userNameEdit").val(allCustomers[index].name);
       $("#phoneNumberEdit").val(allCustomers[index].phone);

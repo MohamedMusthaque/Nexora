@@ -5186,7 +5186,8 @@ body.transactions-mode #transactions_view .txn-page{
   }
 }
 
-/* ---- Account Information window (#userModal) + Add / Edit Product (#newProduct)
+/* ---- Account Information window (#userModal), Add / Edit Product (#newProduct)
+   and New / Edit Customer (#newCustomer, #editCustomer) share this look ----
    [avatar] My Account / New User / Edit User          ×
             @username
    PROFILE      Full Name | Username
@@ -5194,7 +5195,9 @@ body.transactions-mode #transactions_view .txn-page{
    PERMISSIONS  toggle cards in groups (Administrator only)
    [Cancel] [Save]  (always in view; the middle scrolls on short screens) */
 #userModal .account-dialog,
-#newProduct .account-dialog{
+#newProduct .account-dialog,
+#newCustomer .account-dialog,
+#editCustomer .account-dialog{
   width: min(520px, calc(100vw - 30px));
   margin: 30px auto;
 }
@@ -5202,7 +5205,9 @@ body.transactions-mode #transactions_view .txn-page{
   width: min(720px, calc(100vw - 30px));
 }
 #userModal .modal-content,
-#newProduct .modal-content{
+#newProduct .modal-content,
+#newCustomer .modal-content,
+#editCustomer .modal-content{
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 60px);
@@ -5215,7 +5220,9 @@ body.transactions-mode #transactions_view .txn-page{
 
 /* header */
 #userModal .account-hero,
-#newProduct .account-hero{
+#newProduct .account-hero,
+#newCustomer .account-hero,
+#editCustomer .account-hero{
   flex: 0 0 auto;
   position: relative;
   display: flex;
@@ -5226,7 +5233,9 @@ body.transactions-mode #transactions_view .txn-page{
   color: #fff;
 }
 #userModal .account-hero .close,
-#newProduct .account-hero .close{
+#newProduct .account-hero .close,
+#newCustomer .account-hero .close,
+#editCustomer .account-hero .close{
   position: absolute;
   top: 12px;
   right: 16px;
@@ -5236,11 +5245,15 @@ body.transactions-mode #transactions_view .txn-page{
   font-size: 26px;
 }
 #userModal .account-hero .close:hover,
-#newProduct .account-hero .close:hover{
+#newProduct .account-hero .close:hover,
+#newCustomer .account-hero .close:hover,
+#editCustomer .account-hero .close:hover{
   opacity: 1;
 }
 #userModal .account-avatar,
-#newProduct .account-avatar{
+#newProduct .account-avatar,
+#newCustomer .account-avatar,
+#editCustomer .account-avatar{
   flex: 0 0 58px;
   height: 58px;
   border-radius: 50%;
@@ -5255,23 +5268,31 @@ body.transactions-mode #transactions_view .txn-page{
   box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.25);
 }
 #userModal .account-hero-text,
-#newProduct .account-hero-text{
+#newProduct .account-hero-text,
+#newCustomer .account-hero-text,
+#editCustomer .account-hero-text{
   min-width: 0;
 }
 #userModal .account-hero .modal-title,
-#newProduct .account-hero .modal-title{
+#newProduct .account-hero .modal-title,
+#newCustomer .account-hero .modal-title,
+#editCustomer .account-hero .modal-title{
   margin: 0;
   color: #fff;
   font-size: 20px;
   font-weight: 600;
 }
 #userModal .account-hero .modal-title .loading,
-#newProduct .account-hero .modal-title .loading{
+#newProduct .account-hero .modal-title .loading,
+#newCustomer .account-hero .modal-title .loading,
+#editCustomer .account-hero .modal-title .loading{
   margin-left: 8px;
   vertical-align: middle;
 }
 #userModal #accountSubtitle,
-#newProduct .account-subtitle{
+#newProduct .account-subtitle,
+#newCustomer .account-subtitle,
+#editCustomer .account-subtitle{
   margin: 3px 0 0;
   font-size: 13px;
   color: rgba(255, 255, 255, 0.85);
@@ -5282,23 +5303,31 @@ body.transactions-mode #transactions_view .txn-page{
 
 /* body: sections */
 #userModal .modal-body,
-#newProduct .modal-body{
+#newProduct .modal-body,
+#newCustomer .modal-body,
+#editCustomer .modal-body{
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding: 18px 24px 6px;
 }
 #userModal .account-section,
-#newProduct .account-section{
+#newProduct .account-section,
+#newCustomer .account-section,
+#editCustomer .account-section{
   margin-bottom: 14px;
 }
 #userModal .account-section + .account-section,
-#newProduct .account-section + .account-section{
+#newProduct .account-section + .account-section,
+#newCustomer .account-section + .account-section,
+#editCustomer .account-section + .account-section{
   padding-top: 14px;
   border-top: 1px solid #eef1f4;
 }
 #userModal .account-section-title,
-#newProduct .account-section-title{
+#newProduct .account-section-title,
+#newCustomer .account-section-title,
+#editCustomer .account-section-title{
   margin: 0 0 10px;
   font-size: 12px;
   font-weight: 700;
@@ -5307,31 +5336,43 @@ body.transactions-mode #transactions_view .txn-page{
   color: #98a6ad;
 }
 #userModal .account-section-title > .fa,
-#newProduct .account-section-title > .fa{
+#newProduct .account-section-title > .fa,
+#newCustomer .account-section-title > .fa,
+#editCustomer .account-section-title > .fa{
   margin-right: 5px;
   color: #5fbeaa;
 }
 #userModal .form-group,
-#newProduct .form-group{
+#newProduct .form-group,
+#newCustomer .form-group,
+#editCustomer .form-group{
   margin-bottom: 10px;
 }
 #userModal label,
-#newProduct label{
+#newProduct label,
+#newCustomer label,
+#editCustomer label{
   font-weight: 600;
   color: #4c5667;
   margin-bottom: 5px;
 }
 #userModal .account-required,
-#newProduct .account-required{
+#newProduct .account-required,
+#newCustomer .account-required,
+#editCustomer .account-required{
   color: #ef5350;
 }
 #userModal .form-control,
-#newProduct .form-control{
+#newProduct .form-control,
+#newCustomer .form-control,
+#editCustomer .form-control{
   height: 40px;
   border-radius: 6px;
 }
 #userModal .account-hint,
-#newProduct .account-hint{
+#newProduct .account-hint,
+#newCustomer .account-hint,
+#editCustomer .account-hint{
   margin: 0;
   font-size: 12px;
   color: #98a6ad;
@@ -5461,7 +5502,9 @@ body.transactions-mode #transactions_view .txn-page{
 
 /* footer */
 #userModal .account-footer,
-#newProduct .account-footer{
+#newProduct .account-footer,
+#newCustomer .account-footer,
+#editCustomer .account-footer{
   flex: 0 0 auto;
   display: flex;
   justify-content: flex-end;
@@ -5471,19 +5514,25 @@ body.transactions-mode #transactions_view .txn-page{
   background: #fafbfc;
 }
 #userModal .account-footer .btn,
-#newProduct .account-footer .btn{
+#newProduct .account-footer .btn,
+#newCustomer .account-footer .btn,
+#editCustomer .account-footer .btn{
   min-width: 96px;
   height: 38px;
   border-radius: 6px;
 }
 #userModal .account-footer .btn-default,
-#newProduct .account-footer .btn-default{
+#newProduct .account-footer .btn-default,
+#newCustomer .account-footer .btn-default,
+#editCustomer .account-footer .btn-default{
   background: #fff !important;
   border: 1px solid #d5dbe0 !important;
   color: #4c5667 !important;
 }
 #userModal .account-footer .btn-primary > .fa,
-#newProduct .account-footer .btn-primary > .fa{
+#newProduct .account-footer .btn-primary > .fa,
+#newCustomer .account-footer .btn-primary > .fa,
+#editCustomer .account-footer .btn-primary > .fa{
   margin-right: 4px;
 }
 /* Add / Edit Product: the parts the Account window doesn't have */

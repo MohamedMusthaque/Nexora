@@ -1110,100 +1110,146 @@
       </div><!-- /.modal-dialog -->
   </div><!-- /.modal -->
   
-  <div id="newCustomer" class="modal fade bs-example-modal-sm" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" style="display: none;">
-      <div class="modal-dialog modal-sm">
+  <!-- New / Edit Customer: same look as the Account window (#userModal):
+       green header, sections, Cancel / Save always in view -->
+  <div id="newCustomer" class="modal fade account-modal" tabindex="-1" role="dialog" aria-labelledby="newCustomerTitle" aria-hidden="true" style="display: none;">
+      <div class="modal-dialog account-dialog">
           <div class="modal-content">
-              <div class="modal-header">
+              <div class="account-hero">
                   <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-                  <h4 class="modal-title" id="mySmallModalLabel">New Customer
-                      <img  class="loading m-t-5" style="margin-left: 35%" height="50px" src="assets/images/loading.gif" alt="">
-                  </h4>
+                  <div class="account-avatar"><i class="fa fa-user-plus"></i></div>
+                  <div class="account-hero-text">
+                      <h4 class="modal-title" id="newCustomerTitle">New Customer
+                          <img class="loading" height="22" src="assets/images/loading.gif" alt="">
+                      </h4>
+                      <p class="account-subtitle" id="newCustomerSub">Name, contact and credit</p>
+                  </div>
               </div>
               <div class="modal-body">
-                  <form id="saveCustomer" data-parsley-validate>
-                    <input type="hidden" name="id" id="customer_id">
-                      <div class="form-group">
-                          <label for="userName">Customer Name*</label>
-                          <input type="text" required="required"  name="name" parsley-trigger="change" placeholder="Enter name" class="form-control" id="userName">
-                      </div>
-                      <div class="form-group">
-                          <label for="userName">Customer Phone</label>
-                          <input type="text" name="phone" parsley-trigger="change" placeholder="Enter Phone number" class="form-control" id="phoneNumber">
-                      </div>
-                      <div class="form-group">
-                          <label for="userName">Customer Email</label>
-                          <input type="email" name="email" parsley-trigger="change" placeholder="Enter email address" class="form-control" id="emailAddress">
-                      </div>
-                      <div class="form-group">
-                          <label for="userName">Customer Address</label>
-                          <input type="text" name="address" parsley-trigger="change" placeholder="Enter address" class="form-control" id="userAddress">
-                      </div>
-                      <div class="form-group">
-                          <label for="creditType">Credit</label>
-                          <select id="creditType" class="form-control credit-type-select" data-limit-group="#creditLimitGroup">
-                              <option value="unlimited">Unlimited credit</option>
-                              <option value="limited">Credit limit</option>
-                          </select>
-                      </div>
-                      <div class="form-group" id="creditLimitGroup" style="display: none;">
-                          <label for="creditLimit">Credit limit amount*</label>
-                          <input autocomplete="off" inputmode="decimal" type="text" placeholder="Maximum outstanding credit" class="form-control amount-input" id="creditLimit">
+                  <form id="saveCustomer" data-parsley-validate autocomplete="off">
+                      <input type="hidden" name="id" id="customer_id">
+
+                      <div class="account-section">
+                          <h5 class="account-section-title"><i class="fa fa-user"></i> Profile</h5>
+                          <div class="row">
+                              <div class="col-sm-6 form-group">
+                                  <label for="userName">Customer Name <span class="account-required">*</span></label>
+                                  <input type="text" required="required" name="name" parsley-trigger="change" placeholder="Enter name" class="form-control" id="userName">
+                              </div>
+                              <div class="col-sm-6 form-group">
+                                  <label for="phoneNumber">Phone</label>
+                                  <input type="text" name="phone" parsley-trigger="change" placeholder="Phone number" class="form-control" id="phoneNumber">
+                              </div>
+                          </div>
+                          <div class="row">
+                              <div class="col-sm-6 form-group">
+                                  <label for="emailAddress">Email</label>
+                                  <input type="email" name="email" parsley-trigger="change" placeholder="Email address" class="form-control" id="emailAddress">
+                              </div>
+                              <div class="col-sm-6 form-group">
+                                  <label for="userAddress">Address</label>
+                                  <input type="text" name="address" parsley-trigger="change" placeholder="Address" class="form-control" id="userAddress">
+                              </div>
+                          </div>
                       </div>
 
-                      <input type="submit" class="btn btn-primary btn-block waves-effect waves-light">
+                      <div class="account-section">
+                          <h5 class="account-section-title"><i class="fa fa-credit-card"></i> Credit</h5>
+                          <div class="row">
+                              <div class="col-sm-6 form-group">
+                                  <label for="creditType">Credit</label>
+                                  <select id="creditType" class="form-control credit-type-select" data-limit-group="#creditLimitGroup">
+                                      <option value="unlimited">Unlimited credit</option>
+                                      <option value="limited">Credit limit</option>
+                                  </select>
+                              </div>
+                              <div class="col-sm-6 form-group" id="creditLimitGroup" style="display: none;">
+                                  <label for="creditLimit">Credit limit amount <span class="account-required">*</span></label>
+                                  <input autocomplete="off" inputmode="decimal" type="text" placeholder="Maximum outstanding credit" class="form-control amount-input" id="creditLimit">
+                              </div>
+                          </div>
+                          <p class="account-hint"><i class="fa fa-info-circle"></i> Unlimited, or the most this customer may owe at one time.</p>
+                      </div>
                   </form>
+              </div>
+              <div class="modal-footer account-footer">
+                  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                  <button type="submit" form="saveCustomer" class="btn btn-primary waves-effect waves-light"><i class="fa fa-check"></i> Save</button>
               </div>
           </div>
       </div>
   </div>
 
-  <!-- edit customer -->
-  <div id="editCustomer" class="modal fade bs-example-modal-sm" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" style="display: none;">
-    <div class="modal-dialog modal-sm">
-        <div class="modal-content">
-            <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-                <h4 class="modal-title" id="mySmallModalLabel">Edit Customer
-                    <img  class="loading m-t-5" style="margin-left: 35%" height="50px" src="assets/images/loading.gif" alt="">
-                </h4>
-            </div>
-            <div class="modal-body">
-                <form id="editCustomer" data-parsley-validate>
-                  <input type="hidden" name="id" id="customer_id_edit">
-                    <div class="form-group">
-                        <label for="userName">Customer Name*</label>
-                        <input type="text" required="required"  name="name" parsley-trigger="change" placeholder="Enter name" class="form-control" id="userNameEdit">
-                    </div>
-                    <div class="form-group">
-                        <label for="userName">Customer Phone</label>
-                        <input type="text" name="phone" parsley-trigger="change" placeholder="Enter Phone number" class="form-control" id="phoneNumberEdit">
-                    </div>
-                    <div class="form-group">
-                        <label for="userName">Customer Email</label>
-                        <input type="email" name="email" parsley-trigger="change" placeholder="Enter email address" class="form-control" id="emailAddressEdit">
-                    </div>
-                    <div class="form-group">
-                        <label for="userName">Customer Address</label>
-                        <input type="text" name="address" parsley-trigger="change" placeholder="Enter address" class="form-control" id="userAddressEdit">
-                    </div>
-                    <div class="form-group">
-                        <label for="creditTypeEdit">Credit</label>
-                        <select id="creditTypeEdit" class="form-control credit-type-select" data-limit-group="#creditLimitGroupEdit">
-                            <option value="unlimited">Unlimited credit</option>
-                            <option value="limited">Credit limit</option>
-                        </select>
-                    </div>
-                    <div class="form-group" id="creditLimitGroupEdit" style="display: none;">
-                        <label for="creditLimitEdit">Credit limit amount*</label>
-                        <input autocomplete="off" inputmode="decimal" type="text" placeholder="Maximum outstanding credit" class="form-control amount-input" id="creditLimitEdit">
-                    </div>
+  <!-- edit customer (pos.js: editCustomer); the form has its own id so the
+       footer's Save button can submit it -->
+  <div id="editCustomer" class="modal fade account-modal" tabindex="-1" role="dialog" aria-labelledby="editCustomerTitle" aria-hidden="true" style="display: none;">
+      <div class="modal-dialog account-dialog">
+          <div class="modal-content">
+              <div class="account-hero">
+                  <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                  <div class="account-avatar"><i class="fa fa-user"></i></div>
+                  <div class="account-hero-text">
+                      <h4 class="modal-title" id="editCustomerTitle">Edit Customer
+                          <img class="loading" height="22" src="assets/images/loading.gif" alt="">
+                      </h4>
+                      <p class="account-subtitle" id="editCustomerSub">Name, contact and credit</p>
+                  </div>
+              </div>
+              <div class="modal-body">
+                  <form id="editCustomerForm" data-parsley-validate autocomplete="off">
+                      <input type="hidden" name="id" id="customer_id_edit">
 
-                    <input type="submit" class="btn btn-primary btn-block waves-effect waves-light">
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
+                      <div class="account-section">
+                          <h5 class="account-section-title"><i class="fa fa-user"></i> Profile</h5>
+                          <div class="row">
+                              <div class="col-sm-6 form-group">
+                                  <label for="userNameEdit">Customer Name <span class="account-required">*</span></label>
+                                  <input type="text" required="required" name="name" parsley-trigger="change" placeholder="Enter name" class="form-control" id="userNameEdit">
+                              </div>
+                              <div class="col-sm-6 form-group">
+                                  <label for="phoneNumberEdit">Phone</label>
+                                  <input type="text" name="phone" parsley-trigger="change" placeholder="Phone number" class="form-control" id="phoneNumberEdit">
+                              </div>
+                          </div>
+                          <div class="row">
+                              <div class="col-sm-6 form-group">
+                                  <label for="emailAddressEdit">Email</label>
+                                  <input type="email" name="email" parsley-trigger="change" placeholder="Email address" class="form-control" id="emailAddressEdit">
+                              </div>
+                              <div class="col-sm-6 form-group">
+                                  <label for="userAddressEdit">Address</label>
+                                  <input type="text" name="address" parsley-trigger="change" placeholder="Address" class="form-control" id="userAddressEdit">
+                              </div>
+                          </div>
+                      </div>
+
+                      <div class="account-section">
+                          <h5 class="account-section-title"><i class="fa fa-credit-card"></i> Credit</h5>
+                          <div class="row">
+                              <div class="col-sm-6 form-group">
+                                  <label for="creditTypeEdit">Credit</label>
+                                  <select id="creditTypeEdit" class="form-control credit-type-select" data-limit-group="#creditLimitGroupEdit">
+                                      <option value="unlimited">Unlimited credit</option>
+                                      <option value="limited">Credit limit</option>
+                                  </select>
+                              </div>
+                              <div class="col-sm-6 form-group" id="creditLimitGroupEdit" style="display: none;">
+                                  <label for="creditLimitEdit">Credit limit amount <span class="account-required">*</span></label>
+                                  <input autocomplete="off" inputmode="decimal" type="text" placeholder="Maximum outstanding credit" class="form-control amount-input" id="creditLimitEdit">
+                              </div>
+                          </div>
+                          <p class="account-hint"><i class="fa fa-info-circle"></i> Unlimited, or the most this customer may owe at one time.</p>
+                      </div>
+                  </form>
+              </div>
+              <div class="modal-footer account-footer">
+                  <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                  <button type="submit" form="editCustomerForm" class="btn btn-primary waves-effect waves-light"><i class="fa fa-check"></i> Save</button>
+              </div>
+          </div>
+      </div>
+  </div>
+
 
   <!-- end of edit customer -->
 
