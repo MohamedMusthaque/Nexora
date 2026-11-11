@@ -3051,6 +3051,7 @@ if (!authedThisSession) {
       $("#perm_suppliers").prop("checked", allUsers[index].perm_suppliers == 1);
       $("#perm_journal").prop("checked", allUsers[index].perm_journal == 1);
 
+      setAccountHeader("edit", allUsers[index]);
       $("#userModal").modal("show");
     };
 
@@ -5017,6 +5018,7 @@ if (!authedThisSession) {
       $("#perm_expenses").prop("checked", user.perm_expenses == 1);
       $("#perm_suppliers").prop("checked", user.perm_suppliers == 1);
       $("#perm_journal").prop("checked", user.perm_journal == 1);
+      setAccountHeader("own", user);
     });
 
     $("#add-user").click(function () {
@@ -5032,6 +5034,8 @@ if (!authedThisSession) {
       }
 
       $("#saveUser").get(0).reset();
+      $("#user_id").val("");
+      setAccountHeader("new", null);
       $("#userModal").modal("show");
     });
 
@@ -11550,5 +11554,59 @@ $(function () {
   $("#accountsDetailHead").on("click", ".accounts-back", function (e) {
     e.preventDefault();
     showAccount($(this).attr("data-account"));
+  });
+});
+
+
+// ---- Account Information window (#userModal) --------------------------------
+// One window for My Account (the user button), New User and Edit User: the
+// header says which, with the person's initials; permissions (Administrator
+// only) are toggle cards.
+function setAccountHeader(mode, person) {
+  setTimeout(syncAccountPerms, 0); // the checkboxes were just set from the record
+  let titles = { own: "My Account", new: "New User", edit: "Edit User" };
+  $("#accountTitle").text(titles[mode] || "Account Information");
+  let isAdmin = person && person._id == 1;
+  $("#accountSubtitle").text(
+    mode === "new"
+      ? "Create a login and choose what they can do"
+      : "@" + ((person && person.username) || "") + (isAdmin ? " · Administrator" : "")
+  );
+  $("#accountPasswordHint").html(
+    '<i class="fa fa-info-circle"></i> ' +
+      (mode === "new" ? "Choose a password and type it again." : "Leave the password as it is to keep it.")
+  );
+  updateAccountAvatar();
+}
+
+// the avatar shows the name's initials ("Mohamed Musthaque" -> "MM")
+function updateAccountAvatar() {
+  let words = $.trim($("#fullname").val() || "").split(/\s+/).filter(Boolean);
+  let initials = words.slice(0, 2).map((w) => w.charAt(0).toUpperCase()).join("");
+  $("#accountAvatar").html(initials ? txnHtml(initials) : '<i class="fa fa-user"></i>');
+}
+
+// each permission card shows its checkbox's state (the switch and the card's
+// colours follow .is-on); the checkboxes are also set from code, so this runs
+// when the window opens and after Allow all / None
+function syncAccountPerms() {
+  $("#userModal .account-perm").each(function () {
+    $(this).toggleClass("is-on", $(this).find("input[type=checkbox]").prop("checked"));
+  });
+}
+
+$(function () {
+  $("#fullname").on("input", updateAccountAvatar);
+  $("#userModal").on("change", ".account-perm input[type=checkbox]", syncAccountPerms);
+  // wider when the permissions are shown
+  $("#userModal").on("show.bs.modal", function (e) {
+    if (e.target !== this) return;
+    $(this).find(".account-dialog").toggleClass("account-with-perms", $(this).find(".perms").css("display") !== "none");
+    syncAccountPerms();
+  });
+  $("#accountPermsAll, #accountPermsNone").on("click", function (e) {
+    e.preventDefault();
+    $("#userModal .perms input[type=checkbox]").prop("checked", this.id === "accountPermsAll");
+    syncAccountPerms();
   });
 });

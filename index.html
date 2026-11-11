@@ -2220,79 +2220,129 @@
 
 
 
-     <div id="userModal" class="modal fade bs-example-modal-sm" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" style="display: none;">
-        <div class="modal-dialog modal-sm">
+     <!-- Account Information: My Account (#cashier), New User (#add-user) and
+          Edit User (Users list). pos.js: setAccountHeader; permissions only for
+          the Administrator (.perms). -->
+     <div id="userModal" class="modal fade account-modal" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" style="display: none;">
+        <div class="modal-dialog account-dialog">
             <div class="modal-content">
-                <div class="modal-header">
+                <div class="account-hero">
                     <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-                    <h4 class="modal-title" id="mySmallModalLabel">Account Information
-                        <img  class="loading m-t-5" style="margin-left: 35%" height="50px" src="assets/images/loading.gif" alt="">
-                    </h4>
+                    <div class="account-avatar" id="accountAvatar"><i class="fa fa-user"></i></div>
+                    <div class="account-hero-text">
+                        <h4 class="modal-title" id="mySmallModalLabel"><span id="accountTitle">Account Information</span>
+                            <img class="loading" height="22" src="assets/images/loading.gif" alt="">
+                        </h4>
+                        <p id="accountSubtitle">Name, login and password</p>
+                    </div>
                 </div>
                 <div class="modal-body">
-                    <form id="saveUser" data-parsley-validate>
+                    <form id="saveUser" data-parsley-validate autocomplete="off">
                         <input type="hidden" name="id" id="user_id">
-                        <div class="form-group">
-                            <label for="userName">Name*</label>
-                            <input type="text" required="required"  name="fullname" parsley-trigger="change" placeholder="Enter name" class="form-control" id="fullname">
-                        </div>
-                        <div class="form-group">
-                            <label for="userName">Username*</label>
-                            <input type="text" name="username" parsley-trigger="change" placeholder="Login Username" class="form-control" id="username">
-                        </div>
-                        <div class="form-group">
-                            <label for="userName">Password</label>
-                            <input type="password" name="password" parsley-trigger="change" placeholder="Password" class="form-control" id="password">
-                        </div>
-                        <div class="form-group">
-                            <label for="userName">Repeat Password</label>
-                            <input type="password" name="pass" parsley-trigger="change" placeholder="Repeat" class="form-control" id="pass">
+
+                        <div class="account-section">
+                            <h5 class="account-section-title"><i class="fa fa-user"></i> Profile</h5>
+                            <div class="row">
+                                <div class="col-sm-6 form-group">
+                                    <label for="fullname">Full Name <span class="account-required">*</span></label>
+                                    <input type="text" required="required" name="fullname" parsley-trigger="change" placeholder="e.g. Mohamed Musthaque" class="form-control" id="fullname" maxlength="60">
+                                </div>
+                                <div class="col-sm-6 form-group">
+                                    <label for="username">Username <span class="account-required">*</span></label>
+                                    <input type="text" name="username" parsley-trigger="change" placeholder="Used to log in" class="form-control" id="username" maxlength="30">
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="perms">
-
-                            <h4 style="font-size: 22px; margin-top: 20px;">Permissions</h4>
-                            <hr>
-    
-                            <div class="form-group">
-                                  <span><input type="checkbox" name="perm_products" id="perm_products"> Manage Products and Stock </span>
+                        <div class="account-section">
+                            <h5 class="account-section-title"><i class="fa fa-lock"></i> Password</h5>
+                            <div class="row">
+                                <div class="col-sm-6 form-group">
+                                    <label for="password">Password</label>
+                                    <input type="password" name="password" parsley-trigger="change" placeholder="Password" class="form-control" id="password">
+                                </div>
+                                <div class="col-sm-6 form-group">
+                                    <label for="pass">Repeat Password</label>
+                                    <input type="password" name="pass" parsley-trigger="change" placeholder="Type it again" class="form-control" id="pass">
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <span><input type="checkbox" name="perm_categories" id="perm_categories"> Manage Product Categories </span>
-                          </div>
-                          <div class="form-group">
-                            <span><input type="checkbox" name="perm_transactions" id="perm_transactions"> View Transactions </span>
-                           </div>
-                          <div class="form-group">
-                            <span><input type="checkbox" name="perm_profit" id="perm_profit"> View Profit </span>
-                           </div>
-                          <div class="form-group">
-                            <span><input type="checkbox" name="perm_expenses" id="perm_expenses"> Manage Expenses </span>
-                           </div>
-                          <div class="form-group">
-                            <span><input type="checkbox" name="perm_suppliers" id="perm_suppliers"> Manage Suppliers &amp; GRN </span>
-                           </div>
-                          <div class="form-group">
-                            <span><input type="checkbox" name="perm_journal" id="perm_journal"> View Quick Journal, Day End &amp; Accounts </span>
-                           </div>
-                                <div class="form-group">
-                                    <span><input type="checkbox" name="perm_users" id="perm_users"> Manage Users and Permissions </span>
-                            </div>
-                            <div class="form-group">
-                                <span><input type="checkbox" name="perm_settings" id="perm_settings"> Manage Settings </span>
-                            </div>
-    
+                            <p class="account-hint" id="accountPasswordHint"><i class="fa fa-info-circle"></i> Leave the password as it is to keep it.</p>
                         </div>
-           
-                        <input type="submit" class="btn btn-primary btn-block waves-effect waves-light">
+
+                        <div class="perms account-section">
+                            <div class="account-perms-head">
+                                <h5 class="account-section-title"><i class="fa fa-shield"></i> Permissions</h5>
+                                <span class="account-perms-quick">
+                                    <a href="#" id="accountPermsAll">Allow all</a> · <a href="#" id="accountPermsNone">None</a>
+                                </span>
+                            </div>
+
+                            <div class="account-perm-group">Sales &amp; Products</div>
+                            <div class="account-perm-grid">
+                                <label class="account-perm" for="perm_products">
+                                    <span class="account-perm-icon"><i class="fa fa-barcode"></i></span>
+                                    <span class="account-perm-text"><b>Manage Products and Stock</b><small>Add &amp; edit products, stock adjustments</small></span>
+                                    <input type="checkbox" name="perm_products" id="perm_products"><span class="account-switch"></span>
+                                </label>
+                                <label class="account-perm" for="perm_categories">
+                                    <span class="account-perm-icon"><i class="fa fa-tags"></i></span>
+                                    <span class="account-perm-text"><b>Manage Product Categories</b><small>Create, rename &amp; delete categories</small></span>
+                                    <input type="checkbox" name="perm_categories" id="perm_categories"><span class="account-switch"></span>
+                                </label>
+                                <label class="account-perm" for="perm_transactions">
+                                    <span class="account-perm-icon"><i class="fa fa-list-alt"></i></span>
+                                    <span class="account-perm-text"><b>View Transactions</b><small>Bills, payments &amp; products sold</small></span>
+                                    <input type="checkbox" name="perm_transactions" id="perm_transactions"><span class="account-switch"></span>
+                                </label>
+                                <label class="account-perm" for="perm_profit">
+                                    <span class="account-perm-icon"><i class="fa fa-line-chart"></i></span>
+                                    <span class="account-perm-text"><b>View Profit</b><small>Cost, profit &amp; margin on sales</small></span>
+                                    <input type="checkbox" name="perm_profit" id="perm_profit"><span class="account-switch"></span>
+                                </label>
+                            </div>
+
+                            <div class="account-perm-group">Back Office</div>
+                            <div class="account-perm-grid">
+                                <label class="account-perm" for="perm_expenses">
+                                    <span class="account-perm-icon"><i class="fa fa-file-text-o"></i></span>
+                                    <span class="account-perm-text"><b>Manage Expenses</b><small>Record expenses &amp; expense types</small></span>
+                                    <input type="checkbox" name="perm_expenses" id="perm_expenses"><span class="account-switch"></span>
+                                </label>
+                                <label class="account-perm" for="perm_suppliers">
+                                    <span class="account-perm-icon"><i class="fa fa-truck"></i></span>
+                                    <span class="account-perm-text"><b>Manage Suppliers &amp; GRN</b><small>Suppliers, GRNs, PRNs &amp; payments</small></span>
+                                    <input type="checkbox" name="perm_suppliers" id="perm_suppliers"><span class="account-switch"></span>
+                                </label>
+                                <label class="account-perm" for="perm_journal">
+                                    <span class="account-perm-icon"><i class="fa fa-book"></i></span>
+                                    <span class="account-perm-text"><b>Quick Journal, Day End &amp; Accounts</b><small>Money in &amp; out, transfers, accounts</small></span>
+                                    <input type="checkbox" name="perm_journal" id="perm_journal"><span class="account-switch"></span>
+                                </label>
+                            </div>
+
+                            <div class="account-perm-group">Administration</div>
+                            <div class="account-perm-grid">
+                                <label class="account-perm" for="perm_users">
+                                    <span class="account-perm-icon"><i class="fa fa-users"></i></span>
+                                    <span class="account-perm-text"><b>Manage Users and Permissions</b><small>Add users &amp; choose what they can do</small></span>
+                                    <input type="checkbox" name="perm_users" id="perm_users"><span class="account-switch"></span>
+                                </label>
+                                <label class="account-perm" for="perm_settings">
+                                    <span class="account-perm-icon"><i class="fa fa-cog"></i></span>
+                                    <span class="account-perm-text"><b>Manage Settings</b><small>Store, receipt, tax &amp; terminal</small></span>
+                                    <input type="checkbox" name="perm_settings" id="perm_settings"><span class="account-switch"></span>
+                                </label>
+                            </div>
+                        </div>
                     </form>
+                </div>
+                <div class="modal-footer account-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                    <button type="submit" form="saveUser" class="btn btn-primary waves-effect waves-light" id="saveUserBtn"><i class="fa fa-check"></i> Save</button>
                 </div>
            </div>
       </div>
  </div>
-
-
-
 
 
  <div id="holdOrdersModal" class="modal fade modal-fit bs-example-modal-lg" tabindex="-1" role="dialog" aria-labelledby="myLargeModalLabel" aria-hidden="true" style="display: none;">
