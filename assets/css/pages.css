@@ -364,3 +364,12 @@ input.amount-input.amount-input-invalid:focus{
   border-color: #ef5350 !important;
   box-shadow: 0 0 0 2px rgba(239, 83, 80, 0.2) !important;
 }
+
+/* Add Expense: the Expense Type list is disabled while a New Type is typed */
+/* !important: the theme sets the form controls' colours */
+#expenseType:disabled{
+  background-color: #eef1f4 !important;
+  color: #a9b3bc !important;
+  cursor: not-allowed;
+  opacity: 1;
+}

@@ -5649,15 +5649,33 @@ function openExpenseForm(expense) {
   if (!allExpenseTypes.length) showExpenseNewTypeRow();
 }
 
+// New Type: the existing Expense Type list is cleared and disabled while a new
+// type is being typed (one or the other), and enabled again when the new
+// type box closes: Add selects the new type, Cancel puts back the earlier choice.
 function showExpenseNewTypeRow() {
+  let $type = $("#expenseType");
+  if (!$type.prop("disabled")) $type.data("previousType", $type.val() || "");
+  $type.val("").prop("disabled", true);
+  $("#expenseNewTypeBtn").prop("disabled", true);
   $(".expense-newtype-row").show();
   $("#expenseNewTypeName").val("");
   setTimeout(() => $("#expenseNewTypeName").trigger("focus"), 300);
 }
 
-function hideExpenseNewTypeRow() {
+// restoreChoice: put back the type chosen before New Type (Cancel)
+function hideExpenseNewTypeRow(restoreChoice) {
   $(".expense-newtype-row").hide();
   $("#expenseNewTypeName").val("");
+  let $type = $("#expenseType");
+  if ($type.prop("disabled")) {
+    $type.prop("disabled", false);
+    if (restoreChoice === true) {
+      let previous = String($type.data("previousType") || "");
+      if (previous && $type.find(`option[value="${previous}"]`).length) $type.val(previous);
+    }
+  }
+  $type.removeData("previousType");
+  $("#expenseNewTypeBtn").prop("disabled", false);
 }
 
 // ---- add / rename an expense type ----
@@ -5716,6 +5734,10 @@ $(function () {
       Swal.fire("Oops!", "Please enter an amount greater than zero.", "warning");
       return;
     }
+    if ($(".expense-newtype-row").is(":visible")) {
+      Swal.fire("Oops!", "Click Add to save the new expense type first, or Cancel to choose an existing one.", "warning");
+      return;
+    }
     if (!$("#expenseType").val()) {
       Swal.fire("Oops!", "Please choose an expense type, or add one with New Type.", "warning");
       return;
@@ -5758,7 +5780,10 @@ $(function () {
 
   // quick add of an expense type from inside the expense form
   $("#expenseNewTypeBtn").on("click", showExpenseNewTypeRow);
-  $("#expenseNewTypeCancel").on("click", hideExpenseNewTypeRow);
+  $("#expenseNewTypeCancel").on("click", function () {
+    hideExpenseNewTypeRow(true);
+    $("#expenseType").trigger("focus");
+  });
   $("#expenseNewTypeName").on("keydown", function (e) {
     if (e.key === "Enter") {
       e.preventDefault(); // don't submit the expense form
