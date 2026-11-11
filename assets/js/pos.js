@@ -3798,7 +3798,7 @@ if (!authedThisSession) {
     // --- Settle Credit window ---
     $("#settleCreditBtn").on("click", function () {
       if (!creditState.customer || creditState.balance <= 0) return;
-      $("#settleCreditTitle").text("Settle Credit - " + creditState.customer.name);
+      $("#settleCreditSub").text(creditState.customer.name);
       $("#settleOutstanding").text(creditMoney(creditState.balance));
       $("#settleAmount, #settleReference, #settleNote").val("");
       $("#settleRemaining").text("");

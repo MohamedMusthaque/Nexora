@@ -1160,9 +1160,6 @@ body.journal-mode .main-toolbar-row{
   padding: 6px 8px;
   vertical-align: middle;
 }
-#settleCreditModal .modal-dialog{
-  margin-top: 80px;
-}
 #settleCreditModal .settle-balance{
   display: flex;
   justify-content: space-between;
@@ -1170,7 +1167,7 @@ body.journal-mode .main-toolbar-row{
   padding: 12px 14px;
   margin-bottom: 16px;
   border: 1px solid #f3c9c9;
-  border-radius: 5px;
+  border-radius: 8px;
   background: #fdf3f3;
   color: #4c5667;
 }
@@ -1188,6 +1185,7 @@ body.journal-mode .main-toolbar-row{
 }
 #settleCreditModal .settle-amount-row .btn{
   height: 40px;
+  border-radius: 6px;
   white-space: nowrap;
 }
 #settleCreditModal #settleRemaining{
@@ -5187,7 +5185,8 @@ body.transactions-mode #transactions_view .txn-page{
 }
 
 /* ---- Account Information window (#userModal), Add / Edit Product (#newProduct)
-   and New / Edit Customer (#newCustomer, #editCustomer) share this look ----
+   New / Edit Customer (#newCustomer, #editCustomer) and Settle Credit
+   (#settleCreditModal) share this look ----
    [avatar] My Account / New User / Edit User          ×
             @username
    PROFILE      Full Name | Username
@@ -5197,7 +5196,8 @@ body.transactions-mode #transactions_view .txn-page{
 #userModal .account-dialog,
 #newProduct .account-dialog,
 #newCustomer .account-dialog,
-#editCustomer .account-dialog{
+#editCustomer .account-dialog,
+#settleCreditModal .account-dialog{
   width: min(520px, calc(100vw - 30px));
   margin: 30px auto;
 }
@@ -5207,7 +5207,8 @@ body.transactions-mode #transactions_view .txn-page{
 #userModal .modal-content,
 #newProduct .modal-content,
 #newCustomer .modal-content,
-#editCustomer .modal-content{
+#editCustomer .modal-content,
+#settleCreditModal .modal-content{
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 60px);
@@ -5222,7 +5223,8 @@ body.transactions-mode #transactions_view .txn-page{
 #userModal .account-hero,
 #newProduct .account-hero,
 #newCustomer .account-hero,
-#editCustomer .account-hero{
+#editCustomer .account-hero,
+#settleCreditModal .account-hero{
   flex: 0 0 auto;
   position: relative;
   display: flex;
@@ -5235,7 +5237,8 @@ body.transactions-mode #transactions_view .txn-page{
 #userModal .account-hero .close,
 #newProduct .account-hero .close,
 #newCustomer .account-hero .close,
-#editCustomer .account-hero .close{
+#editCustomer .account-hero .close,
+#settleCreditModal .account-hero .close{
   position: absolute;
   top: 12px;
   right: 16px;
@@ -5247,13 +5250,15 @@ body.transactions-mode #transactions_view .txn-page{
 #userModal .account-hero .close:hover,
 #newProduct .account-hero .close:hover,
 #newCustomer .account-hero .close:hover,
-#editCustomer .account-hero .close:hover{
+#editCustomer .account-hero .close:hover,
+#settleCreditModal .account-hero .close:hover{
   opacity: 1;
 }
 #userModal .account-avatar,
 #newProduct .account-avatar,
 #newCustomer .account-avatar,
-#editCustomer .account-avatar{
+#editCustomer .account-avatar,
+#settleCreditModal .account-avatar{
   flex: 0 0 58px;
   height: 58px;
   border-radius: 50%;
@@ -5270,13 +5275,15 @@ body.transactions-mode #transactions_view .txn-page{
 #userModal .account-hero-text,
 #newProduct .account-hero-text,
 #newCustomer .account-hero-text,
-#editCustomer .account-hero-text{
+#editCustomer .account-hero-text,
+#settleCreditModal .account-hero-text{
   min-width: 0;
 }
 #userModal .account-hero .modal-title,
 #newProduct .account-hero .modal-title,
 #newCustomer .account-hero .modal-title,
-#editCustomer .account-hero .modal-title{
+#editCustomer .account-hero .modal-title,
+#settleCreditModal .account-hero .modal-title{
   margin: 0;
   color: #fff;
   font-size: 20px;
@@ -5285,14 +5292,16 @@ body.transactions-mode #transactions_view .txn-page{
 #userModal .account-hero .modal-title .loading,
 #newProduct .account-hero .modal-title .loading,
 #newCustomer .account-hero .modal-title .loading,
-#editCustomer .account-hero .modal-title .loading{
+#editCustomer .account-hero .modal-title .loading,
+#settleCreditModal .account-hero .modal-title .loading{
   margin-left: 8px;
   vertical-align: middle;
 }
 #userModal #accountSubtitle,
 #newProduct .account-subtitle,
 #newCustomer .account-subtitle,
-#editCustomer .account-subtitle{
+#editCustomer .account-subtitle,
+#settleCreditModal .account-subtitle{
   margin: 3px 0 0;
   font-size: 13px;
   color: rgba(255, 255, 255, 0.85);
@@ -5305,7 +5314,8 @@ body.transactions-mode #transactions_view .txn-page{
 #userModal .modal-body,
 #newProduct .modal-body,
 #newCustomer .modal-body,
-#editCustomer .modal-body{
+#editCustomer .modal-body,
+#settleCreditModal .modal-body{
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -5314,20 +5324,23 @@ body.transactions-mode #transactions_view .txn-page{
 #userModal .account-section,
 #newProduct .account-section,
 #newCustomer .account-section,
-#editCustomer .account-section{
+#editCustomer .account-section,
+#settleCreditModal .account-section{
   margin-bottom: 14px;
 }
 #userModal .account-section + .account-section,
 #newProduct .account-section + .account-section,
 #newCustomer .account-section + .account-section,
-#editCustomer .account-section + .account-section{
+#editCustomer .account-section + .account-section,
+#settleCreditModal .account-section + .account-section{
   padding-top: 14px;
   border-top: 1px solid #eef1f4;
 }
 #userModal .account-section-title,
 #newProduct .account-section-title,
 #newCustomer .account-section-title,
-#editCustomer .account-section-title{
+#editCustomer .account-section-title,
+#settleCreditModal .account-section-title{
   margin: 0 0 10px;
   font-size: 12px;
   font-weight: 700;
@@ -5338,20 +5351,23 @@ body.transactions-mode #transactions_view .txn-page{
 #userModal .account-section-title > .fa,
 #newProduct .account-section-title > .fa,
 #newCustomer .account-section-title > .fa,
-#editCustomer .account-section-title > .fa{
+#editCustomer .account-section-title > .fa,
+#settleCreditModal .account-section-title > .fa{
   margin-right: 5px;
   color: #5fbeaa;
 }
 #userModal .form-group,
 #newProduct .form-group,
 #newCustomer .form-group,
-#editCustomer .form-group{
+#editCustomer .form-group,
+#settleCreditModal .form-group{
   margin-bottom: 10px;
 }
 #userModal label,
 #newProduct label,
 #newCustomer label,
-#editCustomer label{
+#editCustomer label,
+#settleCreditModal label{
   font-weight: 600;
   color: #4c5667;
   margin-bottom: 5px;
@@ -5359,20 +5375,23 @@ body.transactions-mode #transactions_view .txn-page{
 #userModal .account-required,
 #newProduct .account-required,
 #newCustomer .account-required,
-#editCustomer .account-required{
+#editCustomer .account-required,
+#settleCreditModal .account-required{
   color: #ef5350;
 }
 #userModal .form-control,
 #newProduct .form-control,
 #newCustomer .form-control,
-#editCustomer .form-control{
+#editCustomer .form-control,
+#settleCreditModal .form-control{
   height: 40px;
   border-radius: 6px;
 }
 #userModal .account-hint,
 #newProduct .account-hint,
 #newCustomer .account-hint,
-#editCustomer .account-hint{
+#editCustomer .account-hint,
+#settleCreditModal .account-hint{
   margin: 0;
   font-size: 12px;
   color: #98a6ad;
@@ -5504,7 +5523,8 @@ body.transactions-mode #transactions_view .txn-page{
 #userModal .account-footer,
 #newProduct .account-footer,
 #newCustomer .account-footer,
-#editCustomer .account-footer{
+#editCustomer .account-footer,
+#settleCreditModal .account-footer{
   flex: 0 0 auto;
   display: flex;
   justify-content: flex-end;
@@ -5516,7 +5536,8 @@ body.transactions-mode #transactions_view .txn-page{
 #userModal .account-footer .btn,
 #newProduct .account-footer .btn,
 #newCustomer .account-footer .btn,
-#editCustomer .account-footer .btn{
+#editCustomer .account-footer .btn,
+#settleCreditModal .account-footer .btn{
   min-width: 96px;
   height: 38px;
   border-radius: 6px;
@@ -5524,7 +5545,8 @@ body.transactions-mode #transactions_view .txn-page{
 #userModal .account-footer .btn-default,
 #newProduct .account-footer .btn-default,
 #newCustomer .account-footer .btn-default,
-#editCustomer .account-footer .btn-default{
+#editCustomer .account-footer .btn-default,
+#settleCreditModal .account-footer .btn-default{
   background: #fff !important;
   border: 1px solid #d5dbe0 !important;
   color: #4c5667 !important;
@@ -5532,9 +5554,14 @@ body.transactions-mode #transactions_view .txn-page{
 #userModal .account-footer .btn-primary > .fa,
 #newProduct .account-footer .btn-primary > .fa,
 #newCustomer .account-footer .btn-primary > .fa,
-#editCustomer .account-footer .btn-primary > .fa{
+#editCustomer .account-footer .btn-primary > .fa,
+#settleCreditModal .account-footer .btn-primary > .fa{
   margin-right: 4px;
 }
+#settleCreditModal .account-footer .btn-success > .fa{
+  margin-right: 4px;
+}
+
 /* Add / Edit Product: the parts the Account window doesn't have */
 #newProduct #productMarginHint{
   margin: -4px 0 0;
