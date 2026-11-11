@@ -5,6 +5,7 @@ const Transactions = require( "./transactions" );
 const Expenses = require( "./expenses" );
 const Suppliers = require( "./suppliers" );
 const Adjustments = require( "./adjustments" );
+const Transfers = require( "./transfers" );
 
 app.use( bodyParser.json() );
 
@@ -368,6 +369,31 @@ function buildEntries( data ) {
         } );
     } );
 
+    // money moved between methods (Day End): one method down, another up by
+    // the same amount; no money comes in or goes out of the shop
+    ( data.transfers || [] ).forEach( ( t ) => {
+        let when = dayAt( t.date, t.created_at );
+        entries.push( {
+            kind: "transfer",
+            group: "transfer",
+            type: "Money Transfer",
+            id: t._id,
+            at: when.at,
+            time_known: when.time_known,
+            reference: t.transfer_no || "",
+            party: "",
+            details: [ t.reference ? "ref " + t.reference : "", t.note || "" ].filter( Boolean ).join( "; " ),
+            method: ( t.from || "" ) + " -> " + ( t.to || "" ),
+            transfer_from: t.from,
+            transfer_to: t.to,
+            amount: round2( t.amount ),
+            money_in: 0,
+            money_out: 0,
+            on_credit: 0,
+            user: t.created_by || ""
+        } );
+    } );
+
     entries.sort( ( a, b ) => String( a.at ).localeCompare( String( b.at ) ) );
     return entries;
 }
@@ -387,12 +413,13 @@ function buildSummary( entries ) {
         prns: Object.assign( group(), { refunded: 0, credited: 0 } ), // goods sent back to suppliers
         written_off: group(), // stock adjustments out (at cost)
         stock_added: group(), // stock adjustments in (at cost)
+        transfers: group(), // money moved between methods (no money in or out)
         advance_used: { customers: 0, suppliers: 0 }, // moves no money that day
         methods: {},
         money_in: 0,
         money_out: 0
     };
-    let method = ( name ) => ( s.methods[name] = s.methods[name] || { in: 0, out: 0 } );
+    let method = ( name ) => ( s.methods[name] = s.methods[name] || { in: 0, out: 0, transfer_in: 0, transfer_out: 0 } );
     // the usual methods always listed, in this order
     [ "Cash", "Card", "Bank Transfer" ].forEach( method );
 
@@ -408,7 +435,8 @@ function buildSummary( entries ) {
             supplier_credit_payment: "credit_paid",
             supplier_advance: "advance_paid",
             prn: "prns",
-            adjustment: e.type === "Stock Added" ? "stock_added" : "written_off"
+            adjustment: e.type === "Stock Added" ? "stock_added" : "written_off",
+            transfer: "transfers"
         }[e.kind];
         s[key].count++;
         s[key].total += e.amount;
@@ -427,6 +455,10 @@ function buildSummary( entries ) {
             s.grns.on_credit += e.on_credit;
             s.advance_used.suppliers += e.advance_used || 0;
         }
+        if ( e.kind === "transfer" ) {
+            method( e.transfer_from ).transfer_out += e.amount;
+            method( e.transfer_to ).transfer_in += e.amount;
+        }
         if ( e.money_in > 0 ) method( e.in_method ).in += e.money_in;
         if ( e.money_out > 0 ) method( e.out_method ).out += e.money_out;
         s.money_in += e.money_in;
@@ -440,7 +472,11 @@ function buildSummary( entries ) {
         } );
     roundAll( s );
     Object.keys( s.methods ).forEach( ( k ) => {
-        s.methods[k].net = round2( s.methods[k].in - s.methods[k].out );
+        // what the method holds after the day: money in - money out, plus
+        // what was moved into it, minus what was moved out of it
+        let m = s.methods[k];
+        m.transfers = round2( m.transfer_in - m.transfer_out );
+        m.net = round2( m.in - m.out + m.transfers );
     } );
     s.net = round2( s.money_in - s.money_out );
     return s;
@@ -465,6 +501,8 @@ app.get( "/", function ( req, res ) {
                 if ( err ) return res.status( 500 ).send( "Could not load the GRNs and supplier payments." );
                 Adjustments.findBetween( fromText, toText, function ( err, adjustments ) {
                 if ( err ) return res.status( 500 ).send( "Could not load the stock adjustments." );
+                Transfers.findBetween( fromText, toText, function ( err, transfers ) {
+                if ( err ) return res.status( 500 ).send( "Could not load the money transfers." );
                 let entries = buildEntries( {
                     sales: sales.sales,
                     returns: sales.returns,
@@ -473,9 +511,11 @@ app.get( "/", function ( req, res ) {
                     grns: purchases.grns,
                     supplier_payments: purchases.supplier_payments,
                     prns: purchases.prns,
-                    adjustments: adjustments
+                    adjustments: adjustments,
+                    transfers: transfers
                 } );
                 res.send( { from: fromText, to: toText, entries: entries, summary: buildSummary( entries ) } );
+                } );
                 } );
             } );
         } );

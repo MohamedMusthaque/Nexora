@@ -8211,6 +8211,7 @@ const JOURNAL_TYPE_CSS = {
   supplier_advance: "label-warning",
   prn: "label-danger",
   adjustment: "label-inverse",
+  transfer: "label-purple",
 };
 
 function canViewJournal() {
@@ -8219,8 +8220,9 @@ function canViewJournal() {
 
 function applyJournalPermission() {
   let allowed = canViewJournal();
-  $("#journalNav").toggle(allowed);
+  $("#journalNav, #dayEndNav").toggle(allowed);
   if (!allowed && $("#journalModal").hasClass("in")) $("#journalModal").modal("hide");
+  if (!allowed && $("#dayEndModal").hasClass("in")) $("#dayEndModal").modal("hide");
 }
 
 function journalDay() {
@@ -8298,6 +8300,7 @@ function renderJournal() {
         <td>${txnHtml(m)}</td>
         <td class="text-right journal-in">${supMoney(v.in)}</td>
         <td class="text-right journal-out">${supMoney(v.out)}</td>
+        <td class="text-right">${v.transfers ? (v.transfers > 0 ? "+" : "") + supMoney(v.transfers) : '<span class="text-muted">-</span>'}</td>
         <td class="text-right"><b>${supMoney(v.net)}</b></td>
       </tr>`;
   });
@@ -8305,6 +8308,7 @@ function renderJournal() {
       <td>Total</td>
       <td class="text-right">${supMoney(s.money_in)}</td>
       <td class="text-right">${supMoney(s.money_out)}</td>
+      <td class="text-right">${s.transfers && s.transfers.count ? supMoney(0) : '<span class="text-muted">-</span>'}</td>
       <td class="text-right ${s.net < 0 ? "text-danger" : ""}">${supMoney(s.net)}</td>
     </tr>`);
   $("#journalMethods").html(rows.join(""));
@@ -8324,6 +8328,7 @@ function journalViewButton(e, index) {
     supplier_advance: "Payment bill",
     prn: "PRN bill",
     adjustment: "Adjustment note",
+    transfer: "Transfer slip",
   }[e.kind];
   if (!title) return "";
   return `<button onClick="$(this).viewJournalEntry(${index})" class="btn btn-info btn-sm" title="${title}"><i class="fa fa-search-plus"></i></button>`;
@@ -8422,6 +8427,12 @@ $.fn.viewJournalEntry = function (index) {
         journalShowBill(() => showSupplierBill(prnBillHtml(r)));
       })
       .fail(fail);
+  } else if (e.kind === "transfer") {
+    $.get(api + "transfers/transfer/" + e.id)
+      .done(function (t) {
+        journalShowBill(() => showSupplierBill(transferSlipHtml(t)));
+      })
+      .fail(fail);
   } else if (e.kind === "adjustment") {
     $.get(api + "adjustments/adjustment/" + e.id)
       .done(function (a) {
@@ -8457,7 +8468,7 @@ function journalPrintHtml() {
   let methods = Object.keys(s.methods)
     .map((m) => {
       let v = s.methods[m];
-      return `<tr><td>${txnHtml(m)}</td><td style="text-align: right;">${supMoney(v.in)}</td><td style="text-align: right;">${supMoney(v.out)}</td><td style="text-align: right;"><b>${supMoney(v.net)}</b></td></tr>`;
+      return `<tr><td>${txnHtml(m)}</td><td style="text-align: right;">${supMoney(v.in)}</td><td style="text-align: right;">${supMoney(v.out)}</td><td style="text-align: right;">${v.transfers ? (v.transfers > 0 ? "+" : "") + supMoney(v.transfers) : "-"}</td><td style="text-align: right;"><b>${supMoney(v.net)}</b></td></tr>`;
     })
     .join("");
 
@@ -8509,6 +8520,15 @@ function journalPrintHtml() {
             : ""
         }
         ${
+          s.transfers && s.transfers.count
+            ? heading("MONEY TRANSFERS (between methods)") +
+              journalData.entries
+                .filter((e) => e.kind === "transfer")
+                .map((e) => row(txnHtml(e.transfer_from) + " &rarr; " + txnHtml(e.transfer_to), supMoney(e.amount)))
+                .join("")
+            : ""
+        }
+        ${
           s.advance_used.customers > 0 || s.advance_used.suppliers > 0
             ? heading("ADVANCES USED (no money moved)") +
               (s.advance_used.customers > 0 ? row("By customers on bills", supMoney(s.advance_used.customers)) : "") +
@@ -8520,11 +8540,11 @@ function journalPrintHtml() {
     <hr>
     <table width="100%">
       <thead style="text-align: left;">
-        <tr><th>Money</th><th style="text-align: right;">In</th><th style="text-align: right;">Out</th><th style="text-align: right;">Net</th></tr>
+        <tr><th>Money</th><th style="text-align: right;">In</th><th style="text-align: right;">Out</th><th style="text-align: right;">Moved</th><th style="text-align: right;">Net</th></tr>
       </thead>
       <tbody>
         ${methods}
-        <tr><td><b>Total</b></td><td style="text-align: right;"><b>${supMoney(s.money_in)}</b></td><td style="text-align: right;"><b>${supMoney(s.money_out)}</b></td><td style="text-align: right;"><b>${supMoney(s.net)}</b></td></tr>
+        <tr><td><b>Total</b></td><td style="text-align: right;"><b>${supMoney(s.money_in)}</b></td><td style="text-align: right;"><b>${supMoney(s.money_out)}</b></td><td></td><td style="text-align: right;"><b>${supMoney(s.net)}</b></td></tr>
       </tbody>
     </table>
     <table width="100%"><tbody>${row("Net", supMoney(s.net), true)}</tbody></table>
@@ -10297,3 +10317,468 @@ $(function () {
 function showAdjustmentsTabOnReturn() {
   $('#Products .products-tabs a[href="#productsTabAdjustments"]').tab("show");
 }
+
+
+// ======================================================================
+// Day End: what each payment method (Cash, Card, Bank Transfer) took in and
+// paid out on a day, what went on credit, and money moved between methods
+// (api/transfers.js), e.g. cash banked or card takings settled into the bank.
+// The numbers come from the Quick Journal (api/journal.js), which counts the
+// transfers too. Same permission as the Quick Journal.
+// ======================================================================
+const DAY_END_METHODS = ["Cash", "Card", "Bank Transfer"];
+const DAY_END_ICONS = { Cash: "fa-money", Card: "fa-credit-card", "Bank Transfer": "fa-university" };
+let dayEndData = null; // the journal of the day shown
+let dayEndOwed = { customers: null, suppliers: null }; // outstanding credit now
+let dayEndRequestId = 0;
+
+function dayEndDay() {
+  let d = moment($("#dayEndDate").val(), "YYYY-MM-DD", true);
+  return d.isValid() ? d : moment().startOf("day");
+}
+
+function openDayEnd() {
+  if (!canViewJournal()) return;
+  $("#dayEndDate").val(moment().format("YYYY-MM-DD"));
+  loadDayEnd();
+  $("#dayEndModal").modal("show");
+}
+
+function loadDayEnd() {
+  let day = dayEndDay();
+  $("#dayEndDate").val(day.format("YYYY-MM-DD")).attr("max", moment().format("YYYY-MM-DD"));
+  $("#dayEndNextDay").prop("disabled", !day.isBefore(moment(), "day"));
+  $("#dayEndDayLabel").text((day.isSame(moment(), "day") ? "Today, " : "") + day.format("dddd D MMM YYYY"));
+  let requestId = ++dayEndRequestId;
+  $.get(api + "journal", { from: day.format("YYYY-MM-DD") })
+    .done(function (data) {
+      if (requestId !== dayEndRequestId) return; // another day was asked for meanwhile
+      dayEndData = data;
+      renderDayEnd();
+    })
+    .fail(function (xhr) {
+      if (requestId !== dayEndRequestId) return;
+      Swal.fire("Oops!", supError(xhr, "Could not load the day."), "warning");
+    });
+  // what customers owe and what is owed to suppliers, now
+  $.get(api + "credit-balances").done(function (balances) {
+    dayEndOwed.customers = supRound(Object.values(balances || {}).reduce((s, b) => s + (Number(b.balance) || 0), 0));
+    if (dayEndData) renderDayEndCards();
+  });
+  $.get(api + "suppliers/all").done(function (suppliers) {
+    dayEndOwed.suppliers = supRound((suppliers || []).reduce((s, x) => s + (Number(x.balance) || 0), 0));
+    if (dayEndData) renderDayEndCards();
+  });
+}
+
+// the methods to show: the usual three, then any other the day used
+function dayEndMethods() {
+  let seen = Object.keys((dayEndData && dayEndData.summary.methods) || {});
+  return DAY_END_METHODS.concat(seen.filter((m) => !DAY_END_METHODS.includes(m)));
+}
+
+function dayEndMethod(m) {
+  let v = (dayEndData && dayEndData.summary.methods[m]) || {};
+  return {
+    in: Number(v.in) || 0,
+    out: Number(v.out) || 0,
+    transfer_in: Number(v.transfer_in) || 0,
+    transfer_out: Number(v.transfer_out) || 0,
+    net: Number(v.net) || 0,
+  };
+}
+
+// the day's credit: given to customers / collected, bought on credit / paid
+function dayEndCredit() {
+  let s = dayEndData.summary;
+  return {
+    sold: Number(s.sales.on_credit) || 0,
+    collected: Number(s.credit_received.total) || 0,
+    bought: Number(s.grns.on_credit) || 0,
+    paid: Number(s.credit_paid.total) || 0,
+  };
+}
+
+function dayEndSigned(n, sign) {
+  return n ? sign + supMoney(n) : '<span class="text-muted">-</span>';
+}
+
+function renderDayEndCards() {
+  let cards = DAY_END_METHODS.map((m) => {
+    let v = dayEndMethod(m);
+    let key = m === "Bank Transfer" ? "bank" : m.toLowerCase();
+    return `<div class="dayend-card dayend-card-${key}">
+        <div class="dayend-card-head"><i class="fa ${DAY_END_ICONS[m]}"></i> ${txnHtml(m)}</div>
+        <div class="dayend-card-value ${v.net < 0 ? "text-danger" : ""}">${supMoney(v.net)}</div>
+        <div class="dayend-card-caption">net for the day</div>
+        <table class="dayend-card-rows">
+          <tr><td>Received</td><td class="dayend-in">${dayEndSigned(v.in, "+")}</td></tr>
+          <tr><td>Paid out</td><td class="dayend-out">${dayEndSigned(v.out, "-")}</td></tr>
+          <tr><td>Moved in</td><td>${dayEndSigned(v.transfer_in, "+")}</td></tr>
+          <tr><td>Moved out</td><td>${dayEndSigned(v.transfer_out, "-")}</td></tr>
+        </table>
+        <button type="button" class="btn btn-default btn-sm btn-block dayend-move" data-from="${txnHtml(m)}"${v.net > 0 ? "" : ' title="Nothing left from this day, but you can still move money"'}>
+          <i class="fa fa-exchange"></i> Move ${txnHtml(m === "Bank Transfer" ? "bank money" : m.toLowerCase())}
+        </button>
+      </div>`;
+  });
+  let c = dayEndCredit();
+  let owed = (n) => (n === null ? '<span class="text-muted">...</span>' : supMoney(n));
+  cards.push(`<div class="dayend-card dayend-card-credit">
+      <div class="dayend-card-head"><i class="fa fa-clock-o"></i> Credit</div>
+      <div class="dayend-card-value">${supMoney(c.sold)}</div>
+      <div class="dayend-card-caption">sold on credit (no money yet)</div>
+      <table class="dayend-card-rows">
+        <tr><td>Collected from customers</td><td class="dayend-in">${dayEndSigned(c.collected, "+")}</td></tr>
+        <tr><td>Bought on credit (GRNs)</td><td>${c.bought ? supMoney(c.bought) : '<span class="text-muted">-</span>'}</td></tr>
+        <tr><td>Paid to suppliers</td><td class="dayend-out">${dayEndSigned(c.paid, "-")}</td></tr>
+      </table>
+      <div class="dayend-owed">
+        <div><span>Customers owe now</span><b>${owed(dayEndOwed.customers)}</b></div>
+        <div><span>Owed to suppliers now</span><b>${owed(dayEndOwed.suppliers)}</b></div>
+      </div>
+    </div>`);
+  $("#dayEndCards").html(cards.join(""));
+}
+
+// rows of the "By method" table: [label, kind filter, "in" | "out"]
+const DAY_END_ROWS = [
+  ["Sales", (e) => e.kind === "sale", "in"],
+  ["Customer credit payments", (e) => e.kind === "customer_credit_payment", "in"],
+  ["Customer advances", (e) => e.kind === "customer_advance", "in"],
+  ["Purchase return refunds", (e) => e.kind === "prn", "in"],
+  ["Refunds to customers", (e) => e.kind === "return" || e.kind === "exchange", "out"],
+  ["GRN purchases", (e) => e.kind === "grn", "out"],
+  ["Supplier credit payments", (e) => e.kind === "supplier_credit_payment", "out"],
+  ["Supplier advances", (e) => e.kind === "supplier_advance", "out"],
+  ["Expenses", (e) => e.kind === "expense", "out"],
+];
+
+function renderDayEndMatrix() {
+  let methods = dayEndMethods();
+  let entries = dayEndData.entries || [];
+  let cell = (n, cls) => `<td class="text-right ${cls || ""}">${n ? supMoney(n) : '<span class="text-muted">-</span>'}</td>`;
+  let head = `<thead><tr><th></th>${methods.map((m) => `<th class="text-right">${txnHtml(m)}</th>`).join("")}<th class="text-right">Total money</th><th class="text-right dayend-credit-col" title="Not money: owed by customers / to suppliers">On credit</th></tr></thead>`;
+  let body = "";
+  ["in", "out"].forEach((flow) => {
+    let rows = "";
+    DAY_END_ROWS.filter((r) => r[2] === flow).forEach(([label, match]) => {
+      let per = {}, credit = 0, any = false;
+      entries.filter(match).forEach((e) => {
+        any = true;
+        if (flow === "in" && e.money_in > 0) per[e.in_method] = (per[e.in_method] || 0) + e.money_in;
+        if (flow === "out" && e.money_out > 0) per[e.out_method] = (per[e.out_method] || 0) + e.money_out;
+        credit += Number(e.on_credit) || 0;
+      });
+      let total = methods.reduce((s, m) => s + (per[m] || 0), 0);
+      if (!any || (!total && !credit)) return; // e.g. an exchange: no money either way
+      rows += `<tr><td>${label}</td>${methods.map((m) => cell(per[m])).join("")}${cell(total, "dayend-total-col")}${cell(credit, "dayend-credit-col")}</tr>`;
+    });
+    // a heading only when something came in / went out
+    if (rows) body += `<tr class="dayend-group"><td colspan="${methods.length + 3}">${flow === "in" ? "Money in" : "Money out"}</td></tr>` + rows;
+  });
+  if (!body) body = `<tr><td colspan="${methods.length + 3}" class="text-muted dayend-empty">No money came in or went out on this day.</td></tr>`;
+  let s = dayEndData.summary;
+  if (s.transfers && s.transfers.count) {
+    body += `<tr class="dayend-group"><td colspan="${methods.length + 3}">Moved between methods</td></tr>`;
+    body += `<tr><td>Transfers</td>${methods
+      .map((m) => {
+        let t = dayEndMethod(m).transfer_in - dayEndMethod(m).transfer_out;
+        return `<td class="text-right">${t ? (t > 0 ? "+" : "") + supMoney(t) : '<span class="text-muted">-</span>'}</td>`;
+      })
+      .join("")}<td class="text-right dayend-total-col">${supMoney(0)}</td><td class="dayend-credit-col"></td></tr>`;
+  }
+  body += `<tr class="dayend-net"><td>Net for the day</td>${methods
+    .map((m) => {
+      let n = dayEndMethod(m).net;
+      return `<td class="text-right ${n < 0 ? "text-danger" : ""}">${supMoney(n)}</td>`;
+    })
+    .join("")}<td class="text-right dayend-total-col ${s.net < 0 ? "text-danger" : ""}">${supMoney(s.net)}</td><td class="dayend-credit-col"></td></tr>`;
+  $("#dayEndMatrix").html(head + "<tbody>" + body + "</tbody>");
+}
+
+function renderDayEndTransfers() {
+  let list = (dayEndData.entries || []).filter((e) => e.kind === "transfer");
+  if (!list.length) {
+    $("#dayEndTransfers").html(
+      `<tr><td colspan="7" class="text-muted dayend-empty">No money moved between methods on this day. Use <b>Transfer Money</b> to record e.g. cash banked or card takings settled.</td></tr>`
+    );
+    return;
+  }
+  $("#dayEndTransfers").html(
+    list
+      .map(
+        (e) => `<tr>
+          <td><b>${txnHtml(e.reference)}</b></td>
+          <td class="nobr">${e.time_known ? moment(e.at).format("hh:mm A") : '<span class="text-muted">-</span>'}</td>
+          <td class="nobr">${txnHtml(e.transfer_from)} <i class="fa fa-long-arrow-right text-muted"></i> ${txnHtml(e.transfer_to)}</td>
+          <td class="text-right nobr"><b>${supMoney(e.amount)}</b></td>
+          <td>${txnHtml(e.details)}</td>
+          <td>${txnHtml(e.user)}</td>
+          <td><button type="button" class="btn btn-info btn-xs" onClick="$(this).viewTransfer(${e.id})" title="Transfer slip"><i class="fa fa-print"></i></button></td>
+        </tr>`
+      )
+      .join("")
+  );
+}
+
+function renderDayEnd() {
+  renderDayEndCards();
+  renderDayEndMatrix();
+  renderDayEndTransfers();
+}
+
+// ---- moving money between methods ----
+function openTransferForm(from) {
+  let day = dayEndDay();
+  $("#saveTransfer").get(0).reset();
+  $(".transfer-currency").text(settings?.symbol ? "(" + String(settings.symbol).trim() + ")" : "");
+  $("#transferDate").val(day.format("YYYY-MM-DD")).attr("max", moment().format("YYYY-MM-DD"));
+  setTransferRoute(from || "Cash", from === "Bank Transfer" ? "Cash" : "Bank Transfer");
+  supSwapModal("#dayEndModal", "#transferModal", loadDayEnd);
+}
+
+function setTransferRoute(from, to) {
+  $("#transferFrom").val(from);
+  $("#transferTo").val(to === from ? DAY_END_METHODS.find((m) => m !== from) : to);
+  updateTransferHint();
+}
+
+// what the "from" method has from the day shown (only for that day)
+function updateTransferHint() {
+  let from = $("#transferFrom").val();
+  let $hint = $("#transferHint").removeClass("text-warning text-danger").empty();
+  $("#transferModal .transfer-presets .btn").each(function () {
+    $(this).toggleClass("active", $(this).data("from") === from && $(this).data("to") === $("#transferTo").val());
+  });
+  if (from === $("#transferTo").val()) {
+    $hint.addClass("text-danger").text("Choose a different method to move the money to.");
+    return;
+  }
+  if (!dayEndData || $("#transferDate").val() !== dayEndData.from) return;
+  let net = supRound(dayEndMethod(from).net);
+  let amount = supRound($("#transferAmount").val());
+  let day = moment(dayEndData.from, "YYYY-MM-DD");
+  let when = day.isSame(moment(), "day") ? "today" : "on " + day.format("D MMM");
+  if (net > 0) {
+    $hint.html(
+      `${txnHtml(from)} ${when}: <b>${supMoney(net)}</b> <a href="#" class="transfer-use-all">move all of it</a>` +
+        (amount > net ? ` <span class="text-warning">· this is more than the day's ${txnHtml(from.toLowerCase())}</span>` : "")
+    );
+  } else {
+    $hint.addClass("text-warning").text(`${from} ${when}: ${supMoney(net)}. Nothing came in by ${from.toLowerCase()} that day (money from earlier days can still be moved).`);
+  }
+}
+
+// the transfer slip, printed like the other bills
+function transferSlipHtml(t) {
+  return `<div style="font-size: 10px;">
+    ${supBillHeader("MONEY TRANSFER")}
+    <p>
+      Transfer No : <b>${txnHtml(t.transfer_no)}</b> <br>
+      Date : ${supDate(t.date)} <br>
+      ${t.reference ? "Reference : " + txnHtml(t.reference) + " <br>" : ""}
+      Recorded by : ${txnHtml(t.created_by || "-")} <br>
+      Entered : ${moment(t.created_at).format("DD MMM YYYY HH:mm:ss")}
+    </p>
+    <hr>
+    <table width="100%">
+      <tbody>
+        ${supBillRow("From", "<b>" + txnHtml(t.from) + "</b>")}
+        ${supBillRow("To", "<b>" + txnHtml(t.to) + "</b>")}
+        ${supBillRow("Amount", supMoney(t.amount), true)}
+      </tbody>
+    </table>
+    ${t.note ? "<p>Note : " + txnHtml(t.note) + "</p>" : ""}
+    <hr>
+    ${supBillSignatures("Handed over by", "Received by")}
+  </div>`;
+}
+
+// the day end report, printed like a bill (with lines to write the cash count on)
+function dayEndPrintHtml() {
+  let s = dayEndData.summary;
+  let row = supBillRow;
+  let heading = (t) => `<tr><td colspan="2" style="padding-top: 6px;"><b>${t}</b></td></tr>`;
+  let methods = dayEndMethods();
+  let methodBlocks = methods
+    .map((m) => {
+      let v = dayEndMethod(m);
+      if (!DAY_END_METHODS.includes(m) && !v.in && !v.out && !v.transfer_in && !v.transfer_out) return "";
+      return (
+        heading(txnHtml(m).toUpperCase()) +
+        row("&nbsp;&nbsp;Received", supMoney(v.in)) +
+        row("&nbsp;&nbsp;Paid out", "-" + supMoney(v.out)) +
+        (v.transfer_in ? row("&nbsp;&nbsp;Moved in", "+" + supMoney(v.transfer_in)) : "") +
+        (v.transfer_out ? row("&nbsp;&nbsp;Moved out", "-" + supMoney(v.transfer_out)) : "") +
+        row("&nbsp;&nbsp;<b>Net</b>", "<b>" + supMoney(v.net) + "</b>")
+      );
+    })
+    .join("");
+  let c = dayEndCredit();
+  let transfers = (dayEndData.entries || [])
+    .filter((e) => e.kind === "transfer")
+    .map((e) => row(txnHtml(e.reference) + " " + txnHtml(e.transfer_from) + " &rarr; " + txnHtml(e.transfer_to), supMoney(e.amount)))
+    .join("");
+  return `<div style="font-size: 10px;">
+    ${supBillHeader("DAY END")}
+    <p>
+      Date : <b>${moment(dayEndData.from, "YYYY-MM-DD").format("dddd D MMM YYYY")}</b> <br>
+      Printed : ${moment().format("DD MMM YYYY HH:mm:ss")} <br>
+      Printed by : ${txnHtml((user && user.fullname) || "")}
+    </p>
+    <hr>
+    <table width="100%"><tbody>
+      ${methodBlocks}
+      ${heading("CREDIT (no money)")}
+      ${row("&nbsp;&nbsp;Sold on credit", supMoney(c.sold))}
+      ${row("&nbsp;&nbsp;Collected from customers", supMoney(c.collected))}
+      ${row("&nbsp;&nbsp;Bought on credit (GRNs)", supMoney(c.bought))}
+      ${row("&nbsp;&nbsp;Paid to suppliers", supMoney(c.paid))}
+      ${dayEndOwed.customers !== null ? row("&nbsp;&nbsp;Customers owe now", supMoney(dayEndOwed.customers)) : ""}
+      ${dayEndOwed.suppliers !== null ? row("&nbsp;&nbsp;Owed to suppliers now", supMoney(dayEndOwed.suppliers)) : ""}
+      ${transfers ? heading("MONEY TRANSFERS") + transfers : ""}
+    </tbody></table>
+    <hr>
+    <table width="100%"><tbody>
+      ${row("Money in", supMoney(s.money_in))}
+      ${row("Money out", "-" + supMoney(s.money_out))}
+      ${row("Net", supMoney(s.net), true)}
+    </tbody></table>
+    <hr>
+    <p style="line-height: 2.2;">
+      Cash counted : ________________ <br>
+      Difference : ________________
+    </p>
+    ${supBillSignatures("Prepared by", "Checked by")}
+  </div>`;
+}
+
+// Bootstrap can't stack popups: Day End steps aside while a bill is open and
+// comes back when the bill is closed
+function dayEndShowBill(html) {
+  receipt = html;
+  $("#viewTransaction").html(html);
+  supSwapModal("#dayEndModal", "#orderModal", null);
+}
+
+$.fn.viewTransfer = function (id) {
+  $.get(api + "transfers/transfer/" + id)
+    .done(function (t) {
+      dayEndShowBill(transferSlipHtml(t));
+    })
+    .fail(function (xhr) {
+      Swal.fire("Oops!", supError(xhr, "Could not load the transfer."), "warning");
+    });
+};
+
+$(function () {
+  $("#dayEndNav").on("click", openDayEnd);
+  $("#dayEndDate").on("change", loadDayEnd);
+  $("#dayEndPrevDay").on("click", function () {
+    $("#dayEndDate").val(dayEndDay().subtract(1, "day").format("YYYY-MM-DD"));
+    loadDayEnd();
+  });
+  $("#dayEndNextDay").on("click", function () {
+    $("#dayEndDate").val(dayEndDay().add(1, "day").format("YYYY-MM-DD"));
+    loadDayEnd();
+  });
+  $("#dayEndToday").on("click", function () {
+    $("#dayEndDate").val(moment().format("YYYY-MM-DD"));
+    loadDayEnd();
+  });
+  $("#dayEndRefresh").on("click", loadDayEnd);
+  $("#dayEndPrint").on("click", function () {
+    if (dayEndData) dayEndShowBill(dayEndPrintHtml());
+  });
+  $("#dayEndTransferBtn").on("click", function () {
+    openTransferForm("Cash");
+  });
+  $("#dayEndCards").on("click", ".dayend-move", function () {
+    openTransferForm($(this).data("from"));
+  });
+
+  $("#transferModal .transfer-presets").on("click", ".btn", function () {
+    setTransferRoute($(this).data("from"), $(this).data("to"));
+    $("#transferAmount").trigger("focus");
+  });
+  $("#transferSwap").on("click", function () {
+    setTransferRoute($("#transferTo").val(), $("#transferFrom").val());
+  });
+  $("#transferFrom, #transferTo, #transferDate").on("change", updateTransferHint);
+  $("#transferAmount").on("input", updateTransferHint);
+  $("#transferHint").on("click", ".transfer-use-all", function (e) {
+    e.preventDefault();
+    $("#transferAmount").val(supRound(dayEndMethod($("#transferFrom").val()).net).toFixed(2));
+    updateTransferHint();
+  });
+  $("#transferModal").on("shown.bs.modal", function () {
+    $("#transferAmount").trigger("focus");
+  });
+
+  $("#saveTransfer").on("submit", function (e) {
+    e.preventDefault();
+    let from = $("#transferFrom").val();
+    let to = $("#transferTo").val();
+    let text = $.trim($("#transferAmount").val());
+    let amount = Number(text);
+    let date = $("#transferDate").val();
+    if (from === to) {
+      Swal.fire("Oops!", "Choose a different method to move the money to.", "warning");
+      return;
+    }
+    if (!/^\d+(\.\d{1,2})?$/.test(text) || !(amount > 0)) {
+      Swal.fire("Oops!", "Please enter an amount greater than 0 (e.g. 5000 or 5000.50).", "warning");
+      return;
+    }
+    if (!date) {
+      Swal.fire("Oops!", "Please enter the date.", "warning");
+      return;
+    }
+    Swal.fire({
+      title: "Save this transfer?",
+      icon: "question",
+      html: `<p><b>${supMoney(amount)}</b> from <b>${txnHtml(from)}</b> to <b>${txnHtml(to)}</b> · ${supDate(date)}</p>
+        <p class="text-muted" style="font-size: 13px;">${txnHtml(from)} goes down and ${txnHtml(to)} goes up by this amount. A saved transfer can't be changed; a mistake is put right with a transfer the other way.</p>`,
+      showCancelButton: true,
+      confirmButtonText: "Save Transfer",
+      confirmButtonColor: "#7266ba",
+    }).then(function (result) {
+      if (!result.value) return;
+      let $btn = $("#submitTransfer").prop("disabled", true);
+      $.ajax({
+        url: api + "transfers",
+        type: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({
+          date: date,
+          from: from,
+          to: to,
+          amount: text,
+          reference: $.trim($("#transferReference").val()),
+          note: $.trim($("#transferNote").val()),
+          created_by: user?.fullname || "",
+          created_by_id: user?._id || "",
+        }),
+      })
+        .done(function (t) {
+          // Day End comes back (showing the transfer's day) with the new numbers
+          $("#dayEndDate").val(t.date);
+          $("#transferModal").modal("hide");
+          Swal.fire({
+            icon: "success",
+            title: t.transfer_no + " saved",
+            text: supMoney(t.amount) + " moved from " + t.from + " to " + t.to + ".",
+            timer: 2200,
+            showConfirmButton: false,
+          });
+        })
+        .fail(function (xhr) {
+          Swal.fire("Oops!", supError(xhr, "Could not save the transfer."), "warning");
+        })
+        .always(function () {
+          $btn.prop("disabled", false);
+        });
+    });
+  });
+});

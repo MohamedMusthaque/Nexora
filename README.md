@@ -302,7 +302,7 @@ Nexora/
 
 By default, NEXORA stores databases and media uploads locally under:
 - **Default Path**: `<UserHome>/Nexora/POS/` (or `%APPDATA%/POS` on Windows)
-  - `server/databases/*.db`: Lightweight NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`, `returns.db`, `credit_payments.db`, `customer_advances.db`, `product_history.db`, `expenses.db`, `expense_types.db`, `suppliers.db`, `grns.db`, `prns.db`, `supplier_payments.db`, `batches.db`, `stock_adjustments.db`).
+  - `server/databases/*.db`: Lightweight NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`, `returns.db`, `credit_payments.db`, `customer_advances.db`, `product_history.db`, `expenses.db`, `expense_types.db`, `suppliers.db`, `grns.db`, `prns.db`, `supplier_payments.db`, `batches.db`, `stock_adjustments.db`, `money_transfers.db`).
   - `uploads/`: Uploaded product pictures and company receipt logos.
 - **Application Logs**: Saved under `<userData>/nexora.log`.
 

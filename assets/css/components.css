@@ -4073,3 +4073,304 @@ body.suppliers-mode #suppliers_view .ph-table-scroll::-webkit-scrollbar-thumb{
 #adjList .nobr{
   white-space: nowrap;
 }
+
+/* ---- Day End (#dayEndModal) ---------------------------------------------
+   [< date >] [Today]  Tuesday 11 Nov 2026 ............. [Transfer Money]
+   [ Cash ] [ Card ] [ Bank Transfer ] [ Credit ]
+   By method (money in / out per method) . Money transfers
+   The window fits the screen; only its body scrolls. */
+#dayEndModal .dayend-dialog{
+  width: min(1120px, calc(100vw - 40px));
+  margin: 24px auto;
+}
+#dayEndModal .modal-dialog .modal-content{
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+}
+#dayEndModal .modal-content > .modal-header{
+  flex: 0 0 auto;
+}
+#dayEndModal .dayend-subtitle{
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #98a6ad;
+}
+#dayEndModal .modal-content > .dayend-body{
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+#dayEndModal .dayend-bar{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+#dayEndModal .dayend-date{
+  display: flex;
+  align-items: center;
+}
+#dayEndModal .dayend-date .form-control{
+  width: 160px;
+  border-radius: 0;
+  margin: 0 -1px;
+}
+#dayEndModal .dayend-date .btn:first-child{
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+#dayEndModal .dayend-date .btn:last-child{
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+#dayEndModal .dayend-day{
+  font-weight: 600;
+  color: #4c5667;
+  margin-left: 4px;
+}
+#dayEndModal .dayend-transfer-btn{
+  margin-left: auto;
+}
+
+/* the four cards */
+#dayEndModal .dayend-cards{
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+#dayEndModal .dayend-card{
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px 12px;
+  border: 1px solid #e3e8ec;
+  border-top: 4px solid #98a6ad;
+  border-radius: 6px;
+  background: #fff;
+}
+#dayEndModal .dayend-card-cash{ border-top-color: #5fbeaa; }
+#dayEndModal .dayend-card-card{ border-top-color: #5d9cec; }
+#dayEndModal .dayend-card-bank{ border-top-color: #7266ba; }
+#dayEndModal .dayend-card-credit{ border-top-color: #ffbd4a; background: #fffcf5; }
+#dayEndModal .dayend-card-head{
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #7a8794;
+}
+#dayEndModal .dayend-card-head > .fa{
+  width: 18px;
+  margin-right: 2px;
+}
+#dayEndModal .dayend-card-cash .dayend-card-head > .fa{ color: #5fbeaa; }
+#dayEndModal .dayend-card-card .dayend-card-head > .fa{ color: #5d9cec; }
+#dayEndModal .dayend-card-bank .dayend-card-head > .fa{ color: #7266ba; }
+#dayEndModal .dayend-card-credit .dayend-card-head > .fa{ color: #f0a42c; }
+#dayEndModal .dayend-card-value{
+  margin-top: 6px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #36404a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#dayEndModal .dayend-card-caption{
+  font-size: 11.5px;
+  color: #98a6ad;
+  margin-bottom: 8px;
+}
+#dayEndModal .dayend-card-rows{
+  width: 100%;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+}
+#dayEndModal .dayend-card-rows td{
+  padding: 3px 0;
+  border-top: 1px solid #f1f4f6;
+  color: #6c7a86;
+}
+#dayEndModal .dayend-card-rows td:last-child{
+  text-align: right;
+  white-space: nowrap;
+  color: #36404a;
+  font-weight: 600;
+}
+#dayEndModal .dayend-card-rows td.dayend-in{ color: #3e9e8a; }
+#dayEndModal .dayend-card-rows td.dayend-out{ color: #d84340; }
+#dayEndModal .dayend-move{
+  margin-top: auto;
+}
+#dayEndModal .dayend-owed{
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px dashed #f0d9a8;
+  font-size: 12.5px;
+}
+#dayEndModal .dayend-owed > div{
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+  color: #6c7a86;
+}
+#dayEndModal .dayend-owed b{
+  color: #36404a;
+  white-space: nowrap;
+}
+
+/* the two tables */
+#dayEndModal .dayend-section{
+  margin-bottom: 18px;
+}
+#dayEndModal .dayend-section:last-child{
+  margin-bottom: 0;
+}
+#dayEndModal .dayend-section-title{
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #36404a;
+}
+#dayEndModal .dayend-section-title small{
+  margin-left: 6px;
+  font-weight: normal;
+  color: #98a6ad;
+}
+#dayEndModal .dayend-table-wrap{
+  border: 1px solid #e3e8ec;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+#dayEndModal .dayend-table-wrap .table{
+  margin: 0;
+}
+#dayEndModal .dayend-table-wrap .table > thead > tr > th{
+  background: #f5f7f9;
+  border-bottom: 1px solid #e3e8ec;
+  font-size: 12px;
+  color: #6c7a86;
+  white-space: nowrap;
+}
+#dayEndModal .dayend-table-wrap .table > tbody > tr > td{
+  vertical-align: middle;
+}
+#dayEndModal .dayend-matrix .dayend-group > td{
+  padding-top: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #98a6ad;
+  background: #fafbfc;
+}
+#dayEndModal .dayend-matrix .dayend-total-col{
+  font-weight: 600;
+  background: #fafbfc;
+}
+#dayEndModal .dayend-matrix .dayend-credit-col{
+  color: #b7801d;
+  border-left: 1px dashed #e3e8ec;
+}
+#dayEndModal .dayend-matrix .dayend-net > td{
+  border-top: 2px solid #dfe5ea;
+  font-weight: 700;
+  font-size: 14px;
+  color: #36404a;
+}
+#dayEndModal .dayend-transfers .dayend-empty{
+  padding: 14px 10px;
+  text-align: center;
+}
+#dayEndModal .nobr{
+  white-space: nowrap;
+}
+@media (max-width: 960px){
+  #dayEndModal .dayend-cards{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ---- Transfer Money (#transferModal) ---- */
+#transferModal .transfer-dialog{
+  width: min(520px, calc(100vw - 30px));
+}
+#transferModal .transfer-presets{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+#transferModal .transfer-presets .btn.active{
+  background: #7266ba !important;
+  border-color: #7266ba !important;
+  color: #fff !important;
+  box-shadow: none;
+}
+#transferModal .transfer-route{
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+#transferModal .transfer-route .form-group{
+  flex: 1 1 0;
+  min-width: 0;
+}
+#transferModal .transfer-swap{
+  margin-bottom: 15px;
+  height: 34px;
+}
+#transferModal .transfer-hint{
+  margin: -6px 0 12px;
+  font-size: 12.5px;
+  color: #6c7a86;
+  min-height: 18px;
+}
+#transferModal .transfer-hint a{
+  color: #7266ba;
+  font-weight: 600;
+}
+#transferModal .modal-dialog .modal-content .transfer-footer{
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+#transferModal .transfer-footer .btn + .btn{
+  margin-left: 0;
+}
+#transferModal .transfer-footer .btn-default{
+  background: #fff !important;
+  border: 1px solid #d3d9de !important;
+  color: #4c5667 !important;
+}
+/* the Move buttons on the cards: quiet outlines (the theme makes btn-default teal) */
+#dayEndModal .dayend-card .dayend-move{
+  background: #fff !important;
+  border: 1px solid #d3d9de !important;
+  color: #4c5667 !important;
+  box-shadow: none !important;
+}
+#dayEndModal .dayend-card .dayend-move:hover{
+  border-color: #7266ba !important;
+  color: #7266ba !important;
+}
+#transferModal .transfer-presets .btn:not(.active),
+#transferModal .transfer-swap{
+  background: #fff !important;
+  border: 1px solid #d3d9de !important;
+  color: #4c5667 !important;
+  box-shadow: none !important;
+}
+#transferModal .transfer-presets .btn:not(.active):hover,
+#transferModal .transfer-swap:hover{
+  border-color: #7266ba !important;
+  color: #7266ba !important;
+}
+#dayEndModal .dayend-matrix .dayend-empty{
+  padding: 14px 10px;
+  text-align: center;
+}

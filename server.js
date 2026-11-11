@@ -37,6 +37,7 @@ app.use("/api/users", require("./api/users"));
 app.use("/api/expenses", require("./api/expenses"));
 app.use("/api/suppliers", require("./api/suppliers"));
 app.use("/api/adjustments", require("./api/adjustments"));
+app.use("/api/transfers", require("./api/transfers"));
 app.use("/api/journal", require("./api/journal"));
 app.use("/api", require("./api/transactions"));
 

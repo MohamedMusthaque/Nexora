@@ -155,6 +155,11 @@
                                 <span class="btn-label"><i class="fa fa-book"></i></span><span class="tb-text">Quick Journal</span>
                             </button>
 
+                            <!-- same permission as the Quick Journal (pos.js: applyJournalPermission) -->
+                            <button id="dayEndNav" type="button" class="btn btn-default waves-effect waves-light" style="display: none;" title="Day End: totals by Cash, Card, Bank Transfer and Credit, and moving money between them">
+                                <span class="btn-label"><i class="fa fa-calculator"></i></span><span class="tb-text">Day End</span>
+                            </button>
+
                             <button id="pointofsale" type="button" class="btn btn-default waves-effect waves-light" title="Back to the Point of Sale">
                                 <span class="btn-label"><i class="glyphicon glyphicon-shopping-cart"></i></span><span class="tb-text">Point of Sale</span>
                             </button>
@@ -1538,6 +1543,131 @@
           </div>
      </div>
 
+     <!-- Day End: a day's money by method (Cash, Card, Bank Transfer) and credit,
+          and money moved between methods (pos.js: "Day End") -->
+     <div id="dayEndModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="dayEndTitle" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog dayend-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                        <button type="button" class="btn btn-default btn-sm pull-right" id="dayEndPrint" style="margin-right: 12px;" title="Print the day end report"><i class="fa fa-print"></i> Print</button>
+                        <h4 class="modal-title" id="dayEndTitle"><i class="fa fa-calculator"></i> Day End</h4>
+                        <p class="dayend-subtitle">What each payment method took in and paid out, and money moved between them</p>
+                    </div>
+                    <div class="modal-body dayend-body">
+                        <div class="dayend-bar">
+                            <div class="journal-date dayend-date">
+                                <button type="button" class="btn btn-default" id="dayEndPrevDay" title="Previous day"><i class="fa fa-chevron-left"></i></button>
+                                <input type="date" class="form-control" id="dayEndDate">
+                                <button type="button" class="btn btn-default" id="dayEndNextDay" title="Next day"><i class="fa fa-chevron-right"></i></button>
+                            </div>
+                            <button type="button" class="btn btn-default" id="dayEndToday">Today</button>
+                            <span class="dayend-day" id="dayEndDayLabel"></span>
+                            <button type="button" class="btn btn-default" id="dayEndRefresh" title="Reload"><i class="fa fa-refresh"></i></button>
+                            <button type="button" class="btn btn-purple waves-effect waves-light dayend-transfer-btn" id="dayEndTransferBtn">
+                                <i class="fa fa-exchange"></i> Transfer Money
+                            </button>
+                        </div>
+
+                        <!-- one card per method (pos.js: renderDayEnd) -->
+                        <div class="dayend-cards" id="dayEndCards"></div>
+
+                        <div class="dayend-section">
+                            <h5 class="dayend-section-title">By method <small>where the day's money came from and went to</small></h5>
+                            <div class="dayend-table-wrap">
+                                <table class="table table-condensed dayend-matrix" id="dayEndMatrix"></table>
+                            </div>
+                        </div>
+
+                        <div class="dayend-section">
+                            <h5 class="dayend-section-title">Money transfers <small>moved from one method to another on this day</small></h5>
+                            <div class="dayend-table-wrap">
+                                <table class="table table-condensed dayend-transfers">
+                                    <thead>
+                                        <tr>
+                                            <th>Transfer No</th>
+                                            <th>Time</th>
+                                            <th>From &rarr; To</th>
+                                            <th class="text-right">Amount</th>
+                                            <th>Reference / Note</th>
+                                            <th>By</th>
+                                            <th style="width: 50px;"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="dayEndTransfers"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+               </div>
+          </div>
+     </div>
+
+     <!-- Moving money between methods (pos.js: openTransferForm) -->
+     <div id="transferModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="transferTitle" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog transfer-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                        <h4 class="modal-title" id="transferTitle"><i class="fa fa-exchange"></i> Transfer Money</h4>
+                    </div>
+                    <div class="modal-body">
+                        <form id="saveTransfer" autocomplete="off">
+                            <!-- the usual end-of-day moves -->
+                            <div class="transfer-presets">
+                                <button type="button" class="btn btn-default btn-sm" data-from="Cash" data-to="Bank Transfer"><i class="fa fa-university"></i> Bank the cash</button>
+                                <button type="button" class="btn btn-default btn-sm" data-from="Bank Transfer" data-to="Cash"><i class="fa fa-money"></i> Withdraw cash</button>
+                                <button type="button" class="btn btn-default btn-sm" data-from="Card" data-to="Bank Transfer"><i class="fa fa-credit-card"></i> Card settlement</button>
+                            </div>
+                            <div class="transfer-route">
+                                <div class="form-group">
+                                    <label for="transferFrom">From</label>
+                                    <select id="transferFrom" class="form-control">
+                                        <option value="Cash">Cash</option>
+                                        <option value="Card">Card</option>
+                                        <option value="Bank Transfer">Bank Transfer</option>
+                                    </select>
+                                </div>
+                                <button type="button" class="btn btn-default transfer-swap" id="transferSwap" title="Swap From and To"><i class="fa fa-exchange"></i></button>
+                                <div class="form-group">
+                                    <label for="transferTo">To</label>
+                                    <select id="transferTo" class="form-control">
+                                        <option value="Cash">Cash</option>
+                                        <option value="Card">Card</option>
+                                        <option value="Bank Transfer">Bank Transfer</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-xs-6 form-group">
+                                    <label for="transferAmount">Amount <span class="text-muted transfer-currency"></span></label>
+                                    <input type="number" id="transferAmount" class="form-control" min="0.01" step="0.01" placeholder="0.00">
+                                </div>
+                                <div class="col-xs-6 form-group">
+                                    <label for="transferDate">Date</label>
+                                    <input type="date" id="transferDate" class="form-control" required>
+                                </div>
+                            </div>
+                            <!-- what the "from" method took that day (pos.js: updateTransferHint) -->
+                            <div class="transfer-hint" id="transferHint"></div>
+                            <div class="form-group">
+                                <label for="transferReference">Reference <small class="text-muted">(optional)</small></label>
+                                <input type="text" id="transferReference" class="form-control" maxlength="100" placeholder="e.g. bank deposit slip no.">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="transferNote">Note <small class="text-muted">(optional)</small></label>
+                                <input type="text" id="transferNote" class="form-control" maxlength="300" placeholder="e.g. day's takings banked at the branch">
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer transfer-footer">
+                        <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                        <button type="submit" form="saveTransfer" class="btn btn-purple waves-effect waves-light" id="submitTransfer"><i class="fa fa-check"></i> Save Transfer</button>
+                    </div>
+               </div>
+          </div>
+     </div>
+
      <!-- Quick Journal: a day's sales, returns, payments, expenses and GRNs (pos.js: openJournal) -->
      <div id="journalModal" class="modal fade modal-fit" tabindex="-1" role="dialog" aria-labelledby="journalTitle" aria-hidden="true" style="display: none;">
             <div class="modal-dialog modal-lg">
@@ -1565,6 +1695,7 @@
                                 <option value="expense">Expenses</option>
                                 <option value="grn">GRNs &amp; purchase returns</option>
                                 <option value="stock">Stock adjustments</option>
+                                <option value="transfer">Money transfers</option>
                             </select>
                             <button type="button" class="btn btn-default" id="journalRefresh" title="Reload"><i class="fa fa-refresh"></i></button>
                         </div>
@@ -1614,7 +1745,7 @@
                             </div>
                             <table class="table table-condensed journal-methods">
                                 <thead>
-                                    <tr><th>Money</th><th class="text-right">In</th><th class="text-right">Out</th><th class="text-right">Net</th></tr>
+                                    <tr><th>Money</th><th class="text-right">In</th><th class="text-right">Out</th><th class="text-right" title="Moved from / to another method (Day End transfers)">Transfers</th><th class="text-right">Net</th></tr>
                                 </thead>
                                 <tbody id="journalMethods"></tbody>
                             </table>
@@ -2089,7 +2220,7 @@
                             <span><input type="checkbox" name="perm_suppliers" id="perm_suppliers"> Manage Suppliers &amp; GRN </span>
                            </div>
                           <div class="form-group">
-                            <span><input type="checkbox" name="perm_journal" id="perm_journal"> View Quick Journal </span>
+                            <span><input type="checkbox" name="perm_journal" id="perm_journal"> View Quick Journal &amp; Day End </span>
                            </div>
                                 <div class="form-group">
                                     <span><input type="checkbox" name="perm_users" id="perm_users"> Manage Users and Permissions </span>
