@@ -904,45 +904,13 @@ if (!authedThisSession) {
         let delay = 0;
         allProducts?.forEach((product) => {
           if (product.stock != 1) return; // doesn't track stock: no stock warnings
+          let name = capitalizeFirstLetter(product.name);
           if (product.quantity <= 5 && product.quantity > 2) {
-            notiflix.Notify.init({
-              position: "right-bottom",
-              cssAnimationDuration: 600,
-              timeout: 4000 + delay,
-              messageMaxLength: 150,
-              cssAnimationStyle: "from-bottom",
-            });
-            notiflix.Notify.warning(
-              `${capitalizeFirstLetter(product.name)} has only ${
-                product.quantity
-              } left in the inventory`
-            );
+            stockToast("warning", `${name} has only ${product.quantity} left in the inventory`, 4000 + delay);
           } else if (product.quantity >= 1 && product.quantity <= 2) {
-            notiflix.Notify.init({
-              position: "right-bottom",
-              cssAnimationDuration: 600,
-              timeout: 8000 + delay * 2,
-              messageMaxLength: 150,
-              cssAnimationStyle: "from-bottom",
-            });
-            notiflix.Notify.failure(
-              `${capitalizeFirstLetter(product.name)} has only ${
-                product.quantity
-              } left in the inventory`
-            );
+            stockToast("failure", `${name} has only ${product.quantity} left in the inventory`, 8000 + delay * 2);
           } else if (product.quantity < 1) {
-            notiflix.Notify.init({
-              position: "right-bottom",
-              cssAnimationDuration: 600,
-              timeout: 8000 + delay * 2,
-              messageMaxLength: 150,
-              cssAnimationStyle: "from-bottom",
-            });
-            notiflix.Notify.failure(
-              `${capitalizeFirstLetter(
-                product.name
-              )} is out of stock. Please restock.`
-            );
+            stockToast("failure", `${name} is out of stock. Please restock.`, 8000 + delay * 2);
           }
           delay += 100;
         });
@@ -5862,6 +5830,29 @@ function applySuppliersPermission() {
   if (!allowed && $("#suppliers_view").is(":visible")) {
     $("#pointofsale").trigger("click");
   }
+}
+
+// A stock warning in the bottom-right corner (low stock / out of stock) with
+// a close (x) button. Notiflix stops hiding a notice by itself when it has a
+// close button, so it is closed after `timeout` by pressing that button
+// (Notiflix's own close animation and clean-up).
+function stockToast(kind, message, timeout) {
+  notiflix.Notify.init({
+    position: "right-bottom",
+    cssAnimationDuration: 600,
+    messageMaxLength: 150,
+    cssAnimationStyle: "from-bottom",
+    closeButton: true,
+  });
+  notiflix.Notify[kind](message);
+  // right-bottom: the newest notice is the first one
+  let wrap = document.getElementById("NotiflixNotifyWrap");
+  let notice = wrap && wrap.firstElementChild;
+  if (!notice) return;
+  setTimeout(function () {
+    let close = notice.isConnected && notice.querySelector(".nx-close-button");
+    if (close) close.click();
+  }, timeout);
 }
 
 function supMoney(n) {

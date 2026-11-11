@@ -338,3 +338,14 @@ margin-right: 30px;
   margin-bottom: 10px;
   color: #c3cbd2;
 }
+
+/* stock notices (pos.js: stockToast): a clear white close (x) button */
+#NotiflixNotifyWrap .nx-close-button{
+  opacity: 0.85;
+}
+#NotiflixNotifyWrap .nx-close-button:hover{
+  opacity: 1;
+}
+#NotiflixNotifyWrap .nx-close-button path{
+  fill: #fff;
+}
