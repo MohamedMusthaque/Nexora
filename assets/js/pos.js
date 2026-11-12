@@ -1228,8 +1228,8 @@ if (!authedThisSession) {
                           <span class="sku${sizeLabel ? " pos-tile-size" : ""}">${txnHtml(subLabel)}</span>
                           <span class="search-keys" hidden>${txnHtml(searchKeys)}</span>
                           ${stockBadge}
-                          <div class="pos-tile-price${priceCount > 1 ? " pos-tile-price-range" : ""}">${priceLabel}</div>
                           ${priceCount > 1 ? `<div class="pos-tile-prices">${priceCount} prices</div>` : ""}
+                          <div class="pos-tile-price${priceCount > 1 ? " pos-tile-price-range" : ""}">${priceLabel}</div>
                       </div>
                   </div>`;
           $("#parent").append(item_info);

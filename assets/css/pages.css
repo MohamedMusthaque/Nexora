@@ -939,7 +939,7 @@ input.amount-input.amount-input-invalid:focus{
   opacity: 0.7;
 }
 #pos_view .pos-tile-prices{
-  margin-top: 3px;
+  margin: auto 3px 4px;
   font-size: 11px;
   color: #98a6ad;
 }
