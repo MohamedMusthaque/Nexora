@@ -94,12 +94,13 @@ Card, Bank Transfer, Return / Refund and Exchange can each be turned off in **Se
 - **Customer Transactions** window with Transactions, Credit payments and Advance tabs, each with date filter, search and Excel / PDF export.
 
 ### 📦 Products, Categories & Stock
-The **Products** window has three tabs: Products, Categories and Stock Adjustments.
+The **Products** window has four tabs: Products, Categories, **Brands** and Stock Adjustments.
 - **Products:**
   - **Brand**, **Size / Variant** (500 ml, Large…), **Unit** (piece, bottle, pack, plate…), **SKU / item code**, description and a per-product **low-stock alert**. Products with the same name in different sizes share one till tile, and the cashier picks the size. The SKU can be typed into the scan box.
   - Cost price and selling price, with live profit and margin shown as you type.
   - Barcode, entered or generated with **Fill**, stock and picture.
   - Printable **barcode labels** with the price.
+- **Brands:** every brand with its products, sizes, units in stock and stock value at cost and selling price, with Excel / PDF export. Open a brand to see its products and edit them; **Rename** fixes a brand's spelling on all its products at once, or merges two brands (e.g. "Nestle" into "Nestlé").
 - **Product History:** every sale, return, GRN, PRN, adjustment and edit for a product, plus its stock batches.
 - **Stock Adjustments:**
   - Stock out (Expired, Damaged, Lost / Missing, Theft, Own / Staff use, Stock count shortage) or stock in (Stock count surplus, Found).

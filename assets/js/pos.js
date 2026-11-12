@@ -1068,6 +1068,7 @@ if (!authedThisSession) {
         allProducts = [...data];
         cartBatchInfo = {}; // the fresh products carry the current stock batches
         loadProductList();
+        loadBrandList(); // the Brands tab
         const capitalizeFirstLetter = (word) =>
           `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
 
@@ -4760,6 +4761,231 @@ if (!authedThisSession) {
         );
       }
     }
+
+    // ---- Brands tab (Products window): the products by brand ----
+    // Built from each product's Brand (any case / spacing is the same brand;
+    // shown in the spelling most of its products use). A row's View shows its
+    // products; Rename renames - or merges into another brand - the brand on
+    // all of them (api/inventory.js: /brands/rename).
+    let brandGroups = []; // [{ key, name, spellings, products }]
+    let brandOpen = new Set(); // brands whose products are shown (kept when the list reloads)
+
+    function brandKey(b) {
+      return String(b || "").replace(/\s+/g, " ").trim().toLowerCase();
+    }
+
+    function buildBrandGroups() {
+      let map = {};
+      allProducts.forEach((p) => {
+        let key = brandKey(p.brand);
+        let g = (map[key] = map[key] || { key, spellings: {}, products: [] });
+        g.products.push(p);
+        if (key) {
+          let spelling = String(p.brand).replace(/\s+/g, " ").trim();
+          g.spellings[spelling] = (g.spellings[spelling] || 0) + 1;
+        }
+      });
+      return Object.values(map).map((g) => {
+        g.name = g.key ? Object.entries(g.spellings).sort((a, b) => b[1] - a[1])[0][0] : "";
+        return g;
+      });
+    }
+
+    // stock (products that track it), stock value at cost and at selling price, sizes
+    function brandFigures(products) {
+      let tracked = products.filter((p) => p.stock == 1);
+      let qty = (p) => Math.max(parseInt(p.quantity) || 0, 0);
+      return {
+        tracked: tracked.length,
+        units: tracked.reduce((s, p) => s + qty(p), 0),
+        cost: tracked.reduce((s, p) => s + qty(p) * (parseFloat(p.cost_price) || 0), 0),
+        selling: tracked.reduce((s, p) => s + qty(p) * (parseFloat(p.price) || 0), 0),
+        noCost: tracked.some((p) => qty(p) > 0 && (p.cost_price === undefined || p.cost_price === "")),
+        sizes: [...new Set(products.map((p) => String(p.size || "").trim()).filter(Boolean))].sort((a, b) =>
+          a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+        ),
+      };
+    }
+
+    // the brand's products, under its row
+    function brandProductsHtml(g) {
+      let catName = (id) => {
+        let c = allCategories.find((x) => String(x._id) === String(id));
+        return c ? c.name : "Uncategorized";
+      };
+      let rows = g.products
+        .slice()
+        .sort(
+          (a, b) =>
+            String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" }) ||
+            String(a.size || "").localeCompare(String(b.size || ""), undefined, { numeric: true, sensitivity: "base" })
+        )
+        .map((p) => {
+          let cost = p.cost_price !== undefined && p.cost_price !== "" ? supMoney(p.cost_price) : '<span class="text-muted">&mdash;</span>';
+          return `<tr>
+            <td><b>${txnHtml(p.name)}</b>${p.size ? ` <span class="label label-default product-meta-size">${txnHtml(p.size)}</span>` : ""}</td>
+            <td>${txnHtml(catName(p.category))}</td>
+            <td>${p.sku ? txnHtml(p.sku) : '<span class="text-muted">&mdash;</span>'}<br><small class="text-muted">${txnHtml(p.barcode ?? "")}</small></td>
+            <td class="text-right nobr">${cost}</td>
+            <td class="text-right nobr">${supMoney(p.price)}</td>
+            <td class="text-right nobr">${productStockHtml(p)}</td>
+            <td><button onClick="$(this).editProduct(${allProducts.indexOf(p)})" class="btn btn-warning btn-xs" title="Edit product"><i class="fa fa-edit"></i></button></td>
+          </tr>`;
+        })
+        .join("");
+      return `<div class="brand-products">
+          <table class="table table-condensed">
+            <thead><tr><th>Product</th><th>Category</th><th>SKU / Barcode</th><th class="text-right">Cost</th><th class="text-right">Price</th><th class="text-right">Stock</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function showBrandProducts(tr, g, show) {
+      let row = $("#brandList").DataTable().row(tr);
+      if (show) {
+        row.child(brandProductsHtml(g), "brand-child").show();
+        brandOpen.add(g.key);
+      } else {
+        row.child.hide();
+        brandOpen.delete(g.key);
+      }
+      $(tr).toggleClass("brand-open", show).find(".brand-toggle i").attr("class", "fa " + (show ? "fa-search-minus" : "fa-search-plus"));
+    }
+
+    function loadBrandList() {
+      brandGroups = buildBrandGroups();
+      let branded = brandGroups.filter((g) => g.key);
+      let none = brandGroups.find((g) => !g.key);
+      let total = brandFigures(allProducts);
+      let brandedCount = branded.reduce((n, g) => n + g.products.length, 0);
+
+      $("#brandsTabCount").text(branded.length);
+      $("#brandsCount").text(branded.length);
+      $("#brandsProducts").text(brandedCount);
+      $("#brandsProductsNote").text("of " + allProducts.length + (allProducts.length === 1 ? " product" : " products"));
+      $("#brandsNone").text(none ? none.products.length : 0);
+      $("#brandsStockValue").text(supMoney(total.cost));
+      $("#brandsStockValueNote").text(total.units + " units · " + supMoney(total.selling) + " at selling price");
+
+      let rows = branded
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
+        .concat(none ? [none] : [])
+        .map((g) => {
+          let f = brandFigures(g.products);
+          let sizes = f.sizes.length
+            ? f.sizes
+                .slice(0, 6)
+                .map((s) => `<span class="label label-default product-meta-size">${txnHtml(s)}</span>`)
+                .join(" ") + (f.sizes.length > 6 ? ` <small class="text-muted">+${f.sizes.length - 6} more</small>` : "")
+            : '<span class="text-muted">&mdash;</span>';
+          let money = (n) => (f.tracked ? supMoney(n) : '<span class="text-muted">&mdash;</span>');
+          let spellings = Object.keys(g.spellings || {});
+          return `<tr data-brand="${txnHtml(g.key)}">
+            <td data-order="${g.key ? txnHtml(g.key) : "￿"}" data-export="${txnHtml(g.key ? g.name : "No brand")}">${
+              g.key
+                ? `<b>${txnHtml(g.name)}</b>${spellings.length > 1 ? ` <i class="fa fa-exclamation-circle text-warning" title="Spelled ${txnHtml(spellings.length)} ways: ${txnHtml(spellings.join(", "))}. Rename to make them the same."></i>` : ""}`
+                : '<span class="text-muted">No brand</span>'
+            }</td>
+            <td class="text-right">${g.products.length}</td>
+            <td data-export="${txnHtml(f.sizes.join(", "))}">${sizes}</td>
+            <td class="text-right" data-order="${f.units}">${f.tracked ? f.units : '<span class="text-muted">N/A</span>'}</td>
+            <td class="text-right nobr" data-order="${f.cost}">${money(f.cost)}${f.noCost ? ' <i class="fa fa-info-circle text-muted" title="Some products have no cost price yet: counted at 0"></i>' : ""}</td>
+            <td class="text-right nobr" data-order="${f.selling}">${money(f.selling)}</td>
+            <td class="nobr">
+              <button type="button" class="btn btn-info btn-sm brand-toggle" title="View products"><i class="fa fa-search-plus"></i></button>
+              ${g.key ? `<button type="button" class="btn btn-warning btn-sm brand-rename" title="Rename / merge brand"><i class="fa fa-edit"></i></button>` : ""}
+            </td>
+          </tr>`;
+        })
+        .join("");
+
+      if ($.fn.DataTable.isDataTable("#brandList")) $("#brandList").DataTable().destroy();
+      $("#brand_list").html(rows);
+      $("#brandList").DataTable(
+        Object.assign(
+          standardTableOptions({
+            noun: "brands",
+            searchPlaceholder: "Search brands...",
+            exportTitle: "Brands",
+            exportColumns: [0, 1, 2, 3, 4, 5],
+            sumColumns: [1, 3, 4, 5],
+            actionColumns: [6], // Sizes stay searchable: "500 ml" finds the brands that have it
+            emptyTable: "No brands yet - add a Brand in a product's form",
+          }),
+          { order: [[0, "asc"]] }
+        )
+      );
+      // brands that were open stay open
+      $("#brandList tbody > tr[data-brand]").each(function () {
+        let g = brandGroups.find((x) => x.key === $(this).attr("data-brand"));
+        if (g && brandOpen.has(g.key)) showBrandProducts(this, g, true);
+      });
+    }
+
+    $(document).on("click", "#brandList .brand-toggle", function () {
+      let tr = $(this).closest("tr");
+      let g = brandGroups.find((x) => x.key === tr.attr("data-brand"));
+      if (g) showBrandProducts(tr[0], g, !tr.hasClass("brand-open"));
+    });
+
+    $(document).on("click", "#brandList .brand-rename", function () {
+      let g = brandGroups.find((x) => x.key === $(this).closest("tr").attr("data-brand"));
+      if (!g) return;
+      let spellings = Object.keys(g.spellings);
+      Swal.fire({
+        title: "Rename brand",
+        html:
+          `<p class="text-muted" style="font-size: 14px;">Changes the brand on all <b>${g.products.length}</b> ${g.products.length === 1 ? "product" : "products"} of <b>${txnHtml(g.name)}</b>.` +
+          (spellings.length > 1 ? `<br>It is spelled ${spellings.length} ways (${txnHtml(spellings.join(", "))}); they all get the new name.` : "") +
+          "<br>Typing an existing brand merges them.</p>",
+        input: "text",
+        inputValue: g.name,
+        inputAttributes: { maxlength: 60 },
+        showCancelButton: true,
+        confirmButtonText: "Rename",
+        inputValidator: (v) => (!String(v || "").trim() ? "Enter the brand name." : undefined),
+      }).then(function (r) {
+        if (!r.value) return;
+        let to = String(r.value).replace(/\s+/g, " ").trim();
+        if (to === g.name && spellings.length === 1) return; // nothing changes
+        let target = brandGroups.find((x) => x.key && x.key === brandKey(to) && x.key !== g.key);
+        let go = function () {
+          $.ajax({
+            url: api + "inventory/brands/rename",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify({ from: g.name, to: to, user: user?.fullname || "", user_id: user?._id || "" }),
+          })
+            .done(function (res) {
+              brandOpen.delete(g.key);
+              Swal.fire({
+                icon: "success",
+                title: target ? "Brands merged" : "Brand renamed",
+                text: `${res.updated} ${res.updated === 1 ? "product now says" : "products now say"} "${to}".`,
+                timer: 2500,
+              });
+              loadProducts();
+            })
+            .fail(function (xhr) {
+              Swal.fire("Oops!", (xhr && xhr.responseText) || "Could not rename the brand.", "error");
+            });
+        };
+        if (!target) return go();
+        Swal.fire({
+          icon: "question",
+          title: "Merge brands?",
+          html: `<b>${txnHtml(target.name)}</b> already has ${target.products.length} ${target.products.length === 1 ? "product" : "products"}. Merge <b>${txnHtml(g.name)}</b> into it?`,
+          showCancelButton: true,
+          confirmButtonText: "Merge",
+        }).then((c) => c.value && go());
+      });
+    });
+
+    // the brands table is measured while its tab is hidden
+    $('#Products .products-tabs a[href="#productsTabBrands"]').on("shown.bs.tab", function () {
+      if ($.fn.DataTable.isDataTable("#brandList")) $("#brandList").DataTable().columns.adjust();
+    });
 
     $.fn.serializeObject = function () {
       var o = {};

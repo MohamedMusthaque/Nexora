@@ -763,6 +763,39 @@ app.createGrnProduct = function (source, costPrice, sellingPrice, info, callback
 // "Coca-Cola 500 ml": for GRN / PRN / stock adjustment lines (suppliers.js, adjustments.js)
 app.productDisplayName = productDisplayName;
 
+// ---- Brands (Products window > Brands tab) ----
+// Renames a brand on every product that has it (any case / spacing), e.g. to
+// fix the spelling, or to merge "Nestle" into "Nestlé". Each product's history
+// records the change. Body: { from, to, user, user_id } -> { updated }
+app.post("/brands/rename", function (req, res) {
+  let from = cleanText(req.body.from, 60);
+  let to = cleanText(req.body.to, 60);
+  if (!from) return res.status(400).send("Choose the brand to rename.");
+  if (!to) return res.status(400).send("Enter the new brand name.");
+  let same = (b) => cleanText(b, 60).toLowerCase() === from.toLowerCase();
+  inventoryDB.find({}, function (err, products) {
+    if (err) return res.status(500).send("Could not load the products.");
+    let hits = products.filter((p) => same(p.brand) && String(p.brand) !== to);
+    if (!hits.length) return res.send({ updated: 0 });
+    let who = { user: req.body.user, user_id: req.body.user_id };
+    let done = 0;
+    let failed = false;
+    hits.forEach(function (p) {
+      inventoryDB.update({ _id: p._id }, { $set: { brand: to } }, {}, function (err) {
+        if (failed) return;
+        if (err) {
+          failed = true;
+          return res.status(500).send("Could not rename the brand on every product. Please try again.");
+        }
+        logHistory([historyEntry(Object.assign({}, p, { brand: to }), "updated", {
+          changes: [{ field: "brand", label: "Brand", from: p.brand, to: to }],
+        }, who)]);
+        if (++done === hits.length) res.send({ updated: done });
+      });
+    });
+  });
+});
+
 // the products with these ids (missing ones are simply not in the result)
 app.getProductsByIds = function (ids, callback) {
   inventoryDB.find({ _id: { $in: ids.map((id) => parseInt(id)) } }, callback);

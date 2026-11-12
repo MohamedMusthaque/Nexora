@@ -2238,6 +2238,12 @@
                                     <i class="glyphicon glyphicon-th"></i> Categories
                                 </a>
                             </li>
+                            <!-- the products by brand (pos.js: "Brands tab") -->
+                            <li role="presentation" class="p_one">
+                                <a href="#productsTabBrands" aria-controls="productsTabBrands" role="tab" data-toggle="tab">
+                                    <i class="fa fa-bookmark"></i> Brands <span class="badge" id="brandsTabCount">0</span>
+                                </a>
+                            </li>
                             <!-- stock written off (expired, damaged, lost...) or found (pos.js: "Stock adjustments") -->
                             <li role="presentation" class="p_one">
                                 <a href="#productsTabAdjustments" aria-controls="productsTabAdjustments" role="tab" data-toggle="tab">
@@ -2305,6 +2311,46 @@
                                     </tr>
                                 </thead>
                                 <tbody id="category_list"></tbody>
+                            </table>
+                        </div>
+
+                        <!-- Brands: the products by brand, with stock and stock value; a brand can be
+                             renamed / merged on all its products (pos.js: "Brands tab") -->
+                        <div role="tabpanel" class="tab-pane" id="productsTabBrands">
+                            <div class="sup-tiles brand-tiles">
+                                <div class="sup-tile">
+                                    <h5>BRANDS</h5>
+                                    <div class="sup-value" id="brandsCount">0</div>
+                                </div>
+                                <div class="sup-tile">
+                                    <h5>PRODUCTS WITH A BRAND</h5>
+                                    <div class="sup-value" id="brandsProducts">0</div>
+                                    <small id="brandsProductsNote">of 0 products</small>
+                                </div>
+                                <div class="sup-tile">
+                                    <h5>NO BRAND YET</h5>
+                                    <div class="sup-value" id="brandsNone">0</div>
+                                    <small>set it in each product's form</small>
+                                </div>
+                                <div class="sup-tile sup-tile-main">
+                                    <h5>STOCK VALUE (COST)</h5>
+                                    <div class="sup-value" id="brandsStockValue">0.00</div>
+                                    <small id="brandsStockValueNote">products that track stock</small>
+                                </div>
+                            </div>
+                            <table class="table table-bordered" id="brandList" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th>Brand</th>
+                                        <th class="txn-num">Products</th>
+                                        <th>Sizes</th>
+                                        <th class="txn-num">In Stock</th>
+                                        <th class="txn-num" title="Stock x cost price">Stock Value (Cost)</th>
+                                        <th class="txn-num" title="Stock x selling price">Stock Value (Selling)</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="brand_list"></tbody>
                             </table>
                         </div>
 

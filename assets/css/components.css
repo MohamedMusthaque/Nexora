@@ -2671,8 +2671,9 @@ ul.ColVis_collection li {
   min-height: 140px;
   overflow-y: auto;
 }
-/* Categories tab: its DataTable's list area scrolls the same way */
-#Products #productsTabCategories > .dataTables_wrapper{
+/* Categories and Brands tabs: their DataTable's list area scrolls the same way */
+#Products #productsTabCategories > .dataTables_wrapper,
+#Products #productsTabBrands > .dataTables_wrapper{
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
@@ -6426,4 +6427,60 @@ body.transactions-mode #transactions_view .txn-page{
 #productList .product-stock-low{
   font-weight: 700;
   color: #d84340;
+}
+
+
+/* ---- Products window > Brands tab (pos.js: loadBrandList) ---- */
+#Products .tab-pane > .brand-tiles{
+  flex: 0 0 auto;
+}
+#brandList > tbody > tr.brand-open > td{
+  background: #f4fbf9;
+  border-bottom-color: transparent;
+}
+#brandList .product-meta-size{
+  display: inline-block;
+  margin: 1px 0;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #e8f6f2;
+  color: #3e9e8a;
+  font-size: 11px;
+  font-weight: 700;
+}
+/* a brand's products, under its row */
+#brandList > tbody > tr.brand-child > td{
+  padding: 0 0 8px 24px;
+  background: #f4fbf9;
+}
+#brandList .brand-products{
+  border-left: 3px solid #5fbeaa;
+  background: #fff;
+}
+#brandList .brand-products .table{
+  margin: 0;
+}
+#brandList .brand-products .table > thead > tr > th{
+  position: static !important; /* not the sticky list headings */
+  background: #f6f8fa;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #98a6ad;
+  box-shadow: none;
+}
+#brandList .brand-products .table > tbody > tr > td{
+  vertical-align: middle;
+  font-size: 13px;
+}
+#brandList .brand-products .table > thead > tr > th.text-right{
+  text-align: right !important;
+}
+#brandList .product-stock-low{
+  font-weight: 700;
+  color: #d84340;
+}
+#brandList .nobr{
+  white-space: nowrap;
 }
