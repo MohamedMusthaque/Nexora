@@ -87,7 +87,7 @@ It runs on a single checkout PC, or across several tills on a local network (LAN
 | **Credit** | Registered customers only, checked against their **credit limit** |
 | **Partial payment** | Part paid now by Cash, Card or Bank Transfer, the rest on credit |
 
-Card and Bank Transfer can be turned off in **Settings → Payments & Operations**. Return / Refund and Exchange are controlled per user in **Users → Edit → Permissions**.
+Card and Bank Transfer can be turned off in **Settings → Payments & Operations**. Return / Refund and Exchange have separate per-user permissions in **Users → Edit → Permissions**. These two permissions can also be changed for the Administrator account without removing its other administrative access. A user who is already signed in should sign out and back in for permission changes to take effect.
 
 ### 👤 Customers, Credit & Advance
 - Customer register with **unlimited** or **limited** credit.
@@ -188,7 +188,7 @@ This is the day-to-day map of what a signed-in user can do in NEXORA POS. Button
 | **Expenses** | Add, edit or delete expenses; create, rename or delete expense types; filter and export the expense list | Each expense records its date, type, payment method, amount, description and creator. An expense type in use must be cleared from its expenses before it can be deleted. |
 | **Transactions & reports** | View bills, products sold, returns, exchanges and profit; search, filter by date/status/payment/cashier; export Excel or PDF; print supported documents | These are reporting actions: they do not alter the underlying sale. Profit access is separately permission-controlled. |
 | **Quick Journal, Day End & Accounts** | Review daily activity; open supporting documents; print or export the journal; complete day end; transfer money between cash, card and bank; view account statements | The Quick Journal brings together sales, returns, payments, expenses, GRNs, PRNs, adjustments and transfers. A transfer creates a printable money-movement note and appears in Accounts. |
-| **Users & permissions** | Add, edit or delete staff accounts; change permissions; sign out | Permissions control access to products, categories, transactions, returns/refunds, exchanges, profit, expenses, suppliers, journal/accounts, User History, users and settings. The bootstrap administrator retains administrative access; Return/Refund and Exchange can be controlled separately. |
+| **Users & permissions** | Add, edit or delete staff accounts; change permissions; sign out | Permissions control access to products, categories, transactions, returns/refunds, exchanges, profit, expenses, suppliers, journal/accounts, User History, users and settings. The bootstrap administrator retains its other administrative access; Return/Refund and Exchange can be controlled separately for any account. Users should sign out and back in after their permissions change. |
 | **User History** | Filter completed actions by user, area or action; search; export Excel or PDF; refresh the list; open related documents | Every successful saved operation is recorded with its time, acting user, area, action and relevant details. A View button opens the related invoice, GRN, PRN, stock adjustment, transfer or product history when applicable; deleted products retain a read-only details snapshot. It requires the **View User History** permission. |
 | **Settings & data** | Update store, tax, currency, receipt, payment and terminal settings; change data location; back up, restore or reset data; configure Google Drive Backup | Setting changes affect future use of the application. Backup/restore and reset are protected actions; reset retains user accounts and creates a backup first. |
 
@@ -381,7 +381,7 @@ The administrator gets **full access** and is logged in straight away. Next:
 
 ## 👥 User Permissions
 
-Each user gets their own permissions (**Users → Edit → Permissions**). Only the administrator can change them.
+Each user gets their own permissions (**Users → Edit → Permissions**). Only the administrator can change them. Return / Refund and Exchange are separate permissions, so either can be enabled or disabled without changing the other. The Administrator account starts with full access and keeps its other administrative permissions, but these two actions can also be restricted for that account. Permission changes apply the next time the affected user signs in.
 
 | Permission | Allows |
 | :--- | :--- |
