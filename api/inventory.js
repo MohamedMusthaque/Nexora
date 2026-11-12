@@ -59,6 +59,41 @@ function historyEntry(product, type, extra, who) {
 }
 
 // Compares a product before/after an edit and builds the history entries
+// ---- Product details (like other POS systems) ----
+// brand: "Coca-Cola"; size: the size / variant ("500 ml", "Large", "Red") -
+// products with the same name and different sizes share one till tile and the
+// cashier picks the size; unit: what one item of stock is (piece, bottle,
+// pack...); sku: the shop's own item code (also found by the scan box);
+// reorder_level: the stock at which the till warns it is running low ("" = 5);
+// description: notes. All optional; older products simply don't have them.
+const PRODUCT_UNITS = ["pcs", "pack", "box", "bottle", "can", "bag", "jar", "cup", "plate", "portion", "dozen", "pair", "set"];
+const DEFAULT_REORDER_LEVEL = 5;
+
+function cleanText(value, max) {
+  return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+function productDetails(body, reorderText) {
+  let unit = String(body.unit ?? "").trim().toLowerCase();
+  return {
+    brand: cleanText(body.brand, 60),
+    size: cleanText(body.size, 40),
+    unit: PRODUCT_UNITS.includes(unit) ? unit : "",
+    sku: cleanText(body.sku, 40),
+    description: String(body.description ?? "").trim().slice(0, 500),
+    reorder_level: reorderText === "" ? "" : parseInt(reorderText),
+  };
+}
+
+// the name shown on bills, GRNs, PRNs...: the name with its size ("Coca-Cola 500 ml"),
+// unless the name already says it
+function productDisplayName(p) {
+  let name = String((p && p.name) || "");
+  let size = String((p && p.size) || "").trim();
+  if (!size || name.toLowerCase().includes(size.toLowerCase())) return name;
+  return name + " " + size;
+}
+
 function editHistoryEntries(before, after, who) {
   let entries = [];
   let tracked = after.stock == 1;
@@ -82,6 +117,12 @@ function editHistoryEntries(before, after, who) {
     ["cost_price", "Cost price"],
     ["category", "Category"],
     ["barcode", "Barcode"],
+    ["brand", "Brand"],
+    ["size", "Size"],
+    ["unit", "Unit"],
+    ["sku", "SKU"],
+    ["reorder_level", "Low-stock alert"],
+    ["description", "Description"],
   ].forEach(function (f) {
     if (String(before[f[0]] ?? "") !== String(after[f[0]] ?? "")) {
       changes.push({ field: f[0], label: f[1], from: before[f[0]], to: after[f[0]] });
@@ -178,17 +219,25 @@ app.post("/product", upload.single("imagename"), function (req, res) {
     }
   }
 
-  let Product = {
-    _id: parseInt(req.body.id),
-    price: priceText.startsWith(".") ? "0" + priceText : priceText, // ".75" -> "0.75"
-    cost_price: costText === "" ? "" : parseFloat(costText).toFixed(2),
-    category: req.body.category,
-    quantity: req.body.quantity == "" ? 0 : req.body.quantity,
-    name: req.body.name,
-    stock: req.body.stock == "on" ? 0 : 1,
-    barcode: req.body.barcode ? req.body.barcode : parseInt(req.body.id),
-    img: image,
-  };
+  let reorderText = String(req.body.reorder_level ?? "").trim();
+  if (reorderText !== "" && !/^\d{1,6}$/.test(reorderText)) {
+    return reject("Low-stock alert must be a whole number (e.g. 5), or left empty.");
+  }
+
+  let Product = Object.assign(
+    {
+      _id: parseInt(req.body.id),
+      price: priceText.startsWith(".") ? "0" + priceText : priceText, // ".75" -> "0.75"
+      cost_price: costText === "" ? "" : parseFloat(costText).toFixed(2),
+      category: req.body.category,
+      quantity: req.body.quantity == "" ? 0 : req.body.quantity,
+      name: req.body.name,
+      stock: req.body.stock == "on" ? 0 : 1,
+      barcode: req.body.barcode ? req.body.barcode : parseInt(req.body.id),
+      img: image,
+    },
+    productDetails(req.body, reorderText)
+  );
 
   let who = { user: req.body.history_user, user_id: req.body.history_user_id };
 
@@ -287,7 +336,7 @@ app.post("/product/sku", function (req, res) {
       if (product) return send(product);
       // a selling price's own barcode ("<product barcode>-2", ...)
       batchesDB.findOne({ barcode: code }, function (err, batch) {
-        if (err || !batch) return res.send(product);
+        if (err || !batch) return findBySku();
         inventoryDB.findOne({ _id: batch.product_id }, function (err, owner) {
           if (err || !owner) return res.send(null);
           send(owner);
@@ -295,6 +344,17 @@ app.post("/product/sku", function (req, res) {
       });
     }
   );
+  // the shop's own item code (SKU), any case; several products can share it
+  // (the same item at different costs): one with stock first
+  function findBySku() {
+    if (!code) return res.send(null);
+    let pattern = new RegExp("^" + code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$", "i");
+    inventoryDB.find({ sku: pattern }, function (err, found) {
+      if (err || !found || !found.length) return res.send(null);
+      let inStock = found.find((p) => p.stock != 1 || (parseInt(p.quantity) || 0) > 0);
+      send(inStock || found[0]);
+    });
+  }
 });
 
 // ======================================================================
@@ -674,6 +734,13 @@ app.createGrnProduct = function (source, costPrice, sellingPrice, info, callback
       stock: source.stock == 1 ? 1 : 0,
       barcode: barcode,
       img: source.img || "",
+      // the same item at another cost: same brand, size, unit, code and alert level
+      brand: source.brand || "",
+      size: source.size || "",
+      unit: source.unit || "",
+      sku: source.sku || "",
+      description: source.description || "",
+      reorder_level: source.reorder_level ?? "",
     };
     inventoryDB.insert(product, function (err, saved) {
       if (err) return callback(err);
@@ -692,6 +759,9 @@ app.createGrnProduct = function (source, costPrice, sellingPrice, info, callback
     });
   });
 };
+
+// "Coca-Cola 500 ml": for GRN / PRN / stock adjustment lines (suppliers.js, adjustments.js)
+app.productDisplayName = productDisplayName;
 
 // the products with these ids (missing ones are simply not in the result)
 app.getProductsByIds = function (ids, callback) {

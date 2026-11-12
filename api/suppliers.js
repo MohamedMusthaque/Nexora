@@ -289,7 +289,8 @@ app.get( "/transactions/:id", function ( req, res ) {
 function resolveGrnProducts( items, info, callback ) {
     Inventory.getAllProducts( function ( err, all ) {
         if ( err ) return callback( err );
-        let family = ( p ) => String( p.name || "" ).trim().toLowerCase() + "||" + String( p.category ?? "" );
+        // the same item: same name, brand, size and category (a 1 L GRN line never goes to the 500 ml product)
+        let family = ( p ) => [ p.name, p.brand, p.size ].map( ( t ) => String( t || "" ).trim().toLowerCase() ).join( "||" ) + "||" + String( p.category ?? "" );
         let costOf = ( p ) => {
             let c = parseFloat( p.cost_price );
             return isFinite( c ) ? round2( c ) : null;
@@ -375,7 +376,7 @@ function resolveGrnProducts( items, info, callback ) {
                 let item = items[i];
                 if ( target._id !== item.product_id ) item.requested_product_id = item.product_id;
                 item.product_id = target._id;
-                item.product_name = target.name;
+                item.product_name = Inventory.productDisplayName( target ); // "Coca-Cola 500 ml"
                 let barcode = target.barcode == null ? "" : String( target.barcode );
                 item.barcode = barcode === "NaN" ? "" : barcode;
                 item.selling_price = priceOf( target );
@@ -680,7 +681,7 @@ app.post( "/prn", function ( req, res ) {
             for ( let i = 0; i < items.length; i++ ) {
                 let p = products.find( ( x ) => x._id === items[i].product_id );
                 if ( !p ) return fail( 400, "Line " + ( i + 1 ) + ": that product no longer exists." );
-                items[i].product_name = p.name;
+                items[i].product_name = Inventory.productDisplayName( p );
                 let barcode = p.barcode == null ? "" : String( p.barcode );
                 items[i].barcode = barcode === "NaN" ? "" : barcode;
                 items[i].total = round2( items[i].quantity * items[i].unit_cost );

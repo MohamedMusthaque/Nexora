@@ -1287,14 +1287,50 @@
                         <div class="account-section">
                             <h5 class="account-section-title"><i class="fa fa-cube"></i> Product</h5>
                             <div class="row">
-                                <div class="col-sm-6 form-group">
+                                <div class="col-sm-8 form-group">
                                     <label for="productName">Product Name <span class="account-required">*</span></label>
-                                    <input type="text" required="required" name="name" parsley-trigger="change" placeholder="Enter a product name" class="form-control" id="productName">
+                                    <input type="text" required="required" name="name" parsley-trigger="change" placeholder="e.g. Coca-Cola, Chicken Kottu" class="form-control" id="productName" maxlength="100">
                                 </div>
-                                <div class="col-sm-6 form-group">
+                                <div class="col-sm-4 form-group">
+                                    <label for="productBrand">Brand</label>
+                                    <!-- suggestions: the brands already used (pos.js: fillProductSuggestions) -->
+                                    <input type="text" name="brand" class="form-control" id="productBrand" list="productBrandList" maxlength="60" placeholder="e.g. Nestle">
+                                    <datalist id="productBrandList"></datalist>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-sm-4 form-group">
                                     <label for="category">Category</label>
                                     <select name="category" class="form-control" id="category"></select>
                                 </div>
+                                <div class="col-sm-4 form-group">
+                                    <label for="productSize">Size / Variant</label>
+                                    <input type="text" name="size" class="form-control" id="productSize" list="productSizeList" maxlength="40" placeholder="e.g. 500 ml, Large">
+                                    <datalist id="productSizeList"></datalist>
+                                </div>
+                                <div class="col-sm-4 form-group">
+                                    <label for="productUnit">Unit</label>
+                                    <select name="unit" class="form-control" id="productUnit">
+                                        <option value="">Piece (pcs)</option>
+                                        <option value="pack">Pack</option>
+                                        <option value="box">Box</option>
+                                        <option value="bottle">Bottle</option>
+                                        <option value="can">Can</option>
+                                        <option value="bag">Bag</option>
+                                        <option value="jar">Jar</option>
+                                        <option value="cup">Cup</option>
+                                        <option value="plate">Plate</option>
+                                        <option value="portion">Portion</option>
+                                        <option value="dozen">Dozen</option>
+                                        <option value="pair">Pair</option>
+                                        <option value="set">Set</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <p class="account-hint product-size-hint"><i class="fa fa-info-circle"></i> Same product in several sizes? Give each the same name and its own size: they share one tile on the till and the cashier picks the size.</p>
+                            <div class="form-group">
+                                <label for="productDescription">Description <small class="text-muted">(optional)</small></label>
+                                <textarea name="description" class="form-control" id="productDescription" rows="2" maxlength="500" placeholder="Ingredients, flavour, notes for staff..."></textarea>
                             </div>
                         </div>
 
@@ -1317,20 +1353,33 @@
                         </div>
 
                         <div class="account-section">
-                            <h5 class="account-section-title"><i class="fa fa-barcode"></i> Barcode &amp; Stock</h5>
+                            <h5 class="account-section-title"><i class="fa fa-barcode"></i> Codes &amp; Stock</h5>
                             <div class="row">
                                 <div class="col-sm-6 form-group">
                                     <label for="product_barcode">Barcode</label>
                                     <div class="input-group">
-                                        <input type="text" name="barcode" placeholder="Enter or generate" class="form-control" id="product_barcode">
+                                        <input type="text" name="barcode" placeholder="Scan, type or generate" class="form-control" id="product_barcode">
                                         <span class="input-group-btn">
                                             <button type="button" id="fill_barcode" class="btn btn-default" title="Generate a barcode"><i class="fa fa-magic"></i> Fill</button>
                                         </span>
                                     </div>
                                 </div>
                                 <div class="col-sm-6 form-group">
+                                    <label for="productSku">SKU / Item code <small class="text-muted">(optional)</small></label>
+                                    <input type="text" name="sku" class="form-control" id="productSku" maxlength="40" placeholder="Your own code, e.g. CC-500" title="Typing this code in the till's scan box rings the item up too">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-sm-6 form-group">
                                     <label for="quantity">Stock</label>
-                                    <input type="text" name="quantity" placeholder="Available stock" class="form-control" id="quantity">
+                                    <div class="input-group">
+                                        <input type="text" name="quantity" placeholder="Available stock" class="form-control" id="quantity">
+                                        <span class="input-group-addon product-unit-label" id="productStockUnit">pcs</span>
+                                    </div>
+                                </div>
+                                <div class="col-sm-6 form-group">
+                                    <label for="productReorder">Low-stock alert at</label>
+                                    <input type="text" name="reorder_level" inputmode="numeric" class="form-control" id="productReorder" maxlength="6" placeholder="5" title="The till warns when the stock falls to this number">
                                 </div>
                             </div>
                             <label class="product-form-check" for="stock">

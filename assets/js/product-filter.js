@@ -31,9 +31,14 @@ $(document).ready(function(){
     function searchProducts () {
         $('#parent .pos-cat-empty').remove();
         $("#categories .btn-categories").removeClass("active");
-        var matcher = new RegExp($("#search").val(), 'gi');
+        // plain text, any case: what is typed is escaped (a "(" or "+" can't break it),
+        // and no "g" flag (a global regex remembers its position between tiles
+        // and then skips matches)
+        var text = String($("#search").val() || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        var matcher = new RegExp(text, 'i');
+        // name, size / price line, brand, and every variant's brand, size, SKU and barcode
         $('.box').show().not(function(){
-            return matcher.test($(this).find('.name, .sku').text())
+            return matcher.test($(this).find('.name, .sku, .pos-tile-brand, .search-keys').text())
         }).hide();
     }
 

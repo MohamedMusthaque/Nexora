@@ -225,6 +225,40 @@ function txnHtml(value) {
   }[c]));
 }
 
+// ---- Product details (brand, size, unit, SKU, low-stock alert) ----
+// Same rules as api/inventory.js. All optional: older products don't have them.
+
+// the name on bills and lists: "Coca-Cola 500 ml" (unless the name already has the size)
+function productDisplayName(p) {
+  let name = String((p && p.name) || "");
+  let size = String((p && p.size) || "").trim();
+  if (!size || name.toLowerCase().includes(size.toLowerCase())) return name;
+  return name + " " + size;
+}
+
+const PRODUCT_UNIT_PLURALS = { box: "boxes", dozen: "dozen", pcs: "pcs" };
+// "24 bottles", "1 bottle", "12 pcs"
+function productUnitText(unit, qty) {
+  unit = unit || "pcs";
+  if (qty === undefined || qty === null) return unit;
+  let n = parseInt(qty) || 0;
+  let word = n === 1 ? unit : PRODUCT_UNIT_PLURALS[unit] || unit + "s";
+  return n + " " + word;
+}
+
+// a product in the GRN / PRN / stock adjustment pickers: "Nestle Milo 400 g (SKU ML-400)"
+// - brand, name, size and the shop's code, so sizes and brands can be told apart and searched
+function productPickLabel(p) {
+  let label = (p && p.brand ? p.brand + " " : "") + productDisplayName(p);
+  return p && p.sku ? label + " (SKU " + p.sku + ")" : label;
+}
+
+// the stock at which the till warns that a product is running low (default 5)
+function productReorderLevel(p) {
+  let level = p ? parseInt(p.reorder_level) : NaN;
+  return isNaN(level) ? 5 : level;
+}
+
 // registered customer's name, or "" for a walk-in customer
 function transactionCustomerName(customer) {
   if (!customer || customer == 0) return "";
@@ -1040,12 +1074,17 @@ if (!authedThisSession) {
         let delay = 0;
         allProducts?.forEach((product) => {
           if (product.stock != 1) return; // doesn't track stock: no stock warnings
-          let name = capitalizeFirstLetter(product.name);
-          if (product.quantity <= 5 && product.quantity > 2) {
-            stockToast("warning", `${name} has only ${product.quantity} left in the inventory`, 4000 + delay);
-          } else if (product.quantity >= 1 && product.quantity <= 2) {
-            stockToast("failure", `${name} has only ${product.quantity} left in the inventory`, 8000 + delay * 2);
-          } else if (product.quantity < 1) {
+          let name = capitalizeFirstLetter(productDisplayName(product));
+          // its own "Low-stock alert at" (default 5); the last 40% of it is urgent
+          let level = productReorderLevel(product);
+          let urgent = Math.max(1, Math.floor(level * 0.4));
+          let qty = parseInt(product.quantity) || 0;
+          let left = productUnitText(product.unit, qty);
+          if (qty <= level && qty > urgent) {
+            stockToast("warning", `${name} has only ${left} left in the inventory`, 4000 + delay);
+          } else if (qty >= 1 && qty <= urgent && qty <= level) {
+            stockToast("failure", `${name} has only ${left} left in the inventory`, 8000 + delay * 2);
+          } else if (qty < 1) {
             stockToast("failure", `${name} is out of stock. Please restock.`, 8000 + delay * 2);
           }
           delay += 100;
@@ -1067,11 +1106,13 @@ if (!authedThisSession) {
             categories.push(item.category);
           }
 
-          let key = item.category + "||" + item.name;
+          // one tile per name and brand in a category: its sizes / prices are picked on the tile
+          let key = item.category + "||" + String(item.brand || "").trim().toLowerCase() + "||" + item.name;
           if (!groupsByKey[key]) {
             groupsByKey[key] = {
               category: item.category,
               name: item.name,
+              brand: String(item.brand || "").trim(),
               variants: [],
             };
           }
@@ -1112,18 +1153,29 @@ if (!authedThisSession) {
             : `<span class="pos-tile-initial" style="--tile-hue: ${posTileHue(group.name)}">${txnHtml(
                 String(group.name || "?").trim().charAt(0).toUpperCase() || "?"
               )}</span>`;
-          let low = trackedVariants.length > 0 && totalStock <= 5;
+          let low = trackedVariants.length > 0 && totalStock <= Math.max(...trackedVariants.map(productReorderLevel));
+          // the sizes on this tile ("500 ml", or "3 sizes")
+          let sizes = [...new Set(group.variants.map((v) => String(v.size || "").trim()).filter(Boolean))];
+          let sizeLabel = sizes.length > 1 ? sizes.length + " sizes" : sizes[0] || "";
+          let subLabel = sizeLabel || (priceCount > 1 ? priceCount + " prices" : representative.sku || "");
+          // what the till search also finds: brand, sizes, SKUs and barcodes of every variant
+          let searchKeys = group.variants
+            .map((v) => [v.brand, v.size, v.sku, v.barcode].filter(Boolean).join(" "))
+            .join(" ");
           let stockBadge =
             trackedVariants.length > 0
               ? `<span class="pos-tile-stock${low ? " pos-tile-stock-low" : ""}" title="In stock"><span class="stock">${low ? "Only" : "Stock"}</span> <span class="count">${stockLabel}</span></span>`
               : `<span class="pos-tile-stock pos-tile-stock-none" title="Stock isn't tracked for this product"><span class="count">No stock count</span></span>`;
           // data-category: the category buttons filter on it (product-filter.js);
           // a class can't be used, category ids are numbers
-          let item_info = `<div class="box" data-category="${txnHtml(String(group.category ?? ""))}" onclick="$(this).selectVariant(${groupIndex})" title="${txnHtml(group.name)}">
+          let tileTitle = (group.brand ? group.brand + " · " : "") + group.name + (sizes.length ? " (" + sizes.join(", ") + ")" : "");
+          let item_info = `<div class="box" data-category="${txnHtml(String(group.category ?? ""))}" onclick="$(this).selectVariant(${groupIndex})" title="${txnHtml(tileTitle)}">
                       <div class="pos-tile">
                           <div class="pos-tile-picture">${picture}</div>
+                          ${group.brand ? `<div class="pos-tile-brand">${txnHtml(group.brand)}</div>` : ""}
                           <div class="name pos-tile-name" id="product_name">${txnHtml(group.name)}</div>
-                          <span class="sku">${txnHtml(priceCount > 1 ? priceCount + " prices" : representative.sku || "")}</span>
+                          <span class="sku${sizeLabel ? " pos-tile-size" : ""}">${txnHtml(subLabel)}</span>
+                          <span class="search-keys" hidden>${txnHtml(searchKeys)}</span>
                           ${stockBadge}
                           <div class="pos-tile-price${priceCount > 1 ? " pos-tile-price-range" : ""}">${priceLabel}</div>
                           ${priceCount > 1 ? `<div class="pos-tile-prices">${priceCount} prices</div>` : ""}
@@ -1228,26 +1280,40 @@ if (!authedThisSession) {
         return;
       }
 
+      // sizes first (smallest to largest as typed: "250 ml" before "1 L" by number), then price
+      let hasSizes = group.variants.some((v) => String(v.size || "").trim());
+      if (hasSizes) {
+        choices.sort(
+          (a, b) =>
+            String(a.v.size || "").localeCompare(String(b.v.size || ""), undefined, { numeric: true, sensitivity: "base" }) ||
+            (parseFloat(a.set ? a.set.price : a.v.price) || 0) - (parseFloat(b.set ? b.set.price : b.v.price) || 0)
+        );
+      }
+
       let optionsHtml = choices
         .map((c, i) => {
           let code = c.set ? c.set.code : c.v.barcode;
           let price = c.set ? c.set.price : c.v.price;
           let left = c.set ? c.set.qty_left : c.v.stock == 1 ? c.v.quantity : null;
+          let size = String(c.v.size || "").trim();
+          // the size in bold (when there are sizes), the barcode and stock below
+          let head = size ? `<b>${txnHtml(size)}</b>` : code ? "<b>" + txnHtml(code) + "</b>" : "";
+          let details = [
+            size && code ? txnHtml(code) : "",
+            c.set ? txnHtml(c.set.references.join(", ")) : "",
+            left !== null ? txnHtml(productUnitText(c.v.unit, left)) + " left" : "",
+          ].filter(Boolean);
           return `<button type="button" class="btn btn-white btn-block variant-option" data-choice="${i}"
               style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-              <span style="text-align:left;">${code ? "<b>" + txnHtml(code) + "</b>" : ""}${
-                c.set || left !== null
-                  ? `<br><small class="text-muted">${c.set ? txnHtml(c.set.references.join(", ")) + " · " : ""}${left !== null ? left + " left" : ""}</small>`
-                  : ""
-              }</span>
+              <span style="text-align:left;">${head}${details.length ? `<br><small class="text-muted">${details.join(" · ")}</small>` : ""}</span>
               <span style="font-size: 16px;"><b>${settings.symbol}${moneyText((parseFloat(price) || 0))}</b></span>
             </button>`;
         })
         .join("");
 
       Swal.fire({
-        title: `Select price for ${txnHtml(group.name)}`,
-        html: `<p class="text-muted" style="font-size: 13px;">Check the barcode / price label on the item.</p><div class="variant-list">${optionsHtml}</div>`,
+        title: `${hasSizes ? "Choose a size" : "Select price"} for ${txnHtml((group.brand ? group.brand + " " : "") + group.name)}`,
+        html: `<p class="text-muted" style="font-size: 13px;">${hasSizes ? "Pick the size the customer wants." : "Check the barcode / price label on the item."}</p><div class="variant-list">${optionsHtml}</div>`,
         showConfirmButton: false,
         showCloseButton: true,
         didOpen: (popup) => {
@@ -1413,7 +1479,7 @@ if (!authedThisSession) {
         )
         .join("");
       Swal.fire({
-        title: `Select price for ${txnHtml(product.name)}`,
+        title: `Select price for ${txnHtml(productDisplayName(product))}`,
         html: `<p class="text-muted" style="font-size: 13px;">${note || "Check the barcode / price label on the item."}</p><div class="variant-list">${options}</div>`,
         showConfirmButton: false,
         showCloseButton: true,
@@ -1450,7 +1516,7 @@ if (!authedThisSession) {
       cartBatchInfo[data._id] = data.batches || [];
       item = {
         id: data._id,
-        product_name: data.name,
+        product_name: productDisplayName(data), // "Coca-Cola 500 ml" on the bill
         sku: data.sku,
         price: set ? set.price : data.price,
         // cost at the time of sale, saved with the transaction for profit
@@ -2662,8 +2728,33 @@ if (!authedThisSession) {
     // header of the Add / Edit Product window (same look as the Account window)
     function setProductFormHeader(product) {
       $("#productFormTitle").text(product ? "Edit Product" : "New Product");
-      $("#productFormSub").text(product ? product.name : "Add a product to sell on the till");
+      $("#productFormSub").text(
+        product ? (product.brand ? product.brand + " · " : "") + productDisplayName(product) : "Add a product to sell on the till"
+      );
     }
+
+    // Brand / Size suggestions: the ones already used, so the same brand is
+    // always spelled the same way
+    function fillProductSuggestions() {
+      let unique = (key) =>
+        [...new Set(allProducts.map((p) => String(p[key] || "").trim()).filter(Boolean))].sort((a, b) =>
+          a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+        );
+      $("#productBrandList").html(unique("brand").map((b) => `<option value="${txnHtml(b)}">`).join(""));
+      $("#productSizeList").html(unique("size").map((b) => `<option value="${txnHtml(b)}">`).join(""));
+    }
+
+    // the unit next to the stock field ("bottles")
+    function updateProductStockUnit() {
+      let unit = $("#productUnit").val() || "pcs";
+      $("#productStockUnit").text(productUnitText(unit, 2).replace(/^2 /, ""));
+    }
+    $("#productUnit").on("change", updateProductStockUnit);
+    // whole numbers only in the low-stock alert
+    $("#productReorder").on("input", function () {
+      let v = this.value.replace(/\D/g, "");
+      if (v !== this.value) this.value = v;
+    });
 
     $("#newProductModal").click(function () {
       $("#saveProduct").get(0).reset();
@@ -2671,6 +2762,8 @@ if (!authedThisSession) {
       $("#current_img").text("");
       clearPriceInputErrors();
       updateProductMarginHint();
+      fillProductSuggestions();
+      updateProductStockUnit();
     });
 
     function clearPriceInputErrors() {
@@ -2737,6 +2830,7 @@ if (!authedThisSession) {
         success: function (response) {
           $("#saveProduct").get(0).reset();
           setProductFormHeader(null); // "Add another" starts a new product
+          updateProductStockUnit();
           $("#current_img").text("");
 
           loadProducts();
@@ -2825,6 +2919,16 @@ if (!authedThisSession) {
       updateProductMarginHint();
       $("#product_barcode").val(allProducts[index].barcode);
       $("#quantity").val(allProducts[index].quantity);
+      // the product details (older products don't have them: empty)
+      let p = allProducts[index];
+      $("#productBrand").val(p.brand || "");
+      $("#productSize").val(p.size || "");
+      $("#productUnit").val(p.unit || "");
+      $("#productSku").val(p.sku || "");
+      $("#productReorder").val(p.reorder_level ?? "");
+      $("#productDescription").val(p.description || "");
+      fillProductSuggestions();
+      updateProductStockUnit();
 
       $("#product_id").val(allProducts[index]._id);
       $("#img").val(allProducts[index].img);
@@ -2837,9 +2941,8 @@ if (!authedThisSession) {
         $("#rmv_img").show();
       }
 
-      if (allProducts[index].stock == 0 && settings.stock_check_disabled != "on") {
-        $("#stock").prop("checked", true);
-      }
+      // set both ways: a box left ticked by the previous product must not carry over
+      $("#stock").prop("checked", allProducts[index].stock == 0 && settings.stock_check_disabled != "on");
 
       $("#newProduct").modal("show");
     };
@@ -4119,7 +4222,7 @@ if (!authedThisSession) {
         confirmButtonText: '<i class="fa fa-print"></i> Print',
       }).then(function (result) {
         if (!result.value) return;
-        printPriceLabels([{ name: product.name, code: code, price: price, copies: parseInt(result.value) || 1 }]);
+        printPriceLabels([{ name: productDisplayName(product), code: code, price: price, copies: parseInt(result.value) || 1 }]);
       });
     });
 
@@ -4206,6 +4309,36 @@ if (!authedThisSession) {
       }
     }
 
+    // a value inside '...' in an onclick="..." attribute: escaped for JS, then for HTML
+    // (so "Kamal's Rice" can't break the button)
+    function jsAttr(value) {
+      return txnHtml(String(value ?? "").replace(/\\/g, "\\\\").replace(/'/g, "\\'"));
+    }
+
+    // under the name: Brand · Size · SKU (hover: the description)
+    function productMetaHtml(product) {
+      let parts = [
+        product.brand ? `<span class="product-meta-brand">${txnHtml(product.brand)}</span>` : "",
+        product.size ? `<span class="label label-default product-meta-size">${txnHtml(product.size)}</span>` : "",
+        product.sku ? `<span title="SKU / item code">SKU ${txnHtml(product.sku)}</span>` : "",
+      ].filter(Boolean);
+      if (!parts.length && !product.description) return "";
+      return `<div class="product-meta"${product.description ? ` title="${txnHtml(product.description)}"` : ""}>${parts.join(" · ")}${
+        product.description ? ` <i class="fa fa-info-circle text-muted"></i>` : ""
+      }</div>`;
+    }
+
+    // stock with its unit ("24 bottles"); red at the product's low-stock alert
+    function productStockHtml(product) {
+      if (product.stock != 1) return "N/A";
+      let qty = parseInt(product.quantity) || 0;
+      let level = productReorderLevel(product);
+      let low = qty <= level;
+      return `<span class="${low ? "product-stock-low" : ""}" title="${low ? "At or below the low-stock alert (" + level + ")" : "Low-stock alert at " + level}">${txnHtml(
+        productUnitText(product.unit, qty)
+      )}</span>`;
+    }
+
     // builds the row markup for one product inside a category's detail table
     function buildProductRowHtml(product) {
       let index = allProducts.indexOf(product);
@@ -4217,17 +4350,17 @@ if (!authedThisSession) {
               ? "./assets/images/default.jpg"
               : img_path + product.img
           }" id="product_img"></td>
-          <td>${product.name}</td>
+          <td>${txnHtml(product.name)}${productMetaHtml(product)}</td>
           <td>${product.cost_price !== undefined && product.cost_price !== "" ? settings.symbol + moneyText(parseFloat(product.cost_price)) : '<span class="text-muted" title="No cost price yet">&mdash;</span>'}</td>
           <td>${settings.symbol}${moneyText(product.price)}${productNextPriceHint(product)}</td>
-          <td>${product.stock == 1 ? product.quantity : "N/A"}</td>
+          <td>${productStockHtml(product)}</td>
           <td class="nobr">
           <span class="btn-group" style="display: flex;">
-            <button onClick="$(this).printBarcode('${product.name}', '${
+            <button onClick="$(this).printBarcode('${jsAttr(productDisplayName(product))}', '${jsAttr(
         product.barcode
-      }', '${
+      )}', '${jsAttr(
         product.price
-      }')" class="btn btn-dark btn-sm" title="Print barcode"><i class="fa fa-print"></i></button>
+      )}')" class="btn btn-dark btn-sm" title="Print barcode"><i class="fa fa-print"></i></button>
             <button onClick="$(this).viewProductHistory(${product._id})" class="btn btn-info btn-sm" title="History"><i class="fa fa-history"></i></button>
             ${product.stock == 1 ? `<button onClick="$(this).adjustProductStock(${product._id})" class="btn btn-default btn-sm" title="Adjust stock (expired, damaged, lost, stock count...)"><i class="fa fa-sliders"></i></button>` : ""}
             <button onClick="$(this).editProduct(${index})" class="btn btn-warning btn-sm"><i class="fa fa-edit"></i></button>
@@ -4334,7 +4467,7 @@ if (!authedThisSession) {
           let itemsToShow = categoryMatches
             ? group.items
             : group.items.filter((p) =>
-                (p.name + " " + p.barcode).toLowerCase().includes(term)
+                [p.name, p.barcode, p.brand, p.size, p.sku].filter((t) => t != null).join(" ").toLowerCase().includes(term)
               );
 
           return { group, itemsToShow, expand: true, matched: categoryMatches || itemsToShow.length > 0 };
@@ -4370,7 +4503,9 @@ if (!authedThisSession) {
     // Excel: products grouped under category rows (groups can be collapsed)
     function exportProductsExcel() {
       let entries = productListMatches();
-      const headers = ["Barcode", "Product", "Cost Price", "Selling Price", "Profit / Item", "Margin", "Stock"];
+      // A Barcode, B SKU, C Product, D Brand, E Size, F Unit, G Cost, H Selling, I Profit, J Margin, K Stock
+      const headers = ["Barcode", "SKU", "Product", "Brand", "Size", "Unit", "Cost Price", "Selling Price", "Profit / Item", "Margin", "Stock"];
+      const STOCK = 11;
       let cols = headers.length;
       let wb = new ExcelJS.Workbook();
       wb.creator = reportStoreName();
@@ -4383,7 +4518,7 @@ if (!authedThisSession) {
       let headerRow = ws.getRow(headerRowNumber);
       headers.forEach((h, i) => (headerRow.getCell(i + 1).value = h));
       styleReportHeaderRow(headerRow);
-      [3, 4, 5, 6, 7].forEach((c) => (headerRow.getCell(c).alignment = { vertical: "middle", horizontal: "right", wrapText: true }));
+      [7, 8, 9, 10, 11].forEach((c) => (headerRow.getCell(c).alignment = { vertical: "middle", horizontal: "right", wrapText: true }));
 
       let r = headerRowNumber;
       entries.forEach(({ group, itemsToShow }) => {
@@ -4391,15 +4526,15 @@ if (!authedThisSession) {
         let g = ws.getRow(++r);
         g.getCell(1).value = group.categoryName + "  (" + itemsToShow.length + (itemsToShow.length === 1 ? " product)" : " products)");
         let tracked = itemsToShow.filter((p) => p.stock == 1);
-        g.getCell(7).value = tracked.length ? tracked.reduce((s, p) => s + (parseInt(p.quantity) || 0), 0) : "N/A";
+        g.getCell(STOCK).value = tracked.length ? tracked.reduce((s, p) => s + (parseInt(p.quantity) || 0), 0) : "N/A";
         for (let c = 1; c <= cols; c++) {
           let cell = g.getCell(c);
           cell.font = { bold: true, size: 10.5, color: { argb: "FF" + REPORT_STYLE.ink } };
           cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + REPORT_STYLE.groupFill } };
           cell.border = reportBorder();
-          cell.alignment = { vertical: "middle", horizontal: c === 7 ? "right" : "left" };
+          cell.alignment = { vertical: "middle", horizontal: c === STOCK ? "right" : "left" };
         }
-        if (typeof g.getCell(7).value === "number") g.getCell(7).numFmt = reportNumFmt("int");
+        if (typeof g.getCell(STOCK).value === "number") g.getCell(STOCK).numFmt = reportNumFmt("int");
 
         // product rows
         itemsToShow.forEach((product, i) => {
@@ -4413,20 +4548,27 @@ if (!authedThisSession) {
           setReportCell(barcode, "", zebra);
           barcode.value = String(product.barcode ?? "");
           barcode.numFmt = "@";
-          setReportCell(row.getCell(2), product.name || "", zebra);
-          setReportCell(row.getCell(3), f.cost === null ? "" : f.cost, zebra, "money");
-          setReportCell(row.getCell(4), f.price === null ? "" : f.price, zebra, "money");
-          setReportCell(row.getCell(5), f.profit === null ? "" : f.profit, zebra, "money");
-          setReportCell(row.getCell(6), f.margin === null ? "" : f.margin, zebra, "percent");
-          setReportCell(row.getCell(7), product.stock == 1 ? parseInt(product.quantity) || 0 : "N/A", zebra, "int");
-          row.getCell(7).alignment = { vertical: "top", horizontal: "right" };
+          let sku = row.getCell(2);
+          setReportCell(sku, "", zebra);
+          sku.value = String(product.sku || "");
+          sku.numFmt = "@";
+          setReportCell(row.getCell(3), product.name || "", zebra);
+          setReportCell(row.getCell(4), product.brand || "", zebra);
+          setReportCell(row.getCell(5), product.size || "", zebra);
+          setReportCell(row.getCell(6), product.unit || "pcs", zebra);
+          setReportCell(row.getCell(7), f.cost === null ? "" : f.cost, zebra, "money");
+          setReportCell(row.getCell(8), f.price === null ? "" : f.price, zebra, "money");
+          setReportCell(row.getCell(9), f.profit === null ? "" : f.profit, zebra, "money");
+          setReportCell(row.getCell(10), f.margin === null ? "" : f.margin, zebra, "percent");
+          setReportCell(row.getCell(STOCK), product.stock == 1 ? parseInt(product.quantity) || 0 : "N/A", zebra, "int");
+          row.getCell(STOCK).alignment = { vertical: "top", horizontal: "right" };
           if (f.cost === null) {
-            let c = row.getCell(3);
+            let c = row.getCell(7);
             c.value = "not set";
             c.font = { italic: true, size: 10, color: { argb: "FF" + REPORT_STYLE.muted } };
             c.alignment = { horizontal: "right" };
           }
-          if (f.profit !== null && f.profit < 0) row.getCell(6).font = { size: 10, color: { argb: "FFD84340" } };
+          if (f.profit !== null && f.profit < 0) row.getCell(10).font = { size: 10, color: { argb: "FFD84340" } };
         });
       });
 
@@ -4452,19 +4594,22 @@ if (!authedThisSession) {
       let money = (n) => (n < 0 ? "-" : "") + (sym ? sym + " " : "") +
         Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-      let body = [["Category", "Product", "Barcode", "Cost Price", "Selling Price", "Profit / Item", "Margin", "Stock"].map((t) => ({ text: t }))];
+      let body = [["Category", "Product", "Brand", "Size", "SKU", "Barcode", "Cost Price", "Selling Price", "Profit / Item", "Margin", "Stock"].map((t) => ({ text: t }))];
       entries.forEach(({ group, itemsToShow }) => {
         itemsToShow.forEach((product) => {
           let f = productPriceFigures(product);
           body.push([
             group.categoryName,
             product.name || "",
+            product.brand || "",
+            product.size || "",
+            product.sku || "",
             String(product.barcode ?? ""),
             f.cost === null ? "not set" : money(f.cost),
             f.price === null ? "" : money(f.price),
             f.profit === null ? "—" : money(f.profit),
             f.margin === null ? "—" : (f.margin * 100).toFixed(1) + "%",
-            product.stock == 1 ? String(parseInt(product.quantity) || 0) : "N/A",
+            product.stock == 1 ? productUnitText(product.unit, product.quantity) : "N/A",
           ].map((t) => ({ text: t })));
         });
       });
@@ -4474,9 +4619,11 @@ if (!authedThisSession) {
       }
 
       let doc = { content: [{ table: { body: body } }] };
-      styleReportPdf(doc, "Product List", productExportSubtitle(entries), null, { textColumns: [2] });
-      // margin text in red when it's a loss
-      body.slice(1).forEach((row) => { if (String(row[5].text).startsWith("-")) row[5].color = row[6].color = "#d84340"; });
+      // SKU and Barcode are codes, not amounts; Stock has its unit ("24 bottles")
+      styleReportPdf(doc, "Product List", productExportSubtitle(entries), null, { textColumns: [4, 5] });
+      body.slice(1).forEach((row) => (row[10].alignment = "right"));
+      // profit / margin text in red when it's a loss
+      body.slice(1).forEach((row) => { if (String(row[8].text).startsWith("-")) row[8].color = row[9].color = "#d84340"; });
       try {
         pdfMake.createPdf(doc).download("Product List " + moment().format("YYYY-MM-DD HHmm") + ".pdf");
       } catch (err) {
@@ -6328,7 +6475,7 @@ function prepareGrnForm(supplierId) {
           let parts = [cost === null ? "no cost yet" : "cost " + supMoney(cost)];
           if (p.stock == 1) parts.push("stock " + (parseInt(p.quantity) || 0));
           if (barcode) parts.push(barcode);
-          return `<option value="${p._id}">${txnHtml(p.name)} — ${txnHtml(parts.join(" · "))}</option>`;
+          return `<option value="${p._id}">${txnHtml(productPickLabel(p))} — ${txnHtml(parts.join(" · "))}</option>`;
         })
         .join("")
   );
@@ -6688,7 +6835,7 @@ function addGrnLine() {
   } else {
     grnLines.push({
       product_id: p._id,
-      name: p.name,
+      name: productDisplayName(p), // "Coca-Cola 500 ml"
       quantity: qty,
       unit_cost: supRound(cost),
       selling_price: target.kind === "existing" ? supRound(target.product.price) : supRound(sell),
@@ -7864,7 +8011,7 @@ function fillPrnProductOptions() {
           if (p.stock == 1) parts.push("stock " + (parseInt(p.quantity) || 0));
           if (barcode) parts.push(barcode);
           let none = p.grn && (p.grn.left < 1 || !prnProduct(p._id));
-          return `<option value="${p._id}"${none ? " disabled" : ""}>${txnHtml(p.name)} — ${txnHtml(parts.join(" · "))}</option>`;
+          return `<option value="${p._id}"${none ? " disabled" : ""}>${txnHtml(productPickLabel(p))} — ${txnHtml(parts.join(" · "))}</option>`;
         })
         .join("")
   );
@@ -8121,7 +8268,7 @@ function addPrnLine() {
   }
   let existing = prnLines.find((l) => String(l.product_id) === String(p._id) && supRound(l.unit_cost) === supRound(cost));
   if (existing) existing.quantity = (Number(existing.quantity) || 0) + qty;
-  else prnLines.push({ product_id: p._id, name: p.name, quantity: qty, unit_cost: supRound(cost) });
+  else prnLines.push({ product_id: p._id, name: productDisplayName(p), quantity: qty, unit_cost: supRound(cost) });
 
   $("#prnProduct").val("").trigger("chosen:updated");
   $("#prnQty, #prnUnitCost").val("");
@@ -10103,7 +10250,7 @@ function fillAdjProductOptions() {
           let parts = ["stock " + adjStock(p), cost === null ? "no cost yet" : "cost " + supMoney(cost)];
           if (barcode) parts.push(barcode);
           let none = out && adjStock(p) < 1;
-          return `<option value="${p._id}"${none ? " disabled" : ""}>${txnHtml(p.name)} — ${txnHtml(parts.join(" · "))}</option>`;
+          return `<option value="${p._id}"${none ? " disabled" : ""}>${txnHtml(productPickLabel(p))} — ${txnHtml(parts.join(" · "))}</option>`;
         })
         .join("")
   );
@@ -10223,7 +10370,7 @@ function addAdjLine() {
   }
   let existing = adjLines.find((l) => String(l.product_id) === String(p._id) && String(l.batch_id) === String(batchId));
   if (existing) existing.quantity = (Number(existing.quantity) || 0) + qty;
-  else adjLines.push({ product_id: p._id, name: p.name, batch_id: batchId, quantity: qty });
+  else adjLines.push({ product_id: p._id, name: productDisplayName(p), batch_id: batchId, quantity: qty });
 
   $("#adjProduct").val("").trigger("chosen:updated");
   $("#adjQty").val("");

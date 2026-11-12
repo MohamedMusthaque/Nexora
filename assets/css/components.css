@@ -6374,3 +6374,56 @@ body.transactions-mode #transactions_view .txn-page{
 .top-toolbar .drive-indicator.drive-error::after{
   background: #f05050;
 }
+
+
+/* ---- Add / Edit Product: brand, size, unit, SKU, low-stock alert ----
+   (index.html #newProduct; pos.js: fillProductSuggestions) */
+#newProduct .modal-dialog.account-dialog{
+  width: min(680px, calc(100vw - 30px)); /* room for three fields in a row */
+}
+#newProduct textarea.form-control{
+  height: auto;
+  min-height: 62px;
+  resize: vertical;
+}
+#newProduct .product-size-hint{
+  margin: -4px 0 10px;
+}
+#newProduct .input-group .product-unit-label{
+  min-width: 64px;
+  border-color: #d5dbe0;
+  border-radius: 0 6px 6px 0;
+  background: #f6f8fa;
+  color: #4c5667;
+  font-weight: 600;
+}
+#newProduct .input-group .product-unit-label:last-child{
+  border-left: 0;
+}
+#newProduct .input-group > .form-control:first-child{
+  border-radius: 6px 0 0 6px;
+}
+
+/* Products list: Brand · Size · SKU under the name; low stock in red */
+#productList .product-meta{
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: #98a6ad;
+}
+#productList .product-meta-brand{
+  font-weight: 700;
+  color: #6c7a86;
+}
+#productList .product-meta-size{
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #e8f6f2;
+  color: #3e9e8a;
+  font-size: 11px;
+  font-weight: 700;
+}
+#productList .product-stock-low{
+  font-weight: 700;
+  color: #d84340;
+}

@@ -96,6 +96,7 @@ Card, Bank Transfer, Return / Refund and Exchange can each be turned off in **Se
 ### 📦 Products, Categories & Stock
 The **Products** window has three tabs: Products, Categories and Stock Adjustments.
 - **Products:**
+  - **Brand**, **Size / Variant** (500 ml, Large…), **Unit** (piece, bottle, pack, plate…), **SKU / item code**, description and a per-product **low-stock alert**. Products with the same name in different sizes share one till tile, and the cashier picks the size. The SKU can be typed into the scan box.
   - Cost price and selling price, with live profit and margin shown as you type.
   - Barcode, entered or generated with **Fill**, stock and picture.
   - Printable **barcode labels** with the price.

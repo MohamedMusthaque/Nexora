@@ -137,7 +137,7 @@ app.post( "/", function ( req, res ) {
                 let p = products.find( ( x ) => x._id === items[i].product_id );
                 if ( !p ) return fail( 400, "Line " + ( i + 1 ) + ": that product no longer exists." );
                 if ( p.stock != 1 ) return fail( 400, "Line " + ( i + 1 ) + " (" + p.name + "): this product doesn't track stock, so there's nothing to adjust." );
-                items[i].product_name = p.name;
+                items[i].product_name = Inventory.productDisplayName( p );
                 let barcode = p.barcode == null ? "" : String( p.barcode );
                 items[i].barcode = barcode === "NaN" ? "" : barcode;
                 wanted[p._id] = ( wanted[p._id] || 0 ) + items[i].quantity;

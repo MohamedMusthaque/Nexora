@@ -1001,3 +1001,34 @@ input.amount-input.amount-input-invalid:focus{
   text-align: center;
   color: #98a6ad;
 }
+
+
+/* till tiles: the brand above the name, the size (or "3 sizes") as a chip
+   below it (pos.js: loadProducts). .sku stays hidden when it isn't a size. */
+#pos_view .pos-tile-brand{
+  width: 100%;
+  margin: 0 0 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #98a6ad;
+}
+#pos_view .pos-tile .sku.pos-tile-size{
+  display: inline-block;
+  max-width: 100%;
+  margin: -2px 0 6px;
+  padding: 1px 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border: 1px solid #d9efe9;
+  border-radius: 9px;
+  background: #f4fbf9;
+  color: #3e9e8a;
+  font-size: 11.5px;
+  font-weight: 700;
+}
