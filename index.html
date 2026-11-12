@@ -351,6 +351,13 @@
                                             </div>
                                             <button type="button" class="btn btn-default date-range-clear" title="Clear date filter" style="display: none;"><i class="fa fa-times"></i> Clear</button>
                                         </div>
+                                        <!-- profit per product, or added up per brand / category (pos.js: profitGroups) -->
+                                        <label for="profitGroupBy" style="margin: 0 0 0 8px;">View by</label>
+                                        <select id="profitGroupBy" class="form-control profit-group-by">
+                                            <option value="product">Product</option>
+                                            <option value="brand">Brand</option>
+                                            <option value="category">Category</option>
+                                        </select>
                                     </div>
                                 </div>
                                 <div class="profit-tiles">
@@ -379,7 +386,8 @@
                                 <table class="table table-bordered" id="profitTable" style="width: 100%;">
                                     <thead>
                                         <tr>
-                                            <th>Product</th>
+                                            <th id="profitCol0">Product</th>
+                                            <th id="profitCol1">Brand</th>
                                             <th>Qty Sold</th>
                                             <th>Returned</th>
                                             <th>Net Sales</th>

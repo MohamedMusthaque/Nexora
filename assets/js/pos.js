@@ -265,6 +265,22 @@ function productPickLabel(p) {
   return p && p.sku ? label + " (SKU " + p.sku + ")" : label;
 }
 
+// The product a bill / GRN / PRN / return line is for (by id), and the
+// line's name with its size: new lines already have it ("Milo 400 g"),
+// older ones get the product's size.
+function lineProduct(line) {
+  let id = line && (line.product_id != null ? line.product_id : line.id);
+  return id == null ? null : (allProducts || []).find((p) => p._id == id) || null;
+}
+
+function lineDisplayName(line) {
+  let name = String((line && line.product_name) || "");
+  let p = lineProduct(line);
+  if (!name) return p ? productDisplayName(p) : "";
+  let size = p && p.size ? String(p.size).trim() : "";
+  return size && !name.toLowerCase().includes(size.toLowerCase()) ? name + " " + size : name;
+}
+
 // the stock at which the till warns that a product is running low (default 5)
 function productReorderLevel(p) {
   let level = p ? parseInt(p.reorder_level) : NaN;
@@ -1020,6 +1036,10 @@ if (!authedThisSession) {
     $(document).on("products:changed", function () {
       loadProducts();
     });
+    // customers' credit / advance changed elsewhere (e.g. a return)
+    $(document).on("customers:changed", function () {
+      loadCustomers();
+    });
 
     if (settings && settings.symbol) {
       $("#price_curr, #payment_curr, #change_curr").text(settings.symbol);
@@ -1083,6 +1103,7 @@ if (!authedThisSession) {
         loadCategoryList(); // products / stock per category
         loadBrands(); // the brand list: the Brands tab and the product form's Brand list
         loadUnits(); // the unit list: the Units tab and the product form's Unit list
+        refreshOpenPages(); // Transactions / Profit, Quick Journal, Accounts, Suppliers on screen
         const capitalizeFirstLetter = (word) =>
           `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
 
@@ -2852,9 +2873,19 @@ if (!authedThisSession) {
           $("#current_img").text("");
 
           loadProducts();
+          // the same item at its other cost prices got the same details (api/inventory.js: syncItemCopies)
+          let copies = 0;
+          try {
+            copies = (typeof response === "string" ? JSON.parse(response) : response || {}).copies_updated || 0;
+          } catch (e) {
+            copies = 0;
+          }
           Swal.fire({
             title: "Product Saved",
-            text: "Select an option below to continue.",
+            text:
+              (copies
+                ? `Also updated on the item's ${copies} other ${copies === 1 ? "price" : "prices"} (same item from GRNs). `
+                : "") + "Select an option below to continue.",
             icon: "success",
             showCancelButton: true,
             confirmButtonColor: "#3085d6",
@@ -5996,12 +6027,22 @@ function computeProfit(transactions, returns, products) {
   let byProduct = {};
   let orders = {};
   let currentCost = {};
-  (products || []).forEach((p) => (currentCost[p._id] = numberOrNull(p.cost_price)));
+  let productById = {};
+  (products || []).forEach((p) => {
+    currentCost[p._id] = numberOrNull(p.cost_price);
+    productById[p._id] = p;
+  });
 
   function entry(id, name) {
     if (!byProduct[id]) {
+      let p = productById[id];
       byProduct[id] = {
-        id: id, name: name || "Unknown product",
+        id: id, name: lineDisplayName({ id: id, product_name: name }) || "Unknown product",
+        // the product's details (as it is now), for the Brand / Category views
+        brand: p ? String(p.brand || "").replace(/\s+/g, " ").trim() : "",
+        category: p ? p.category : null,
+        sku: p ? p.sku || "" : "",
+        unit: p ? p.unit || "" : "",
         qty: 0, returned: 0,
         sales: 0, costedSales: 0, cost: 0, salesNoCost: 0,
         estimated: false, costKnown: false,
@@ -6098,7 +6139,47 @@ function computeProfit(transactions, returns, products) {
   return { rows: rows, totals: totals };
 }
 
+// The profit rows added up per brand or per category (by: "brand" /
+// "category"); "product" keeps one row per product.
+function profitGroups(rows, by) {
+  if (by !== "brand" && by !== "category") return rows;
+  let catName = (id) => {
+    let c = (allCategories || []).find((x) => String(x._id) === String(id));
+    return c ? c.name : "Uncategorized";
+  };
+  let groups = {};
+  rows.forEach((e) => {
+    let key = by === "brand" ? e.brand.toLowerCase() : String(e.category ?? "");
+    let g = (groups[key] =
+      groups[key] || {
+        key: key,
+        name: by === "brand" ? e.brand || "No brand" : catName(e.category),
+        none: by === "brand" ? !e.brand : !(allCategories || []).some((c) => String(c._id) === key),
+        products: 0, qty: 0, returned: 0, sales: 0, costedSales: 0, cost: 0, salesNoCost: 0,
+        hasCost: false, missingCost: false, estimated: false,
+      });
+    g.products += 1;
+    g.qty += e.qty;
+    g.returned += e.returned;
+    g.sales += e.sales;
+    g.costedSales += e.costedSales;
+    g.cost += e.cost;
+    g.salesNoCost += e.salesNoCost;
+    g.hasCost = g.hasCost || e.hasCost;
+    g.missingCost = g.missingCost || e.missingCost;
+    g.estimated = g.estimated || e.estimated;
+  });
+  return Object.values(groups).map((g) => {
+    g.profit = g.hasCost ? g.costedSales - g.cost : null;
+    g.margin = g.hasCost && g.costedSales > 0 ? (g.profit / g.costedSales) * 100 : null;
+    return g;
+  });
+}
+
+let lastProfitResult = null; // re-shown when "View by" changes
+
 function renderProfit(result) {
+  lastProfitResult = result;
   let sym = settings?.symbol || "";
   let money = (n) => (n < 0 ? "-" : "") + sym + moneyText(Math.abs(n));
   let t = result.totals;
@@ -6137,17 +6218,39 @@ function renderProfit(result) {
   }
   $("#profitNotices").html(notices);
 
+  // View by: one row per product, brand or category
+  let by = $("#profitGroupBy").val() || "product";
+  let grouped = by !== "product";
+  $("#profitCol0").text(by === "brand" ? "Brand" : by === "category" ? "Category" : "Product");
+  $("#profitCol1").text(grouped ? "Products" : "Brand");
+  let catName = (id) => {
+    let c = (allCategories || []).find((x) => String(x._id) === String(id));
+    return c ? c.name : "";
+  };
+
   let rows = "";
-  result.rows.forEach((e) => {
+  profitGroups(result.rows, by).forEach((e) => {
     let profitCell = e.profit === null
       ? '<span class="text-muted" title="No cost price">&mdash;</span>'
       : `<span class="${e.profit < 0 ? "text-danger" : "text-success"}"><b>${money(e.profit)}</b></span>`;
     let flags =
       (e.missingCost && e.hasCost ? ' <span class="label label-warning" title="Some of these sales have no cost price">part no cost</span>' : "") +
       (e.estimated ? ' <span class="label label-info" title="Uses the current cost price for older sales">est.</span>' : "");
+    // a product: its category and SKU under the name; a brand / category: how many products
+    let first = grouped
+      ? `<b class="${e.none ? "text-muted" : ""}">${txnHtml(e.name)}</b>${flags}`
+      : `${txnHtml(e.name)}${flags}${
+          [catName(e.category), e.sku ? "SKU " + e.sku : ""].filter(Boolean).length
+            ? `<br><small class="text-muted">${txnHtml([catName(e.category), e.sku ? "SKU " + e.sku : ""].filter(Boolean).join(" · "))}</small>`
+            : ""
+        }`;
+    let second = grouped
+      ? `<td class="text-right" data-order="${e.products}">${e.products}</td>`
+      : `<td data-order="${txnHtml((e.brand || "\uffff").toLowerCase())}">${e.brand ? txnHtml(e.brand) : '<span class="text-muted">&mdash;</span>'}</td>`;
     rows += `<tr>
-        <td>${$("<i>").text(e.name).html()}${flags}</td>
-        <td class="text-right" data-order="${e.qty}">${e.qty}</td>
+        <td data-export="${txnHtml(e.name)}">${first}</td>
+        ${second}
+        <td class="text-right" data-order="${e.qty}" data-export="${e.qty}">${e.qty}${!grouped && e.unit ? ` <small class="text-muted">${txnHtml(productUnitText(e.unit, e.qty).replace(/^\d+ /, ""))}</small>` : ""}</td>
         <td class="text-right" data-order="${e.returned}">${e.returned || ""}</td>
         <td class="text-right nobr" data-order="${e.sales}">${money(e.sales)}</td>
         <td class="text-right nobr" data-order="${e.hasCost ? e.cost : -1e15}">${e.hasCost ? money(e.cost) : '<span class="text-muted">&mdash;</span>'}</td>
@@ -6160,17 +6263,19 @@ function renderProfit(result) {
     $("#profitTable").DataTable().destroy();
   }
   $("#profit_list").html(rows);
+  let noun = by === "brand" ? "brands" : by === "category" ? "categories" : "products";
   $("#profitTable").DataTable(
     Object.assign(
       standardTableOptions({
-        noun: "products",
-        searchPlaceholder: "Search products...",
-        exportTitle: "Profit",
+        noun: noun,
+        searchPlaceholder: "Search " + noun + "...",
+        exportTitle: by === "brand" ? "Profit by Brand" : by === "category" ? "Profit by Category" : "Profit",
         exportSubtitle: () => $("#profitPeriod").text(),
-        sumColumns: [1, 2, 3, 4, 5], // Qty, Returned, Net Sales, Cost, Profit
+        // (Products,) Qty, Returned, Net Sales, Cost, Profit
+        sumColumns: grouped ? [1, 2, 3, 4, 5, 6] : [2, 3, 4, 5, 6],
         emptyTable: "No sales in the selected period",
       }),
-      { order: [[5, "desc"]] }
+      { order: [[6, "desc"]] }
     )
   );
 }
@@ -6213,6 +6318,10 @@ function fitTransactionsView() {
 }
 
 $(function () {
+  // profit per product / brand / category: the same figures, shown again
+  $("#profitGroupBy").on("change", function () {
+    if (lastProfitResult) renderProfit(lastProfitResult);
+  });
   // a tab's table was measured while it was hidden
   $('#transactions_view .transactions-tabs a[data-toggle="tab"]').on("shown.bs.tab", fitTransactionsView);
   $(window).on("resize", fitTransactionsView);
@@ -7560,7 +7669,7 @@ function grnDetailsHtml(g) {
   let items = (g.items || [])
     .map(
       (i) => `<tr>
-        <td>${txnHtml(i.product_name)}${i.new_product ? ' <span class="label label-warning" title="Created by this GRN: goods at a new cost price">New product</span>' : ""}${
+        <td>${txnHtml(lineDisplayName(i))}${i.new_product ? ' <span class="label label-warning" title="Created by this GRN: goods at a new cost price">New product</span>' : ""}${
           i.barcode ? `<br><small class="text-muted">${txnHtml(i.barcode)}</small>` : ""
         }</td>
         <td class="text-right">${i.quantity}</td>
@@ -7816,7 +7925,7 @@ function supBillSignatures(left, right) {
 function grnBillHtml(g) {
   let items = (g.items || []).map((i) => [
     billItemName(
-      i.product_name,
+      lineDisplayName(i),
       i.selling_price != null ? `sell @ ${supMoney(i.selling_price)}${i.batch_code ? " · " + txnHtml(i.batch_code) : ""}` : ""
     ),
     i.quantity,
@@ -7869,7 +7978,7 @@ function saleBillHtml(b) {
   let items = (b.items || []).map((i) => {
     let qty = parseFloat(i.quantity) || 0;
     let price = parseFloat(i.price) || 0;
-    return [billItemName(i.product_name), i.quantity, money(price), money(price * qty)];
+    return [billItemName(lineDisplayName(i)), i.quantity, money(price), money(price * qty)];
   });
   let discount = parseFloat(b.discount) || 0;
   let payment = (b.payment || []).filter(Boolean);
@@ -8980,7 +9089,7 @@ function addPrnLine() {
 // ---- the PRN bill (like the GRN bill) ----
 function prnBillHtml(r) {
   let items = (r.items || []).map((i) => [
-    billItemName(i.product_name),
+    billItemName(lineDisplayName(i)),
     i.quantity,
     supMoney(i.unit_cost),
     supMoney(i.total),
@@ -9025,7 +9134,7 @@ function prnDetailsHtml(r) {
   let items = (r.items || [])
     .map(
       (i) => `<tr>
-        <td>${txnHtml(i.product_name)}${i.barcode ? `<br><small class="text-muted">${txnHtml(i.barcode)}</small>` : ""}</td>
+        <td>${txnHtml(lineDisplayName(i))}${i.barcode ? `<br><small class="text-muted">${txnHtml(i.barcode)}</small>` : ""}</td>
         <td class="text-right">${i.quantity}</td>
         <td class="text-right nobr">${supMoney(i.unit_cost)}</td>
         <td class="text-right nobr">${supMoney(i.total)}</td>
@@ -9789,6 +9898,16 @@ $(function () {
   }
 });
 
+// After data changes (products edited, a brand / unit / category renamed,
+// stock moved by a GRN / PRN / adjustment / return...), the page on screen
+// shows it straight away: each keeps its filters, day and selected account.
+function refreshOpenPages() {
+  if ($("#transactions_view").is(":visible")) loadTransactions(); // also Profit and Products Sold
+  if ($("#journal_view").is(":visible")) loadJournal();
+  if ($("#accounts_view").is(":visible") && typeof accountsData !== "undefined" && accountsData) loadAccounts();
+  if ($("#suppliers_view").is(":visible")) loadSuppliersPage();
+}
+
 function loadTransactions() {
   let users = [];
   let sales = 0;
@@ -10008,9 +10127,14 @@ function loadSoldProducts() {
 
     counter++;
 
+    let p0 = product.length ? product[0] : null;
     sold_list += `<tr>
-            <td>${txnHtml(item?.product)}</td>
-            <td class="text-right">${item?.qty}</td>
+            <td>${txnHtml(lineDisplayName({ id: item?.id, product_name: item?.product }))}${
+              p0 && p0.brand ? `<br><small class="text-muted">${txnHtml(p0.brand)}</small>` : ""
+            }</td>
+            <td class="text-right" data-order="${item?.qty}">${item?.qty}${
+              p0 && p0.unit ? ` <small class="text-muted">${txnHtml(productUnitText(p0.unit, item?.qty).replace(/^\d+ /, ""))}</small>` : ""
+            }</td>
             <td class="text-right txn-stock">${
               product.length === 0
                 ? ""
@@ -10129,7 +10253,7 @@ $.fn.viewTransaction = function (index, source) {
           .sort((a, b) => new Date(a.date) - new Date(b.date))
           .map((ret) => {
             let items = (ret.items || [])
-              .map((i) => txnHtml(i.product_name) + " ×" + (parseInt(i.quantity) || 0))
+              .map((i) => txnHtml(lineDisplayName(i)) + " ×" + (parseInt(i.quantity) || 0))
               .join(", ");
             return `<div class="bill-return">
                 <div class="bill-return-head">
@@ -10389,7 +10513,7 @@ $.fn.openReturnModal = function (mode) {
 
       rows += `<tr>
                     <td><input type="checkbox" class="return-item-check" data-line="${line}" ${remaining <= 0 ? "disabled" : ""}></td>
-                    <td>${item.product_name}</td>
+                    <td>${txnHtml(lineDisplayName(item))}</td>
                     <td>${item.quantity}</td>
                     <td>${returnedQty}</td>
                     <td><input type="number" class="form-control return-item-qty" data-line="${line}" min="0" max="${remaining}" value="0" ${remaining <= 0 ? "disabled" : ""}></td>
@@ -10469,6 +10593,9 @@ $.fn.submitReturn = function () {
     success: function (response) {
       $("#returnModal").modal("hide");
       loadTransactions();
+      // returned goods are back in stock; the customer's credit / advance may have changed
+      $(document).trigger("products:changed");
+      $(document).trigger("customers:changed");
 
       if (currentReturnMode == "exchange") {
         cart = [];
@@ -11131,7 +11258,7 @@ function adjBillHtml(a) {
   let items = (a.items || [])
     .map(
       (i) => `<tr>
-        <td>${txnHtml(i.product_name)}${
+        <td>${txnHtml(lineDisplayName(i))}${
           (i.batches || []).length ? `<br><small>${i.batches.map((b) => txnHtml(b.reference) + " ×" + b.qty).join(", ")}</small>` : ""
         }</td>
         <td style="padding: 0 6px; vertical-align: top;">${out ? "-" : "+"}${i.quantity}</td>

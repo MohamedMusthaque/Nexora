@@ -6,6 +6,7 @@ const Expenses = require( "./expenses" );
 const Suppliers = require( "./suppliers" );
 const Adjustments = require( "./adjustments" );
 const Transfers = require( "./transfers" );
+const Inventory = require( "./inventory" );
 
 app.use( bodyParser.json() );
 
@@ -72,10 +73,26 @@ function saleCreditPart( t ) {
 
 const REFUND_METHODS = { cash: "Cash", card: "Card", bank: "Bank Transfer" };
 
-function itemsText( items ) {
-    return ( items || [] )
-        .map( ( i ) => ( i.product_name || "" ) + " x" + ( parseInt( i.quantity ) || 0 ) )
-        .join( ", " );
+// The products, by id, while the entries are built (loadEntries): a line's
+// name gets its size, and its quantity its unit, also on older records.
+let productsById = {};
+
+// "Milo 400 g x2", "Marie Biscuits x3 packets"
+function lineText( i ) {
+    let p = productsById[ i.product_id != null ? i.product_id : i.id ];
+    let name = String( i.product_name || ( p && p.name ) || "" );
+    let size = p && p.size ? String( p.size ).trim() : "";
+    if ( size && !name.toLowerCase().includes( size.toLowerCase() ) ) name += " " + size;
+    let qty = parseInt( i.quantity ) || 0;
+    let unit = p ? Inventory.productUnitText( p.unit, qty ) : "";
+    return name + " x" + qty + ( unit ? " " + unit : "" );
+}
+
+// the lines of a bill / GRN / return...: the first few, then "+N more"
+function itemsText( items, max ) {
+    let lines = ( items || [] ).map( lineText );
+    max = max || 4;
+    return lines.length > max ? lines.slice( 0, max ).join( ", " ) + " +" + ( lines.length - max ) + " more" : lines.join( ", " );
 }
 
 function buildEntries( data ) {
@@ -106,7 +123,7 @@ function buildEntries( data ) {
             time_known: true,
             reference: reference,
             party: party,
-            details: notes.join( "; " ),
+            details: [ itemsText( t.items ) ].concat( notes ).filter( Boolean ).join( "; " ),
             method: isCredit ? "Credit" : ( t.payment_type || "" ) + ( credit > 0 ? " + Credit" : "" ),
             in_method: received > 0 ? t.payment_type || "Other" : "",
             amount: round2( total ),
@@ -242,7 +259,7 @@ function buildEntries( data ) {
         let due = g.amount_due != null ? num( g.amount_due ) : total;
         let onCredit = g.payment_method === "Credit" ? due : 0;
         let paid = g.payment_method !== "Credit" && g.payment_method !== "Advance" ? due : 0;
-        let notes = [ ( g.item_count || ( g.items || [] ).length ) + " products, " + ( g.total_quantity || 0 ) + " units" ];
+        let notes = [ itemsText( g.items ), ( g.item_count || ( g.items || [] ).length ) + " products, " + ( g.total_quantity || 0 ) + " units" ];
         if ( advanceUsed > 0 ) notes.push( "supplier advance used " + advanceUsed.toFixed( 2 ) );
         if ( g.note ) notes.push( g.note );
         entries.push( {
@@ -334,6 +351,7 @@ function buildEntries( data ) {
             reference: r.prn_no || "",
             party: ( r.supplier_name || "" ) + ( r.walk_in && r.supplier_name !== "Walk-in seller" ? " (Walk-in)" : "" ),
             details: [
+                itemsText( r.items ),
                 ( r.item_count || ( r.items || [] ).length ) + " products, " + ( r.total_quantity || 0 ) + " units",
                 r.grn_ref ? "GRN " + r.grn_ref : "",
                 r.note || ""
@@ -363,7 +381,7 @@ function buildEntries( data ) {
             reference: a.adj_no || "",
             party: a.reason || "",
             details: [
-                ( a.items || [] ).map( ( i ) => ( i.product_name || "" ) + " x" + ( parseInt( i.quantity ) || 0 ) ).join( ", " ),
+                itemsText( a.items ),
                 a.note || ""
             ].filter( Boolean ).join( "; " ),
             method: "No money",
@@ -497,6 +515,9 @@ function loadEntries( fromDay, toDay, callback ) {
     let toText = dayText( toDay );
     let fail = ( message ) => callback( new Error( message ) );
 
+    Inventory.getAllProducts( function ( err, products ) {
+    productsById = {};
+    ( products || [] ).forEach( ( p ) => { productsById[ p._id ] = p; } );
     Transactions.journalData( from, to, function ( err, sales ) {
         if ( err ) return fail( "Could not load the sales." );
         Expenses.journalData( fromText, toText, function ( err, expenses ) {
@@ -523,6 +544,7 @@ function loadEntries( fromDay, toDay, callback ) {
                 } );
             } );
         } );
+    } );
     } );
 }
 

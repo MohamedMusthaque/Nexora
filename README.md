@@ -142,7 +142,8 @@ The **Products** window has five tabs: Products, Categories, **Brands**, **Units
 
 ### 📊 Transactions & Profit
 - **Transactions page** with Cashier, Status, Payment Method and date filters, totals (Sales, Transactions, Items sold, Products), and a "Products Sold" side list.
-- **Profit tab:** cost, profit and margin for its own date range.
+- **Profit tab:** cost, profit and margin for its own date range, **viewed by Product, Brand or Category**. Products show their size, brand, category, SKU and quantities with their unit ("24 bottles").
+- **Products Sold**, bills, the **Quick Journal** and **Accounts** name items with their size and unit ("Milo 400 g x2, Marie Biscuits x3 packets"), also on sales made before sizes existed.
 
 ### 🧾 Bills & Printing
 One clean, receipt-printer-friendly design for every document: **sale bill, GRN, PRN, credit receipt, supplier payment, stock adjustment, money transfer, Quick Journal and Day End**.

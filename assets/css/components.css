@@ -6609,3 +6609,11 @@ body.transactions-mode #transactions_view .txn-page{
   margin-left: 6px;
   font-size: 11px;
 }
+
+
+/* Profit: "View by" Product / Brand / Category */
+#profitSection .profit-group-by{
+  width: auto;
+  min-width: 130px;
+  height: 34px;
+}

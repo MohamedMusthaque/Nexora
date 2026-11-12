@@ -283,7 +283,11 @@ app.post("/product", upload.single("imagename"), function (req, res) {
           if (!before) return res.sendStatus(200);
           afterProductEdit(before, Product, who, function (err) {
             if (err) console.error("Batch update after product edit failed:", err);
-            res.sendStatus(200);
+            // the same item at its other cost prices gets the same details
+            syncItemCopies(before, Product, who, function (err, copies) {
+              if (err) console.error("Updating the item's other prices failed:", err);
+              res.send({ copies_updated: copies || 0 });
+            });
           });
         }
       );
@@ -769,6 +773,21 @@ app.createGrnProduct = function (source, costPrice, sellingPrice, info, callback
 
 // "Coca-Cola 500 ml": for GRN / PRN / stock adjustment lines (suppliers.js, adjustments.js)
 app.productDisplayName = productDisplayName;
+
+// a quantity with its unit: "3 packets", "1 bottle"; no unit: "" (journal.js)
+const UNIT_PLURALS = { box: "boxes", dozen: "dozen" };
+function productUnitText(unit, qty) {
+  unit = String(unit || "");
+  if (!unit) return "";
+  let n = parseInt(qty) || 0;
+  if (n === 1) return unit;
+  if (UNIT_PLURALS[unit]) return UNIT_PLURALS[unit];
+  if (/^(kg|g|mg|l|ml|m|cm|mm|lb|oz)$/.test(unit) || /s$/.test(unit)) return unit;
+  if (/(x|z|ch|sh)$/.test(unit)) return unit + "es";
+  if (/[^aeiou]y$/.test(unit)) return unit.slice(0, -1) + "ies";
+  return unit + "s";
+}
+app.productUnitText = productUnitText;
 
 // ---- Brands (Products window > Brands tab, and the product form's Brand list) ----
 // The brand list: brands added in the Brands tab or with "+ New" in the product
@@ -1350,6 +1369,42 @@ app.incrementInventory = function (products, callback) {
 
 // After the product form is saved: a new price / cost price applies to the
 // batch being sold now, and a stock change adds to / takes from it.
+// ---- one item, several products (one per cost price) ----
+// Goods received at a new cost become a product of their own (createGrnProduct):
+// the same item - same name, brand, size and category - with its own cost,
+// price, barcode and stock. What describes the item is shared, so editing
+// one of them changes the others too; each keeps its own price, cost,
+// barcode and stock. Their history records the change.
+const ITEM_SHARED_FIELDS = ["name", "brand", "size", "unit", "sku", "category", "description", "reorder_level", "img", "stock"];
+
+function itemFamilyKey(p) {
+  return [p.name, p.brand, p.size].map((t) => String(t || "").replace(/\s+/g, " ").trim().toLowerCase()).join("||") +
+    "||" + String(p.category ?? "");
+}
+
+function syncItemCopies(before, after, who, callback) {
+  let changed = ITEM_SHARED_FIELDS.filter((f) => String(before[f] ?? "") !== String(after[f] ?? ""));
+  if (!changed.length) return callback(null, 0);
+  inventoryDB.find({}, function (err, all) {
+    if (err) return callback(err, 0);
+    let copies = all.filter((p) => p._id !== after._id && itemFamilyKey(p) === itemFamilyKey(before));
+    if (!copies.length) return callback(null, 0);
+    let set = {};
+    changed.forEach((f) => (set[f] = after[f]));
+    async.eachSeries(
+      copies,
+      function (p, next) {
+        inventoryDB.update({ _id: p._id }, { $set: set }, {}, function (err) {
+          if (err) return next(err);
+          logHistory(editHistoryEntries(p, Object.assign({}, p, set), who));
+          next();
+        });
+      },
+      (err) => callback(err, copies.length)
+    );
+  });
+}
+
 function afterProductEdit(before, after, who, callback) {
   inStockSeries(function (done) {
     let finish = function (err) {
