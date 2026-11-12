@@ -100,7 +100,7 @@ The **Products** window has four tabs: Products, Categories, **Brands** and Stoc
   - Cost price and selling price, with live profit and margin shown as you type.
   - Barcode, entered or generated with **Fill**, stock and picture.
   - Printable **barcode labels** with the price.
-- **Brands:** **Add Brand** (or **+ New** next to Brand in the product form, like Expense Type in the expense form) - every brand with its products, sizes, units in stock and stock value at cost and selling price, with Excel / PDF export. Open a brand to see its products and edit them; **Rename** fixes a brand's spelling on all its products at once, or merges two brands (e.g. "Nestle" into "Nestlé").
+- **Brands:** **Add Brand** (the brands then show in the product form's Brand list) - every brand with its products, sizes, units in stock and stock value at cost and selling price, with Excel / PDF export. Open a brand to see its products and edit them; **Rename** fixes a brand's spelling on all its products at once, or merges two brands (e.g. "Nestle" into "Nestlé").
 - **Product History:** every sale, return, GRN, PRN, adjustment and edit for a product, plus its stock batches.
 - **Stock Adjustments:**
   - Stock out (Expired, Damaged, Lost / Missing, Theft, Own / Staff use, Stock count shortage) or stock in (Stock count surplus, Found).

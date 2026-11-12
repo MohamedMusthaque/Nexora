@@ -2763,7 +2763,6 @@ if (!authedThisSession) {
       updateProductMarginHint();
       fillProductSuggestions();
       updateProductStockUnit();
-      hideProductNewBrandRow();
       renderBrandOptions("");
     });
 
@@ -2815,13 +2814,6 @@ if (!authedThisSession) {
     $("#saveProduct").submit(function (e) {
       e.preventDefault();
 
-      // a new brand still being typed: add it (or cancel) first, else the
-      // product would be saved without a brand
-      if ($(".product-newbrand-row").is(":visible")) {
-        Swal.fire("Add the brand first", "Click Add to add the new brand (or Cancel), then save the product.", "info");
-        return;
-      }
-
       let priceError = validateProductPrices();
       if (priceError) {
         Swal.fire("Check the prices", priceError, "warning");
@@ -2839,8 +2831,7 @@ if (!authedThisSession) {
           $("#saveProduct").get(0).reset();
           setProductFormHeader(null); // "Add another" starts a new product
           updateProductStockUnit();
-          hideProductNewBrandRow();
-          renderBrandOptions("");
+              renderBrandOptions("");
           $("#current_img").text("");
 
           loadProducts();
@@ -2931,7 +2922,6 @@ if (!authedThisSession) {
       $("#quantity").val(allProducts[index].quantity);
       // the product details (older products don't have them: empty)
       let p = allProducts[index];
-      hideProductNewBrandRow();
       renderBrandOptions(String(p.brand || "").trim());
       $("#productSize").val(p.size || "");
       $("#productUnit").val(p.unit || "");
@@ -4774,7 +4764,7 @@ if (!authedThisSession) {
 
     // ---- Brands (Products window > Brands tab, and the product form's Brand list) ----
     // The brand list (api/inventory.js: /brands) - brands added with Add Brand
-    // here or "+ New" in the product form - plus brands already on products.
+    // here - plus brands already on products.
     // Brands are the same whatever the case / spacing, shown in the list's
     // spelling (else the one most of their products use). A row's View shows
     // its products; Rename (the Brand window) renames - or merges into another
@@ -4825,7 +4815,7 @@ if (!authedThisSession) {
       let value = keep !== undefined ? keep : $sel.val() || "";
       let names = brandNames();
       $sel.html(
-        `<option value="">${names.length ? "No brand" : "No brands yet - add one with New"}</option>` +
+        `<option value="">${names.length ? "No brand" : "No brands available"}</option>` +
           names.map((n) => `<option value="${txnHtml(n)}">${txnHtml(n)}</option>`).join("")
       );
       if (value && !names.includes(value)) $sel.append(`<option value="${txnHtml(value)}">${txnHtml(value)}</option>`);
@@ -5108,62 +5098,6 @@ if (!authedThisSession) {
           .done(() => loadBrands())
           .fail((xhr) => Swal.fire("Oops!", (xhr && xhr.responseText) || "Could not delete the brand.", "warning"));
       });
-    });
-
-    // ---- product form: "+ New" brand, like New Type in the expense form ----
-    // The Brand list is cleared and disabled while a new brand is typed; Add
-    // saves it to the brand list and selects it, Cancel puts back the earlier choice.
-    function showProductNewBrandRow() {
-      let $sel = $("#productBrand");
-      if (!$sel.prop("disabled")) $sel.data("previousBrand", $sel.val() || "");
-      $sel.val("").prop("disabled", true);
-      $("#productNewBrandBtn").prop("disabled", true);
-      $(".product-newbrand-row").show();
-      $("#productNewBrandName").val("");
-      setTimeout(() => $("#productNewBrandName").trigger("focus"), 100);
-    }
-
-    function hideProductNewBrandRow(restoreChoice) {
-      $(".product-newbrand-row").hide();
-      $("#productNewBrandName").val("");
-      let $sel = $("#productBrand");
-      if ($sel.prop("disabled")) {
-        $sel.prop("disabled", false);
-        if (restoreChoice === true) $sel.val(String($sel.data("previousBrand") || ""));
-      }
-      $sel.removeData("previousBrand");
-      $("#productNewBrandBtn").prop("disabled", false);
-    }
-
-    $("#productNewBrandBtn").on("click", showProductNewBrandRow);
-    $("#productNewBrandCancel").on("click", function () {
-      hideProductNewBrandRow(true);
-      $("#productBrand").trigger("focus");
-    });
-    $("#productNewBrandName").on("keydown", function (e) {
-      if (e.key === "Enter") {
-        e.preventDefault(); // don't save the product yet
-        $("#productNewBrandSave").trigger("click");
-      }
-    });
-    $("#productNewBrandSave").on("click", function () {
-      let name = String($("#productNewBrandName").val() || "").replace(/\s+/g, " ").trim();
-      if (!name) return $("#productNewBrandName").trigger("focus");
-      // already in the list (any case / spacing): just select it
-      let existing = brandGroups.find((g) => g.key && g.key === brandKey(name));
-      if (existing) {
-        hideProductNewBrandRow();
-        renderBrandOptions(existing.name);
-        return;
-      }
-      let $btn = $(this).prop("disabled", true);
-      addBrand(name)
-        .done(function (brand) {
-          hideProductNewBrandRow();
-          loadBrands(() => renderBrandOptions(brand.name));
-        })
-        .fail((xhr) => Swal.fire("Oops!", (xhr && xhr.responseText) || "Could not add the brand.", "warning"))
-        .always(() => $btn.prop("disabled", false));
     });
 
     // the brands table is measured while its tab is hidden

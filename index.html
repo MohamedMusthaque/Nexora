@@ -1286,45 +1286,31 @@
 
                         <div class="account-section">
                             <h5 class="account-section-title"><i class="fa fa-cube"></i> Product</h5>
+                            <!-- row 1: the name, full width -->
+                            <div class="form-group">
+                                <label for="productName">Product Name <span class="account-required">*</span></label>
+                                <input type="text" required="required" name="name" parsley-trigger="change" placeholder="e.g. Coca-Cola, Chicken Kottu" class="form-control" id="productName" maxlength="100">
+                            </div>
+                            <!-- row 2: Brand (wide enough to read the brand names) and Category -->
                             <div class="row">
-                                <div class="col-sm-8 form-group">
-                                    <label for="productName">Product Name <span class="account-required">*</span></label>
-                                    <input type="text" required="required" name="name" parsley-trigger="change" placeholder="e.g. Coca-Cola, Chicken Kottu" class="form-control" id="productName" maxlength="100">
-                                </div>
-                                <div class="col-sm-4 form-group">
+                                <div class="col-sm-6 form-group">
                                     <label for="productBrand">Brand</label>
-                                    <!-- the brand list (Products > Brands); "New" adds one here, like
-                                         Expense Type in the expense form (pos.js: renderBrandOptions) -->
-                                    <div class="input-group">
-                                        <select name="brand" class="form-control" id="productBrand"></select>
-                                        <span class="input-group-btn">
-                                            <button type="button" class="btn btn-default" id="productNewBrandBtn" title="Add a new brand"><i class="fa fa-plus"></i> New</button>
-                                        </span>
-                                    </div>
+                                    <!-- the brand list: brands are added in Products > Brands (pos.js: renderBrandOptions) -->
+                                    <select name="brand" class="form-control" id="productBrand"></select>
                                 </div>
-                            </div>
-                            <!-- quick add of a brand without leaving this form -->
-                            <div class="form-group product-newbrand-row" style="display: none;">
-                                <div class="input-group">
-                                    <span class="input-group-addon"><i class="fa fa-bookmark"></i></span>
-                                    <input type="text" id="productNewBrandName" class="form-control" maxlength="60" placeholder="New brand, e.g. Nestle">
-                                    <span class="input-group-btn">
-                                        <button type="button" class="btn btn-primary" id="productNewBrandSave">Add</button>
-                                        <button type="button" class="btn btn-default" id="productNewBrandCancel">Cancel</button>
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="row">
-                                <div class="col-sm-4 form-group">
+                                <div class="col-sm-6 form-group">
                                     <label for="category">Category</label>
                                     <select name="category" class="form-control" id="category"></select>
                                 </div>
-                                <div class="col-sm-4 form-group">
+                            </div>
+                            <!-- row 3: Size and Unit -->
+                            <div class="row">
+                                <div class="col-sm-6 form-group">
                                     <label for="productSize">Size / Variant</label>
                                     <input type="text" name="size" class="form-control" id="productSize" list="productSizeList" maxlength="40" placeholder="e.g. 500 ml, Large">
                                     <datalist id="productSizeList"></datalist>
                                 </div>
-                                <div class="col-sm-4 form-group">
+                                <div class="col-sm-6 form-group">
                                     <label for="productUnit">Unit</label>
                                     <select name="unit" class="form-control" id="productUnit">
                                         <option value="">Piece (pcs)</option>
