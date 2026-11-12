@@ -1312,20 +1312,9 @@
                                 </div>
                                 <div class="col-sm-6 form-group">
                                     <label for="productUnit">Unit</label>
+                                    <!-- the unit list (Products > Units); piece is the default (pos.js: renderUnitOptions) -->
                                     <select name="unit" class="form-control" id="productUnit">
                                         <option value="">Piece (pcs)</option>
-                                        <option value="pack">Pack</option>
-                                        <option value="box">Box</option>
-                                        <option value="bottle">Bottle</option>
-                                        <option value="can">Can</option>
-                                        <option value="bag">Bag</option>
-                                        <option value="jar">Jar</option>
-                                        <option value="cup">Cup</option>
-                                        <option value="plate">Plate</option>
-                                        <option value="portion">Portion</option>
-                                        <option value="dozen">Dozen</option>
-                                        <option value="pair">Pair</option>
-                                        <option value="set">Set</option>
                                     </select>
                                 </div>
                             </div>
@@ -1407,6 +1396,34 @@
         </div>
     </div>
 
+
+    <!-- Add / rename a unit (pos.js: openUnitForm). Takes the Products window's
+         place while open, and brings it back on the Units tab. -->
+    <div id="unitModal" class="modal fade nx-modal" tabindex="-1" role="dialog" aria-labelledby="unitModalTitle" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog modal-md">
+                <div class="modal-content">
+                    <div class="modal-header nx-hero">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                        <span class="nx-hero-icon"><i class="fa fa-cubes"></i></span>
+                        <div class="nx-hero-text">
+                            <h4 class="modal-title" id="unitModalTitle">Add Unit</h4>
+                            <p class="nx-hero-sub" id="unitModalSub">What one item of stock is</p>
+                        </div>
+                    </div>
+                    <div class="modal-body">
+                        <form id="saveUnit" autocomplete="off">
+                            <input type="hidden" id="unitFrom">
+                            <div class="form-group">
+                                <label for="unitName">Unit (one item)</label>
+                                <input type="text" id="unitName" class="form-control" maxlength="20" placeholder="e.g. packet, tray, roll" required>
+                                <span class="help-block" id="unitNameHelp">Write it for one item: "packet", not "packets".</span>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-block waves-effect waves-light" id="submitUnit">Save Unit</button>
+                        </form>
+                    </div>
+               </div>
+          </div>
+     </div>
 
     <!-- Add / rename a brand (pos.js: openBrandForm). Takes the Products window's
          place while open, and brings it back on the Brands tab. -->
@@ -2275,6 +2292,12 @@
                                     <i class="fa fa-bookmark"></i> Brands <span class="badge" id="brandsTabCount">0</span>
                                 </a>
                             </li>
+                            <!-- what one item of stock is: packet, bottle... (pos.js: "Units tab") -->
+                            <li role="presentation" class="p_one">
+                                <a href="#productsTabUnits" aria-controls="productsTabUnits" role="tab" data-toggle="tab">
+                                    <i class="fa fa-cubes"></i> Units <span class="badge" id="unitsTabCount">0</span>
+                                </a>
+                            </li>
                             <!-- stock written off (expired, damaged, lost...) or found (pos.js: "Stock adjustments") -->
                             <li role="presentation" class="p_one">
                                 <a href="#productsTabAdjustments" aria-controls="productsTabAdjustments" role="tab" data-toggle="tab">
@@ -2302,10 +2325,19 @@
                                         </select>
                                         categories</label>
                                 </div>
+                                <!-- filters (pos.js: productListMatches): one brand; only products at or below their low-stock alert -->
+                                <div class="product-list-filters">
+                                    <select id="productListBrand" class="form-control input-sm" title="Show one brand's products">
+                                        <option value="">All brands</option>
+                                    </select>
+                                    <label class="product-low-toggle" title="Only products at or below their low-stock alert">
+                                        <input type="checkbox" id="productListLow"> <i class="fa fa-exclamation-triangle"></i> Low stock
+                                    </label>
+                                </div>
                             </div>
                             <div class="ph-toolbar-right">
                                 <div class="dataTables_filter">
-                                    <label><input type="search" id="productListSearch" class="form-control input-sm" placeholder="Search categories or products..." style="width: 280px;"></label>
+                                    <label><input type="search" id="productListSearch" class="form-control input-sm" placeholder="Search name, brand, size, SKU, barcode..." style="width: 280px;"></label>
                                 </div>
                             </div>
                         </div>
@@ -2338,6 +2370,9 @@
                                 <thead>
                                     <tr>
                                         <th>Name</th>
+                                        <th class="txn-num">Products</th>
+                                        <th class="txn-num">In Stock</th>
+                                        <th class="txn-num" title="Stock x cost price">Stock Value (Cost)</th>
                                         <th>Action</th>
                                     </tr>
                                 </thead>
@@ -2388,6 +2423,30 @@
                                     </tr>
                                 </thead>
                                 <tbody id="brand_list"></tbody>
+                            </table>
+                        </div>
+
+                        <!-- Units: what one item of stock is, with the products, stock and stock value;
+                             add / rename (merge) / delete (pos.js: "Units tab") -->
+                        <div role="tabpanel" class="tab-pane" id="productsTabUnits">
+                            <div class="filter-bar unit-filters">
+                                <button type="button" class="btn btn-warning waves-effect waves-light" id="addUnitBtn">
+                                    <i class="fa fa-plus"></i> Add Unit
+                                </button>
+                                <span class="text-muted">Units show in the product form's Unit list. Piece (pcs) is the default.</span>
+                            </div>
+                            <table class="table table-bordered" id="unitList" style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th>Unit</th>
+                                        <th class="txn-num">Products</th>
+                                        <th class="txn-num">In Stock</th>
+                                        <th class="txn-num" title="Stock x cost price">Stock Value (Cost)</th>
+                                        <th class="txn-num" title="Stock x selling price">Stock Value (Selling)</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="unit_list"></tbody>
                             </table>
                         </div>
 

@@ -41,12 +41,21 @@ app.post( "/category", function ( req, res ) {
 
 
 
+// only a category no product is in: deleting one in use would leave its
+// products "Uncategorized" on the till (move them to another category first)
 app.delete( "/category/:categoryId", function ( req, res ) {
-    categoryDB.remove( {
-        _id: parseInt(req.params.categoryId)
-    }, function ( err, numRemoved ) {
-        if ( err ) res.status( 500 ).send( err );
-        else res.sendStatus( 200 );
+    let id = parseInt( req.params.categoryId );
+    require( "./inventory" ).getAllProducts( function ( err, products ) {
+        if ( err ) return res.status( 500 ).send( "Could not check the category's products." );
+        let used = ( products || [] ).filter( ( p ) => String( p.category ) === String( id ) ).length;
+        if ( used ) {
+            return res.status( 400 ).send( used + ( used === 1 ? " product is" : " products are" ) +
+                " in this category. Move " + ( used === 1 ? "it" : "them" ) + " to another category (Edit product) before deleting it." );
+        }
+        categoryDB.remove( { _id: id }, function ( err ) {
+            if ( err ) res.status( 500 ).send( "Could not delete the category." );
+            else res.sendStatus( 200 );
+        } );
     } );
 } );
 

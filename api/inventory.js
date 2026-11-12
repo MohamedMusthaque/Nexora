@@ -66,19 +66,26 @@ function historyEntry(product, type, extra, who) {
 // pack...); sku: the shop's own item code (also found by the scan box);
 // reorder_level: the stock at which the till warns it is running low ("" = 5);
 // description: notes. All optional; older products simply don't have them.
-const PRODUCT_UNITS = ["pcs", "pack", "box", "bottle", "can", "bag", "jar", "cup", "plate", "portion", "dozen", "pair", "set"];
+// the units the unit list starts with (Products > Units can add, rename and delete
+// them); "" = piece (pcs), the default every product has unless it says otherwise
+const DEFAULT_UNITS = ["pack", "packet", "box", "bottle", "can", "bag", "jar", "cup", "plate", "portion", "dozen", "pair", "set"];
 const DEFAULT_REORDER_LEVEL = 5;
 
 function cleanText(value, max) {
   return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
+// a unit as stored: lowercase, short; "pcs" / "piece" is the default ("")
+function cleanUnit(value) {
+  let unit = cleanText(value, 20).toLowerCase();
+  return ["pcs", "pc", "piece", "pieces"].includes(unit) ? "" : unit;
+}
+
 function productDetails(body, reorderText) {
-  let unit = String(body.unit ?? "").trim().toLowerCase();
   return {
     brand: cleanText(body.brand, 60),
     size: cleanText(body.size, 40),
-    unit: PRODUCT_UNITS.includes(unit) ? unit : "",
+    unit: cleanUnit(body.unit),
     sku: cleanText(body.sku, 40),
     description: String(body.description ?? "").trim().slice(0, 500),
     reorder_level: reorderText === "" ? "" : parseInt(reorderText),
@@ -879,6 +886,124 @@ app.post("/brands/rename", function (req, res) {
         }
         logHistory([historyEntry(Object.assign({}, p, { brand: to }), "updated", {
           changes: [{ field: "brand", label: "Brand", from: p.brand, to: to }],
+        }, who)]);
+        if (++done === hits.length) finish(done);
+      });
+    });
+  });
+});
+
+// ---- Units (Products window > Units tab, and the product form's Unit list) ----
+// What one item of stock is: packet, bottle, box... (piece is the default).
+// The list starts with DEFAULT_UNITS the first time (a unit deleted later
+// stays deleted), and Products > Units adds, renames / merges and deletes.
+const unitsFile = process.env.APPDATA + "/POS/server/databases/units.db";
+const unitsAreNew = !fs.existsSync(unitsFile);
+let unitsDB = new Datastore({
+  filename: unitsFile,
+  autoload: true,
+  onload: function (err) {
+    if (err || !unitsAreNew) return;
+    let base = Date.now() * 1000;
+    unitsDB.insert(DEFAULT_UNITS.map((name, i) => ({ _id: base + i, name: name, created_at: new Date().toJSON() })), function () {});
+  },
+});
+
+function newUnitId() {
+  return Date.now() * 1000 + Math.floor(Math.random() * 1000);
+}
+
+// the units, with how many products have each (a unit in use can't be deleted)
+app.get("/units", function (req, res) {
+  unitsDB.find({}).sort({ name: 1 }).exec(function (err, units) {
+    if (err) return res.status(500).send("Could not load the units.");
+    inventoryDB.find({}, { unit: 1 }, function (err, products) {
+      if (err) return res.status(500).send("Could not load the units.");
+      let counts = {};
+      products.forEach((p) => {
+        let u = cleanUnit(p.unit);
+        if (u) counts[u] = (counts[u] || 0) + 1;
+      });
+      res.send(units.map((u) => Object.assign({}, u, { product_count: counts[cleanUnit(u.name)] || 0 })));
+    });
+  });
+});
+
+// Body: { name } -> the new unit (lowercase: "Packet" -> "packet")
+app.post("/units", function (req, res) {
+  let raw = cleanText(req.body.name, 20);
+  if (!raw) return res.status(400).send("Please enter the unit, e.g. packet.");
+  let name = cleanUnit(raw);
+  if (!name) return res.status(409).send("Piece (pcs) is already the default unit.");
+  unitsDB.find({}, function (err, units) {
+    if (err) return res.status(500).send("Could not save the unit.");
+    let existing = units.find((u) => cleanUnit(u.name) === name);
+    if (existing) return res.status(409).send('The unit "' + existing.name + '" already exists.');
+    unitsDB.insert({ _id: newUnitId(), name: name, created_at: new Date().toJSON() }, function (err, saved) {
+      if (err) return res.status(500).send("Could not save the unit.");
+      res.send(saved);
+    });
+  });
+});
+
+// only a unit no product has
+app.delete("/units/:id", function (req, res) {
+  let id = parseInt(req.params.id);
+  unitsDB.findOne({ _id: id }, function (err, unit) {
+    if (err) return res.status(500).send("Could not delete the unit.");
+    if (!unit) return res.status(404).send("That unit no longer exists.");
+    inventoryDB.find({}, { unit: 1 }, function (err, products) {
+      if (err) return res.status(500).send("Could not delete the unit.");
+      let used = products.filter((p) => cleanUnit(p.unit) === cleanUnit(unit.name)).length;
+      if (used) {
+        return res.status(400).send(used + (used === 1 ? " product is" : " products are") + ' sold by the "' + unit.name +
+          '". Change their unit (or merge it into another unit with Rename) before deleting it.');
+      }
+      unitsDB.remove({ _id: id }, {}, function (err) {
+        if (err) return res.status(500).send("Could not delete the unit.");
+        res.sendStatus(200);
+      });
+    });
+  });
+});
+
+// Renames a unit on every product that has it, and in the unit list; renaming
+// to an existing unit merges the two. Each product's history records it.
+// Body: { from, to, user, user_id } -> { updated }
+app.post("/units/rename", function (req, res) {
+  let from = cleanUnit(req.body.from);
+  let to = cleanUnit(req.body.to);
+  if (!from) return res.status(400).send("Choose the unit to rename.");
+  if (!cleanText(req.body.to, 20)) return res.status(400).send("Enter the new unit.");
+  if (!to) return res.status(400).send("Piece (pcs) is the default unit: choose another name.");
+  inventoryDB.find({}, function (err, products) {
+    if (err) return res.status(500).send("Could not load the products.");
+    let hits = from === to ? [] : products.filter((p) => cleanUnit(p.unit) === from);
+    let finish = function (updated) {
+      unitsDB.find({}, function (err, units) {
+        if (err) return res.status(500).send("The products were changed, but the unit list could not be updated.");
+        let stale = from === to ? [] : units.filter((u) => cleanUnit(u.name) === from);
+        let target = units.find((u) => cleanUnit(u.name) === to);
+        unitsDB.remove({ _id: { $in: stale.map((u) => u._id) } }, { multi: true }, function () {
+          let done = () => res.send({ updated: updated });
+          if (target) return done();
+          unitsDB.insert({ _id: newUnitId(), name: to, created_at: new Date().toJSON() }, done);
+        });
+      });
+    };
+    if (!hits.length) return finish(0);
+    let who = { user: req.body.user, user_id: req.body.user_id };
+    let done = 0;
+    let failed = false;
+    hits.forEach(function (p) {
+      inventoryDB.update({ _id: p._id }, { $set: { unit: to } }, {}, function (err) {
+        if (failed) return;
+        if (err) {
+          failed = true;
+          return res.status(500).send("Could not change the unit on every product. Please try again.");
+        }
+        logHistory([historyEntry(Object.assign({}, p, { unit: to }), "updated", {
+          changes: [{ field: "unit", label: "Unit", from: p.unit, to: to }],
         }, who)]);
         if (++done === hits.length) finish(done);
       });

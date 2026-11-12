@@ -94,13 +94,14 @@ Card, Bank Transfer, Return / Refund and Exchange can each be turned off in **Se
 - **Customer Transactions** window with Transactions, Credit payments and Advance tabs, each with date filter, search and Excel / PDF export.
 
 ### 📦 Products, Categories & Stock
-The **Products** window has four tabs: Products, Categories, **Brands** and Stock Adjustments.
+The **Products** window has five tabs: Products, Categories, **Brands**, **Units** and Stock Adjustments.
 - **Products:**
-  - **Brand**, **Size / Variant** (500 ml, Large…), **Unit** (piece, bottle, pack, plate…), **SKU / item code**, description and a per-product **low-stock alert**. Products with the same name in different sizes share one till tile, and the cashier picks the size. The SKU can be typed into the scan box.
+  - **Brand**, **Size / Variant** (500 ml, Large…), **Unit** (piece, packet, bottle, pack, plate…), **SKU / item code**, description and a per-product **low-stock alert**. Products with the same name in different sizes share one till tile, and the cashier picks the size. The SKU can be typed into the scan box.
   - Cost price and selling price, with live profit and margin shown as you type.
   - Barcode, entered or generated with **Fill**, stock and picture.
   - Printable **barcode labels** with the price.
 - **Brands:** **Add Brand** (the brands then show in the product form's Brand list) - every brand with its products, sizes, units in stock and stock value at cost and selling price, with Excel / PDF export. Open a brand to see its products and edit them; **Rename** fixes a brand's spelling on all its products at once, or merges two brands (e.g. "Nestle" into "Nestlé").
+- **Units:** **Add Unit** (e.g. packet, tray, roll), then every unit with its products, stock in that unit ("40 packets") and stock value. **Rename** changes a unit on all its products or merges two units; an unused unit can be deleted. Piece (pcs) is the default. The units show in the product form's Unit list.
 - **Product History:** every sale, return, GRN, PRN, adjustment and edit for a product, plus its stock batches.
 - **Stock Adjustments:**
   - Stock out (Expired, Damaged, Lost / Missing, Theft, Own / Staff use, Stock count shortage) or stock in (Stock count surplus, Found).
@@ -477,7 +478,7 @@ Nexora/
 
 ### Where the data lives
 - **Data folder:** `<UserHome>/Nexora/POS/` by default. You can change it in **Settings → Data & Backup → Current Data Location**.
-  - `server/databases/*.db`: NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`, `returns.db`, `credit_payments.db`, `customer_advances.db`, `product_history.db`, `expenses.db`, `expense_types.db`, `suppliers.db`, `grns.db`, `prns.db`, `supplier_payments.db`, `batches.db`, `stock_adjustments.db`, `money_transfers.db`, `brands.db`).
+  - `server/databases/*.db`: NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`, `returns.db`, `credit_payments.db`, `customer_advances.db`, `product_history.db`, `expenses.db`, `expense_types.db`, `suppliers.db`, `grns.db`, `prns.db`, `supplier_payments.db`, `batches.db`, `stock_adjustments.db`, `money_transfers.db`, `brands.db`, `units.db`).
   - `uploads/`: product pictures and the receipt logo.
 - **Backups made by the app:** `<UserHome>/Nexora/Nexora-Backups/`. This holds the safety copies taken before a reset or restore, and `drive-queue/`, where backups wait for upload.
 - **App settings** (data location, Google Drive connection): the OS user-data folder (`app-config.json`), never inside the data folder.

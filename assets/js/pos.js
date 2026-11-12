@@ -237,13 +237,25 @@ function productDisplayName(p) {
 }
 
 const PRODUCT_UNIT_PLURALS = { box: "boxes", dozen: "dozen", pcs: "pcs" };
+// a unit for more than one: packet -> packets, box -> boxes, kg stays kg
+function productUnitPlural(unit) {
+  unit = String(unit || "pcs");
+  if (PRODUCT_UNIT_PLURALS[unit]) return PRODUCT_UNIT_PLURALS[unit];
+  if (/^(kg|g|mg|l|ml|m|cm|mm|lb|oz)$/.test(unit) || /s$/.test(unit)) return unit;
+  if (/(x|z|ch|sh)$/.test(unit)) return unit + "es";
+  if (/[^aeiou]y$/.test(unit)) return unit.slice(0, -1) + "ies";
+  return unit + "s";
+}
 // "24 bottles", "1 bottle", "12 pcs"
 function productUnitText(unit, qty) {
   unit = unit || "pcs";
   if (qty === undefined || qty === null) return unit;
   let n = parseInt(qty) || 0;
-  let word = n === 1 ? unit : PRODUCT_UNIT_PLURALS[unit] || unit + "s";
-  return n + " " + word;
+  return n + " " + (n === 1 ? unit : productUnitPlural(unit));
+}
+// a unit in lists: "Packet"; no unit: "Piece (pcs)"
+function productUnitLabel(unit) {
+  return unit ? unit.charAt(0).toUpperCase() + unit.slice(1) : "Piece (pcs)";
 }
 
 // a product in the GRN / PRN / stock adjustment pickers: "Nestle Milo 400 g (SKU ML-400)"
@@ -1068,7 +1080,9 @@ if (!authedThisSession) {
         allProducts = [...data];
         cartBatchInfo = {}; // the fresh products carry the current stock batches
         loadProductList();
+        loadCategoryList(); // products / stock per category
         loadBrands(); // the brand list: the Brands tab and the product form's Brand list
+        loadUnits(); // the unit list: the Units tab and the product form's Unit list
         const capitalizeFirstLetter = (word) =>
           `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
 
@@ -2764,6 +2778,8 @@ if (!authedThisSession) {
       fillProductSuggestions();
       updateProductStockUnit();
       renderBrandOptions("");
+      renderUnitOptions("");
+      updateProductStockUnit();
     });
 
     function clearPriceInputErrors() {
@@ -2830,8 +2846,9 @@ if (!authedThisSession) {
         success: function (response) {
           $("#saveProduct").get(0).reset();
           setProductFormHeader(null); // "Add another" starts a new product
+          renderBrandOptions("");
+          renderUnitOptions("");
           updateProductStockUnit();
-              renderBrandOptions("");
           $("#current_img").text("");
 
           loadProducts();
@@ -2904,7 +2921,7 @@ if (!authedThisSession) {
     });
 
     $.fn.editProduct = function (index) {
-      $("#Products").modal("hide");
+      leaveProductsWindow(); // comes back (same tab) when the form closes
 
       $("#category option")
         .filter(function () {
@@ -2924,7 +2941,7 @@ if (!authedThisSession) {
       let p = allProducts[index];
       renderBrandOptions(String(p.brand || "").trim());
       $("#productSize").val(p.size || "");
-      $("#productUnit").val(p.unit || "");
+      renderUnitOptions(p.unit || "");
       $("#productSku").val(p.sku || "");
       $("#productReorder").val(p.reorder_level ?? "");
       $("#productDescription").val(p.description || "");
@@ -3219,6 +3236,9 @@ if (!authedThisSession) {
             success: function (result) {
               loadCategories();
               Swal.fire("Done!", "Category deleted", "success");
+            },
+            error: function (xhr) {
+              Swal.fire("Can't delete this category", (xhr && xhr.responseText) || "Please try again.", "warning");
             },
           });
         }
@@ -4113,7 +4133,7 @@ if (!authedThisSession) {
           { targets: [8], orderable: false },
           { targets: [3, 4, 5], className: "text-right" },
         ],
-        buttons: tableExportButtons("Product history - " + (p ? p.name : ""), {
+        buttons: tableExportButtons("Product history - " + (p ? productDisplayName(p) : ""), {
           exportOptions: { columns: [0, 1, 2, 3, 4, 5, 6, 7] }, // not the View button
           subtitle: () =>
             $("#productHistoryFilter option:selected").text() +
@@ -4214,7 +4234,7 @@ if (!authedThisSession) {
       let left = parseInt($(this).data("left")) || 1;
       Swal.fire({
         title: "Print price labels",
-        html: `<b>${escapeHtml(product.name)}</b> · ${settings.symbol}${moneyText((parseFloat(price) || 0))} · ${escapeHtml(code)}`,
+        html: `<b>${escapeHtml(productDisplayName(product))}</b> · ${settings.symbol}${moneyText((parseFloat(price) || 0))} · ${escapeHtml(code)}`,
         input: "number",
         inputLabel: "How many labels?",
         inputValue: Math.max(left, 1),
@@ -4233,12 +4253,23 @@ if (!authedThisSession) {
       productHistoryProduct = product;
       productHistoryEvents = [];
 
-      $("#productHistoryTitle").text("Product History - " + product.name);
+      $("#productHistoryTitle").text("Product History - " + productDisplayName(product));
+      // brand, size, SKU, stock with its unit and low-stock alert, description
+      let details = [
+        product.brand ? `Brand: <b>${escapeHtml(product.brand)}</b>` : "",
+        product.size ? `Size: <b>${escapeHtml(product.size)}</b>` : "",
+        product.sku ? `SKU: <b>${escapeHtml(product.sku)}</b>` : "",
+        product.stock == 1
+          ? `Stock now: <b>${escapeHtml(productUnitText(product.unit, product.quantity))}</b> (low-stock alert at ${productReorderLevel(product)})`
+          : "",
+      ].filter(Boolean);
       $("#productHistoryInfo").html(
         `Barcode: <b>${escapeHtml(product.barcode)}</b> &nbsp;·&nbsp; ` +
           `Category: <b>${escapeHtml(historyCategoryName(product.category))}</b> &nbsp;·&nbsp; ` +
           `Price now: <b>${settings.symbol}${moneyText((parseFloat(product.price) || 0))}</b> &nbsp;·&nbsp; ` +
-          `Stock tracking: <b>${product.stock == 1 ? "On" : "Off"}</b>`
+          `Stock tracking: <b>${product.stock == 1 ? "On" : "Off"}</b>` +
+          (details.length ? "<br>" + details.join(" &nbsp;·&nbsp; ") : "") +
+          (product.description ? `<br><small class="text-muted">${escapeHtml(product.description)}</small>` : "")
       );
       loadProductBatches(product);
       $("#productHistoryFilter").val("all");
@@ -4248,7 +4279,7 @@ if (!authedThisSession) {
       }
       $("#product_history_list").html('<tr><td colspan="9">Loading...</td></tr>');
 
-      $("#Products").modal("hide");
+      leaveProductsWindow(); // comes back (same tab) when the history closes
       $("#productHistoryModal").modal("show");
 
       $.get(api + "product-history/" + product._id)
@@ -4289,8 +4320,31 @@ if (!authedThisSession) {
     );
 
     $("#productHistoryBack").on("click", function () {
-      $("#productHistoryModal").modal("hide");
-      $("#Products").modal("show");
+      if (!productsReturnTab) productsReturnTab = "#productsTabProducts";
+      $("#productHistoryModal").modal("hide"); // back to the Products window
+    });
+
+    // ---- back to the Products window ----
+    // Editing a product or opening its history from the Products window
+    // (Products, Brands tabs...) brings the window back, on the same tab, when
+    // that closes - instead of leaving the till screen.
+    let productsReturnTab = null; // "#productsTabBrands", ...
+
+    function leaveProductsWindow() {
+      let $p = $("#Products");
+      if ($p.hasClass("in")) productsReturnTab = $p.find(".products-tabs li.active > a").attr("href") || "#productsTabProducts";
+      $p.modal("hide");
+    }
+
+    $("#newProduct, #productHistoryModal").on("hidden.bs.modal", function () {
+      // not while another window (a bill...) is still open from it
+      setTimeout(function () {
+        if (!productsReturnTab || $(".modal.in").length) return;
+        let tab = productsReturnTab;
+        productsReturnTab = null;
+        $('#Products .products-tabs a[href="' + tab + '"]').tab("show");
+        $("#Products").modal("show");
+      }, 60);
     });
 
     // under the price in the product list: the product's other selling prices
@@ -4379,9 +4433,12 @@ if (!authedThisSession) {
           <td><i class="fa fa-chevron-${
             expanded ? "down" : "right"
           } toggle-icon"></i></td>
-          <td><strong>${group.categoryName}</strong></td>
-          <td>${group.trackedCount > 0 ? group.totalStock : "N/A"}</td>
-          <td>${group.items.length}</td>
+          <td><strong>${txnHtml(group.categoryName)}</strong></td>
+          <td>${(() => {
+            let tracked = itemsToShow.filter((p) => p.stock == 1);
+            return tracked.length ? tracked.reduce((s, p) => s + (parseInt(p.quantity) || 0), 0) : "N/A";
+          })()}</td>
+          <td>${itemsToShow.length}${itemsToShow.length !== group.items.length ? ` <small class="text-muted">of ${group.items.length}</small>` : ""}</td>
         </tr>
         <tr class="category-detail" data-category="${
           group.catId
@@ -4455,25 +4512,61 @@ if (!authedThisSession) {
     // groups and refreshes the pagination controls
     // categories + products matching the Products search box (used by the
     // list and by its Excel / PDF exports, so both show the same rows)
+    // Brand filter ("" all, "__none__" no brand, else the brand) and Low stock
+    // (at or below the product's low-stock alert) narrow the list first
+    function productListFilterMatch(p) {
+      let brand = $("#productListBrand").val() || "";
+      let lowOnly = $("#productListLow").is(":checked");
+      if (brand && (brand === "__none__" ? brandKey(p.brand) !== "" : brandKey(p.brand) !== brand)) return false;
+      if (lowOnly && !(p.stock == 1 && (parseInt(p.quantity) || 0) <= productReorderLevel(p))) return false;
+      return true;
+    }
+
     function productListMatches() {
       let term = $("#productListSearch").val().trim().toLowerCase();
+      let filtering = term !== "" || !!$("#productListBrand").val() || $("#productListLow").is(":checked");
 
       return productGroups
         .map((group) => {
+          let pool = group.items.filter(productListFilterMatch);
           if (term === "") {
-            return { group, itemsToShow: group.items, expand: false };
+            return { group, itemsToShow: pool, expand: filtering, matched: pool.length > 0 };
           }
 
           let categoryMatches = group.categoryName.toLowerCase().includes(term);
           let itemsToShow = categoryMatches
-            ? group.items
-            : group.items.filter((p) =>
+            ? pool
+            : pool.filter((p) =>
                 [p.name, p.barcode, p.brand, p.size, p.sku].filter((t) => t != null).join(" ").toLowerCase().includes(term)
               );
 
-          return { group, itemsToShow, expand: true, matched: categoryMatches || itemsToShow.length > 0 };
+          return { group, itemsToShow, expand: true, matched: itemsToShow.length > 0 };
         })
-        .filter((entry) => term === "" || entry.matched);
+        .filter((entry) => !filtering || entry.matched);
+    }
+
+    // the Brand filter's choices: every brand, and "No brand"
+    function renderProductBrandFilter() {
+      let $sel = $("#productListBrand");
+      let chosen = $sel.val() || "";
+      let groups = brandGroups.filter((g) => g.key).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+      $sel.html(
+        `<option value="">All brands</option>` +
+          groups.map((g) => `<option value="${txnHtml(g.key)}">${txnHtml(g.name)}</option>`).join("") +
+          `<option value="__none__">No brand</option>`
+      );
+      $sel.val($sel.find(`option[value="${chosen.replace(/"/g, '\\"')}"]`).length ? chosen : "");
+    }
+
+    // a brand's products on the Products tab (Brands tab: "Show in Products")
+    function showBrandInProducts(key) {
+      $("#productListSearch").val("");
+      $("#productListLow").prop("checked", false);
+      renderProductBrandFilter();
+      $("#productListBrand").val(key || "__none__");
+      productListPage = 1;
+      renderProductList();
+      $('#Products .products-tabs a[href="#productsTabProducts"]').tab("show");
     }
 
     // ---- Products page: Excel / PDF exports (same look as the table exports) ----
@@ -4481,9 +4574,12 @@ if (!authedThisSession) {
     function productExportSubtitle(entries) {
       let products = entries.reduce((n, e) => n + e.itemsToShow.length, 0);
       let term = $("#productListSearch").val().trim();
+      let brand = $("#productListBrand").val() ? $("#productListBrand option:selected").text() : "";
       return (
         entries.length + (entries.length === 1 ? " category" : " categories") +
         " · " + products + (products === 1 ? " product" : " products") +
+        (brand ? " · Brand: " + brand : "") +
+        ($("#productListLow").is(":checked") ? " · Low stock only" : "") +
         (term ? ' · Search: "' + term + '"' : "")
       );
     }
@@ -4727,40 +4823,61 @@ if (!authedThisSession) {
       renderProductList();
     });
 
+    $("#productListBrand, #productListLow").on("change", function () {
+      productListPage = 1;
+      renderProductList();
+    });
+
     $("#productListPageSize").on("change", function () {
       productListPageSize = parseInt($(this).val(), 10);
       productListPage = 1;
       renderProductList();
     });
 
+    // Categories tab: each category with its products, stock and stock value
+    // (like Brands); a category with products can't be deleted (api/categories.js)
     function loadCategoryList() {
-      let category_list = "";
-      let counter = 0;
-      $("#category_list").empty();
-      $("#categoryList").DataTable().destroy();
-
-      allCategories.forEach((category, index) => {
-        counter++;
-
-        category_list += `<tr>
-     
-            <td>${category.name}</td>
-            <td><span class="btn-group"><button onClick="$(this).editCategory(${index})" class="btn btn-warning"><i class="fa fa-edit"></i></button><button onClick="$(this).deleteCategory(${category._id})" class="btn btn-danger"><i class="fa fa-trash"></i></button></span></td></tr>`;
-      });
-
-      if (counter == allCategories.length) {
-        $("#category_list").html(category_list);
-        $("#categoryList").DataTable(
-          standardTableOptions({
-            noun: "categories",
-            searchPlaceholder: "Search categories...",
-            exportTitle: "Categories",
-            exportColumns: [0],
-            actionColumns: [1],
-          })
-        );
-      }
+      if ($.fn.DataTable.isDataTable("#categoryList")) $("#categoryList").DataTable().destroy();
+      let rows = allCategories
+        .map((category, index) => {
+          let products = allProducts.filter((p) => String(p.category) === String(category._id));
+          let f = brandFigures(products);
+          let inUse = products.length > 0;
+          return `<tr>
+            <td><b>${txnHtml(category.name)}</b></td>
+            <td class="text-right">${products.length}</td>
+            <td class="text-right" data-order="${f.units}">${f.tracked ? f.units : '<span class="text-muted">N/A</span>'}</td>
+            <td class="text-right nobr" data-order="${f.cost}">${f.tracked ? supMoney(f.cost) : '<span class="text-muted">&mdash;</span>'}</td>
+            <td class="nobr"><span class="btn-group">
+              ${inUse ? `<button onClick="$(this).showCategoryInProducts('${jsAttr(category.name)}')" class="btn btn-default" title="Show in the Products tab"><i class="fa fa-list"></i></button>` : ""}
+              <button onClick="$(this).editCategory(${index})" class="btn btn-warning" title="Rename"><i class="fa fa-edit"></i></button>
+              <button onClick="$(this).deleteCategory(${category._id})" class="btn btn-danger"${inUse ? ` disabled title="${products.length} ${products.length === 1 ? "product is" : "products are"} in this category: move ${products.length === 1 ? "it" : "them"} to another category first"` : ' title="Delete"'}><i class="fa fa-trash"></i></button>
+            </span></td>
+          </tr>`;
+        })
+        .join("");
+      $("#category_list").html(rows);
+      $("#categoryList").DataTable(
+        standardTableOptions({
+          noun: "categories",
+          searchPlaceholder: "Search categories...",
+          exportTitle: "Categories",
+          exportColumns: [0, 1, 2, 3],
+          sumColumns: [1, 2, 3],
+          actionColumns: [4],
+        })
+      );
     }
+
+    // a category's products on the Products tab
+    $.fn.showCategoryInProducts = function (name) {
+      $("#productListBrand").val("");
+      $("#productListLow").prop("checked", false);
+      $("#productListSearch").val(name);
+      productListPage = 1;
+      renderProductList();
+      $('#Products .products-tabs a[href="#productsTabProducts"]').tab("show");
+    };
 
     // ---- Brands (Products window > Brands tab, and the product form's Brand list) ----
     // The brand list (api/inventory.js: /brands) - brands added with Add Brand
@@ -4852,9 +4969,11 @@ if (!authedThisSession) {
     }
 
     // the brand's products, under its row
-    function brandProductsHtml(g) {
+    // noun: "brand" / "unit" (the Units tab uses it too)
+    function brandProductsHtml(g, noun) {
+      noun = noun || "brand";
       if (!g.products.length) {
-        return `<div class="brand-products brand-products-empty text-muted"><i class="fa fa-info-circle"></i> No products have this brand yet. Choose it in a product's form (Brand).</div>`;
+        return `<div class="brand-products brand-products-empty text-muted"><i class="fa fa-info-circle"></i> No products have this ${noun} yet. Choose it in a product's form (${noun === "unit" ? "Unit" : "Brand"}).</div>`;
       }
       let catName = (id) => {
         let c = allCategories.find((x) => String(x._id) === String(id));
@@ -4902,6 +5021,7 @@ if (!authedThisSession) {
 
     function loadBrandList() {
       brandGroups = buildBrandGroups();
+      renderProductBrandFilter();
       let branded = brandGroups.filter((g) => g.key);
       let none = brandGroups.find((g) => !g.key);
       let total = brandFigures(allProducts);
@@ -4942,6 +5062,7 @@ if (!authedThisSession) {
             <td class="text-right nobr" data-order="${f.selling}">${money(f.selling)}</td>
             <td class="nobr">
               <button type="button" class="btn btn-info btn-sm brand-toggle" title="View products"><i class="fa fa-search-plus"></i></button>
+              ${g.products.length ? `<button type="button" class="btn btn-default btn-sm brand-show-products" title="Show in the Products tab"><i class="fa fa-list"></i></button>` : ""}
               ${g.key ? `<button type="button" class="btn btn-warning btn-sm brand-rename" title="Rename / merge brand"><i class="fa fa-edit"></i></button>` : ""}
               ${canDelete ? `<button type="button" class="btn btn-danger btn-sm brand-delete" title="Delete brand (no product has it)"><i class="fa fa-trash"></i></button>` : ""}
             </td>
@@ -4971,6 +5092,10 @@ if (!authedThisSession) {
         if (g && brandOpen.has(g.key)) showBrandProducts(this, g, true);
       });
     }
+
+    $(document).on("click", "#brandList .brand-show-products", function () {
+      showBrandInProducts($(this).closest("tr").attr("data-brand"));
+    });
 
     $(document).on("click", "#brandList .brand-toggle", function () {
       let tr = $(this).closest("tr");
@@ -5098,6 +5223,238 @@ if (!authedThisSession) {
           .done(() => loadBrands())
           .fail((xhr) => Swal.fire("Oops!", (xhr && xhr.responseText) || "Could not delete the brand.", "warning"));
       });
+    });
+
+    // ---- Units (Products window > Units tab, and the product form's Unit list) ----
+    // What one item of stock is: packet, bottle, box... Piece (pcs) is the
+    // default (a product with no unit). The unit list (api/inventory.js:
+    // /units) plus units already on products. Add / Rename (merge) through
+    // the Unit window; an unused unit can be deleted.
+    let allUnits = []; // the unit list: [{ _id, name, product_count }]
+    let unitGroups = []; // [{ key ("" = piece), stored, products }]
+    let unitOpen = new Set(); // units whose products are shown
+
+    function unitKey(u) {
+      let k = String(u || "").replace(/\s+/g, " ").trim().toLowerCase();
+      return ["pcs", "pc", "piece", "pieces"].includes(k) ? "" : k;
+    }
+
+    function buildUnitGroups() {
+      let map = { "": { key: "", stored: null, products: [] } };
+      let group = (key) => (map[key] = map[key] || { key, stored: null, products: [] });
+      allUnits.forEach((u) => {
+        let k = unitKey(u.name);
+        if (k) group(k).stored = u;
+      });
+      allProducts.forEach((p) => group(unitKey(p.unit)).products.push(p));
+      return Object.values(map);
+    }
+
+    // the product form's Unit list; keep: the unit to select (else the current one)
+    function renderUnitOptions(keep) {
+      let $sel = $("#productUnit");
+      let value = unitKey(keep !== undefined ? keep : $sel.val() || "");
+      let keys = unitGroups.map((g) => g.key).filter(Boolean).sort((a, b) => a.localeCompare(b));
+      if (value && !keys.includes(value)) keys.push(value); // a product's own unit stays
+      $sel.html(
+        `<option value="">Piece (pcs)</option>` +
+          keys.map((k) => `<option value="${txnHtml(k)}">${txnHtml(productUnitLabel(k))}</option>`).join("")
+      );
+      $sel.val(value);
+    }
+
+    function loadUnits(done) {
+      $.get(api + "inventory/units")
+        .done(function (units) {
+          allUnits = units || [];
+        })
+        .always(function () {
+          loadUnitList();
+          renderUnitOptions();
+          if (typeof done === "function") done();
+        });
+    }
+
+    function showUnitProducts(tr, g, show) {
+      let row = $("#unitList").DataTable().row(tr);
+      if (show) {
+        row.child(brandProductsHtml(g, "unit"), "brand-child").show();
+        unitOpen.add(g.key);
+      } else {
+        row.child.hide();
+        unitOpen.delete(g.key);
+      }
+      $(tr).toggleClass("brand-open", show).find(".unit-toggle i").attr("class", "fa " + (show ? "fa-search-minus" : "fa-search-plus"));
+    }
+
+    function loadUnitList() {
+      unitGroups = buildUnitGroups();
+      $("#unitsTabCount").text(unitGroups.length);
+      let rows = unitGroups
+        .sort((a, b) => (a.key === "" ? -1 : b.key === "" ? 1 : a.key.localeCompare(b.key)))
+        .map((g) => {
+          let f = brandFigures(g.products);
+          let money = (n) => (f.tracked ? supMoney(n) : '<span class="text-muted">&mdash;</span>');
+          let canDelete = g.key && g.stored && !g.products.length;
+          return `<tr data-unit="${txnHtml(g.key)}">
+            <td data-order="${g.key ? txnHtml(g.key) : ""}" data-export="${txnHtml(productUnitLabel(g.key))}"><b>${txnHtml(productUnitLabel(g.key))}</b>${
+              g.key ? ` <small class="text-muted">(${txnHtml(productUnitPlural(g.key))})</small>` : ' <span class="label label-default unit-default">default</span>'
+            }</td>
+            <td class="text-right">${g.products.length}</td>
+            <td class="text-right" data-order="${f.units}">${f.tracked ? txnHtml(productUnitText(g.key, f.units)) : '<span class="text-muted">N/A</span>'}</td>
+            <td class="text-right nobr" data-order="${f.cost}">${money(f.cost)}</td>
+            <td class="text-right nobr" data-order="${f.selling}">${money(f.selling)}</td>
+            <td class="nobr">
+              <button type="button" class="btn btn-info btn-sm unit-toggle" title="View products"><i class="fa fa-search-plus"></i></button>
+              ${g.key ? `<button type="button" class="btn btn-warning btn-sm unit-rename" title="Rename / merge unit"><i class="fa fa-edit"></i></button>` : ""}
+              ${canDelete ? `<button type="button" class="btn btn-danger btn-sm unit-delete" title="Delete unit (no product has it)"><i class="fa fa-trash"></i></button>` : ""}
+            </td>
+          </tr>`;
+        })
+        .join("");
+
+      if ($.fn.DataTable.isDataTable("#unitList")) $("#unitList").DataTable().destroy();
+      $("#unit_list").html(rows);
+      $("#unitList").DataTable(
+        Object.assign(
+          standardTableOptions({
+            noun: "units",
+            searchPlaceholder: "Search units...",
+            exportTitle: "Units",
+            exportColumns: [0, 1, 2, 3, 4],
+            sumColumns: [1, 3, 4],
+            actionColumns: [5],
+          }),
+          { order: [[0, "asc"]] }
+        )
+      );
+      $("#unitList tbody > tr[data-unit]").each(function () {
+        let g = unitGroups.find((x) => x.key === $(this).attr("data-unit"));
+        if (g && unitOpen.has(g.key)) showUnitProducts(this, g, true);
+      });
+    }
+
+    $(document).on("click", "#unitList .unit-toggle", function () {
+      let tr = $(this).closest("tr");
+      let g = unitGroups.find((x) => x.key === tr.attr("data-unit"));
+      if (g) showUnitProducts(tr[0], g, !tr.hasClass("brand-open"));
+    });
+
+    // ---- the Unit window: add / rename (like the Brand window) ----
+    let returnToUnitsTab = false;
+
+    function openUnitForm(g) {
+      $("#saveUnit").get(0).reset();
+      $("#unitFrom").val(g ? g.key : "");
+      $("#unitName").val(g ? g.key : "");
+      $("#unitModalTitle").text(g ? "Rename Unit" : "Add Unit");
+      $("#unitModalSub").text(
+        g ? `${g.products.length} ${g.products.length === 1 ? "product is" : "products are"} sold by the ${g.key}` : "What one item of stock is"
+      );
+      $("#unitNameHelp").text(
+        g
+          ? "Changes the unit on all its products. Typing an existing unit merges the two."
+          : 'Write it for one item: "packet", not "packets".'
+      );
+      returnToUnitsTab = $("#Products").hasClass("in");
+      $("#Products").modal("hide");
+      $("#unitModal").modal("show");
+    }
+
+    $("#addUnitBtn").on("click", () => openUnitForm(null));
+    $(document).on("click", "#unitList .unit-rename", function () {
+      let g = unitGroups.find((x) => x.key === $(this).closest("tr").attr("data-unit"));
+      if (g && g.key) openUnitForm(g);
+    });
+    $("#unitModal").on("shown.bs.modal", () => $("#unitName").trigger("focus").select());
+    $("#unitModal").on("hidden.bs.modal", function () {
+      $("#saveUnit").get(0).reset();
+      $("#unitFrom").val("");
+      if (returnToUnitsTab) {
+        returnToUnitsTab = false;
+        showProductsTab("Units");
+        $("#Products").modal("show");
+      }
+    });
+
+    $("#saveUnit").on("submit", function (e) {
+      e.preventDefault();
+      let to = unitKey($("#unitName").val());
+      let typed = String($("#unitName").val() || "").trim();
+      let from = $("#unitFrom").val();
+      if (!typed) return $("#unitName").trigger("focus");
+      if (!to) {
+        Swal.fire("Piece is the default", "Piece (pcs) is already the default unit. Choose another name.", "info");
+        return;
+      }
+      let $btn = $("#submitUnit").prop("disabled", true);
+      let fail = (xhr) => Swal.fire("Oops!", (xhr && xhr.responseText) || "Could not save the unit.", "warning");
+      let done = () => {
+        $("#unitModal").modal("hide");
+        loadProducts(); // products, the Units tab and the form's Unit list
+      };
+      if (!from) {
+        $.ajax({ url: api + "inventory/units", type: "POST", contentType: "application/json", data: JSON.stringify({ name: to }) })
+          .done(done)
+          .fail(fail)
+          .always(() => $btn.prop("disabled", false));
+        return;
+      }
+      if (to === from) {
+        $btn.prop("disabled", false);
+        return $("#unitModal").modal("hide");
+      }
+      let target = unitGroups.find((x) => x.key === to);
+      let go = function () {
+        $.ajax({
+          url: api + "inventory/units/rename",
+          type: "POST",
+          contentType: "application/json",
+          data: JSON.stringify({ from: from, to: to, user: user?.fullname || "", user_id: user?._id || "" }),
+        })
+          .done(function (res) {
+            unitOpen.delete(from);
+            Swal.fire({
+              icon: "success",
+              title: target ? "Units merged" : "Unit renamed",
+              text: `${res.updated} ${res.updated === 1 ? "product is" : "products are"} now sold by the ${to}.`,
+              timer: 2500,
+            });
+            done();
+          })
+          .fail(fail)
+          .always(() => $btn.prop("disabled", false));
+      };
+      if (!target) return go();
+      Swal.fire({
+        icon: "question",
+        title: "Merge units?",
+        html: `The unit <b>${txnHtml(to)}</b> already exists (${target.products.length} ${target.products.length === 1 ? "product" : "products"}). Merge <b>${txnHtml(from)}</b> into it?`,
+        showCancelButton: true,
+        confirmButtonText: "Merge",
+      }).then((c) => (c.value ? go() : $btn.prop("disabled", false)));
+    });
+
+    $(document).on("click", "#unitList .unit-delete", function () {
+      let g = unitGroups.find((x) => x.key === $(this).closest("tr").attr("data-unit"));
+      if (!g || !g.stored) return;
+      Swal.fire({
+        title: "Delete this unit?",
+        html: `<b>${txnHtml(productUnitLabel(g.key))}</b> is removed from the Unit list.`,
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        confirmButtonText: "Delete",
+      }).then(function (r) {
+        if (!r.value) return;
+        $.ajax({ url: api + "inventory/units/" + g.stored._id, type: "DELETE" })
+          .done(() => loadUnits())
+          .fail((xhr) => Swal.fire("Oops!", (xhr && xhr.responseText) || "Could not delete the unit.", "warning"));
+      });
+    });
+
+    $('#Products .products-tabs a[href="#productsTabUnits"]').on("shown.bs.tab", function () {
+      if ($.fn.DataTable.isDataTable("#unitList")) $("#unitList").DataTable().columns.adjust();
     });
 
     // the brands table is measured while its tab is hidden
@@ -6930,7 +7287,7 @@ function grnNewPriceProblem(l) {
   let p = t.product;
   let suggested = grnSuggestedPrice(p.cost_price, p.price, l.unit_cost);
   let margin = suggested !== "" ? " Same margin: " + supMoney(suggested) + "." : "";
-  let intro = `No "${p.name}" has the cost price ${supMoney(l.unit_cost)} yet, so a new product is created for these goods`;
+  let intro = `No "${productDisplayName(p)}" has the cost price ${supMoney(l.unit_cost)} yet, so a new product is created for these goods`;
   if (l.selling_price === "" || l.selling_price == null || isNaN(Number(l.selling_price))) {
     return intro + " and it needs its own selling price." + margin;
   }
@@ -7110,8 +7467,8 @@ function updateGrnAddBar() {
     let code = t.product.barcode != null && String(t.product.barcode) !== "NaN" ? String(t.product.barcode) : "";
     $("#grnAddHint").html(
       t.setsCost
-        ? `<i class="fa fa-info-circle"></i> Adds to the stock of <b>${txnHtml(t.product.name)}</b>${code ? " (" + txnHtml(code) + ")" : ""} - its first cost price.`
-        : `<i class="fa fa-check-circle text-success"></i> Same cost price as <b>${txnHtml(t.product.name)}</b>${code ? " (" + txnHtml(code) + ")" : ""}: its stock goes up; it keeps selling at ${supMoney(t.product.price)}.`
+        ? `<i class="fa fa-info-circle"></i> Adds to the stock of <b>${txnHtml(productDisplayName(t.product))}</b>${code ? " (" + txnHtml(code) + ")" : ""} - its first cost price.`
+        : `<i class="fa fa-check-circle text-success"></i> Same cost price as <b>${txnHtml(productDisplayName(t.product))}</b>${code ? " (" + txnHtml(code) + ")" : ""}: its stock goes up; it keeps selling at ${supMoney(t.product.price)}.`
     );
   } else if (t.kind === "new") {
     if ($sell.prop("disabled") || !grnSellTyped) {
@@ -7121,7 +7478,7 @@ function updateGrnAddBar() {
     $sell.prop("disabled", false);
     $(".grn-add-barcode").show();
     $("#grnAddHint").html(
-      `<i class="fa fa-plus-circle text-warning"></i> No <b>${txnHtml(t.product.name)}</b> has this cost price yet: these goods become a <b>new product</b> (same name and category). Enter its selling price, and scan or type its barcode (or leave it empty to create one).`
+      `<i class="fa fa-plus-circle text-warning"></i> No <b>${txnHtml(productDisplayName(t.product))}</b> has this cost price yet: these goods become a <b>new product</b> (same name and category). Enter its selling price, and scan or type its barcode (or leave it empty to create one).`
     );
   } else {
     $sell.prop("disabled", false);
@@ -8512,7 +8869,7 @@ function prnStockProblem(l) {
   if (!p || p.stock != 1) return "";
   let stock = parseInt(p.quantity) || 0;
   let total = prnQtyOf(l.product_id);
-  return total > stock ? `Only ${stock} of "${p.name}" in stock, but the lines return ${total}.` : "";
+  return total > stock ? `Only ${stock} of "${productDisplayName(p)}" in stock, but the lines return ${total}.` : "";
 }
 
 function updatePrnTotals() {
@@ -8589,13 +8946,13 @@ function addPrnLine() {
   if (grn) {
     let e = prnGrnReturnable(grn)[p._id];
     if (!e) {
-      Swal.fire("Not on this GRN", `"${p.name}" isn't on ${grn.grn_no}.`, "warning");
+      Swal.fire("Not on this GRN", `"${productDisplayName(p)}" isn't on ${grn.grn_no}.`, "warning");
       return;
     }
     if (prnQtyOf(p._id) + qty > e.left) {
       Swal.fire(
         "Too many",
-        `${grn.grn_no} brought in ${e.received} of "${p.name}"${e.returned ? ", " + e.returned + " already returned" : ""}` +
+        `${grn.grn_no} brought in ${e.received} of "${productDisplayName(p)}"${e.returned ? ", " + e.returned + " already returned" : ""}` +
           (prnQtyOf(p._id) ? `, ${prnQtyOf(p._id)} already on this PRN` : "") +
           `: at most ${Math.max(e.left - prnQtyOf(p._id), 0)} more can go back.`,
         "warning"
@@ -8606,7 +8963,7 @@ function addPrnLine() {
   if (p.stock == 1) {
     let stock = parseInt(p.quantity) || 0;
     if (prnQtyOf(p._id) + qty > stock) {
-      Swal.fire("Not enough stock", `Only ${stock} of "${p.name}" in stock` + (prnQtyOf(p._id) ? ` (${prnQtyOf(p._id)} already on this PRN).` : "."), "warning");
+      Swal.fire("Not enough stock", `Only ${stock} of "${productDisplayName(p)}" in stock` + (prnQtyOf(p._id) ? ` (${prnQtyOf(p._id)} already on this PRN).` : "."), "warning");
       return;
     }
   }
@@ -9655,10 +10012,10 @@ function loadSoldProducts() {
             <td>${txnHtml(item?.product)}</td>
             <td class="text-right">${item?.qty}</td>
             <td class="text-right txn-stock">${
-              product[0]?.stock == 1
-                ? product.length > 0
-                  ? product[0]?.quantity
-                  : ""
+              product.length === 0
+                ? ""
+                : product[0].stock == 1
+                ? `<span class="${(parseInt(product[0].quantity) || 0) <= productReorderLevel(product[0]) ? "product-stock-low" : ""}" title="Low-stock alert at ${productReorderLevel(product[0])}">${txnHtml(productUnitText(product[0].unit, product[0].quantity))}</span>`
                 : "N/A"
             }</td>
             <td class="text-right nobr">${
@@ -10554,11 +10911,11 @@ function adjStockProblem(l) {
   if (!p) return "";
   let stock = adjStock(p);
   let total = adjQtyOf(l.product_id);
-  if (total > stock) return `Only ${Math.max(stock, 0)} of "${p.name}" in stock, but the lines take out ${total}.`;
+  if (total > stock) return `Only ${Math.max(stock, 0)} of "${productDisplayName(p)}" in stock, but the lines take out ${total}.`;
   if (l.batch_id != null) {
     let b = (p.batches || []).find((x) => String(x._id) === String(l.batch_id));
     let fromBatch = adjQtyOf(l.product_id, l.batch_id);
-    if (b && fromBatch > b.qty_left) return `Only ${b.qty_left} of "${p.name}" left in ${b.reference}, but the lines take ${fromBatch} from it.`;
+    if (b && fromBatch > b.qty_left) return `Only ${b.qty_left} of "${productDisplayName(p)}" left in ${b.reference}, but the lines take ${fromBatch} from it.`;
   }
   return "";
 }
@@ -10703,12 +11060,12 @@ function addAdjLine() {
   if (adjDirection() === "out") {
     let already = adjQtyOf(p._id);
     if (already + qty > adjStock(p)) {
-      Swal.fire("Not enough stock", `Only ${Math.max(adjStock(p), 0)} of "${p.name}" in stock` + (already ? ` (${already} already on this adjustment).` : "."), "warning");
+      Swal.fire("Not enough stock", `Only ${Math.max(adjStock(p), 0)} of "${productDisplayName(p)}" in stock` + (already ? ` (${already} already on this adjustment).` : "."), "warning");
       return;
     }
     let b = batchId != null ? (p.batches || []).find((x) => x._id === batchId) : null;
     if (b && adjQtyOf(p._id, batchId) + qty > b.qty_left) {
-      Swal.fire("Not that many in this batch", `Only ${b.qty_left} of "${p.name}" left in ${b.reference}.`, "warning");
+      Swal.fire("Not that many in this batch", `Only ${b.qty_left} of "${productDisplayName(p)}" left in ${b.reference}.`, "warning");
       return;
     }
   }

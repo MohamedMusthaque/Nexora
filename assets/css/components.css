@@ -2673,7 +2673,8 @@ ul.ColVis_collection li {
 }
 /* Categories and Brands tabs: their DataTable's list area scrolls the same way */
 #Products #productsTabCategories > .dataTables_wrapper,
-#Products #productsTabBrands > .dataTables_wrapper{
+#Products #productsTabBrands > .dataTables_wrapper,
+#Products #productsTabUnits > .dataTables_wrapper{
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
@@ -6498,4 +6499,113 @@ body.transactions-mode #transactions_view .txn-page{
 #brandList .brand-products-empty{
   padding: 10px 14px;
   font-size: 13px;
+}
+
+
+/* ---- Products tab filters: Brand and Low stock (pos.js: productListMatches) ---- */
+#Products .product-list-filters{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 10px;
+}
+#Products #productListBrand{
+  width: auto;
+  min-width: 140px;
+  max-width: 200px;
+}
+#Products .product-low-toggle{
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 4px 10px;
+  border: 1px solid #e3e3e3;
+  border-radius: 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #6c7a86;
+  cursor: pointer;
+  user-select: none;
+}
+#Products .product-low-toggle input{
+  margin: 0;
+}
+#Products .product-low-toggle .fa{
+  color: #e0a030;
+}
+#Products .product-low-toggle:has(input:checked){
+  border-color: #f0b25a;
+  background: #fff8ee;
+  color: #c97f12;
+}
+/* low stock in red: Transactions > Products Sold too */
+#productsSold .product-stock-low,
+#categoryList .product-stock-low{
+  font-weight: 700;
+  color: #d84340;
+}
+
+
+/* ---- Products window > Units tab (pos.js: loadUnitList) ---- */
+#Products .tab-pane > .unit-filters{
+  flex: 0 0 auto;
+  margin-bottom: 12px;
+}
+#Products .unit-filters .text-muted{
+  margin-left: 10px;
+  font-size: 12.5px;
+}
+#unitList > tbody > tr.brand-open > td{
+  background: #f4fbf9;
+  border-bottom-color: transparent;
+}
+#unitList > tbody > tr.brand-child > td{
+  padding: 0 0 8px 24px;
+  background: #f4fbf9;
+}
+#unitList .brand-products{
+  border-left: 3px solid #5fbeaa;
+  background: #fff;
+}
+#unitList .brand-products .table{
+  margin: 0;
+}
+#unitList .brand-products .table > thead > tr > th{
+  position: static !important;
+  background: #f6f8fa;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #98a6ad;
+  box-shadow: none;
+}
+#unitList .brand-products .table > thead > tr > th.text-right{
+  text-align: right !important;
+}
+#unitList .brand-products .table > tbody > tr > td{
+  vertical-align: middle;
+  font-size: 13px;
+}
+#unitList .brand-products-empty{
+  padding: 10px 14px;
+  font-size: 13px;
+}
+#unitList .product-meta-size{
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #e8f6f2;
+  color: #3e9e8a;
+  font-size: 11px;
+  font-weight: 700;
+}
+#unitList .product-stock-low{
+  font-weight: 700;
+  color: #d84340;
+}
+#unitList .unit-default{
+  margin-left: 6px;
+  font-size: 11px;
 }
