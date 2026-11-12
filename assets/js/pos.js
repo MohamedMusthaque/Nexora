@@ -965,6 +965,16 @@ let authedThisSession = sessionStorage.getItem("auth") === "1";
 auth = storage.get("auth");
 user = storage.get("user");
 
+// The API uses these headers to attach each successful write to the active
+// staff member in User History. Login and first-run setup have no prior user.
+$.ajaxPrefilter(function (options, originalOptions, jqXHR) {
+  if (/\/users\/(login|setup)(?:\?|$)/.test(options.url || "")) return;
+  if (user && user._id != null) {
+    jqXHR.setRequestHeader("X-User-Id", String(user._id));
+    jqXHR.setRequestHeader("X-User-Name", String(user.fullname || user.username || ""));
+  }
+});
+
 if (!authedThisSession) {
   $("#loading").show();
   // first launch on this machine (no user accounts yet): set up the
@@ -1004,6 +1014,7 @@ if (!authedThisSession) {
     applyExpensesPermission();
     applySuppliersPermission();
     applyJournalPermission();
+    applyUserHistoryPermission();
     $("#loggedin-user").text(user.fullname);
     $("#cashier").attr("title", user.fullname);
   });
@@ -1085,6 +1096,7 @@ if (!authedThisSession) {
     applyExpensesPermission();
     applySuppliersPermission();
     applyJournalPermission();
+    applyUserHistoryPermission();
 
     // product id -> open stock batches, from the latest product lookup (the
     // till's price codes). Declared before loadProducts, which resets it.
@@ -2647,7 +2659,7 @@ if (!authedThisSession) {
       );
     }
 
-    // switches between the Point of Sale, Transactions, Expenses and Suppliers pages.
+    // switches between the Point of Sale, reports and back-office pages.
     // The open page's button is highlighted with .nav-current (it is never
     // hidden, so the toolbar doesn't shift); buttons hidden by a permission
     // stay hidden.
@@ -2658,6 +2670,7 @@ if (!authedThisSession) {
       $("#suppliers_view").toggle(page === "suppliers");
       $("#accounts_view").toggle(page === "accounts");
       $("#journal_view").toggle(page === "journal");
+      $("#user_history_view").toggle(page === "user-history");
       // every button stays where it is; the open page's one is highlighted
       [
         ["#pointofsale", "pos"],
@@ -2666,6 +2679,7 @@ if (!authedThisSession) {
         ["#suppliersNav", "suppliers"],
         ["#accountsNav", "accounts"],
         ["#journalNav", "journal"],
+        ["#userHistoryNav", "user-history"],
       ].forEach(([sel, p]) => {
         $(sel)
           .toggleClass("nav-current", page === p)
@@ -2747,6 +2761,12 @@ if (!authedThisSession) {
       if (!canViewJournal()) return;
       showPage("accounts");
       loadAccountsPage();
+    });
+
+    $("#userHistoryNav").click(function () {
+      if (!canViewUserHistory()) return;
+      showPage("user-history");
+      loadUserHistory();
     });
 
     $("#viewRefOrders").click(function () {
@@ -9513,6 +9533,155 @@ const JOURNAL_TYPE_CSS = {
 function canViewJournal() {
   return !!(user && (user._id === 1 || user.perm_journal == 1));
 }
+
+// User History contains activity across all business areas, so it follows the
+// existing staff-management permission. The administrator always has access.
+function canViewUserHistory() {
+  return !!(user && (user._id === 1 || user.perm_users == 1));
+}
+
+function applyUserHistoryPermission() {
+  let allowed = canViewUserHistory();
+  $("#userHistoryNav").toggle(allowed);
+  if (!allowed && $("#user_history_view").is(":visible")) $("#pointofsale").trigger("click");
+}
+
+let userHistoryEvents = [];
+
+function userHistorySelectOptions(selector, rows, valueOf, labelOf, emptyLabel) {
+  let $select = $(selector);
+  let selected = $select.val() || "";
+  let seen = {};
+  let values = [];
+  rows.forEach(function(row) {
+    let value = String(valueOf(row) == null ? "" : valueOf(row));
+    if (!value || seen[value]) return;
+    seen[value] = true;
+    values.push({ value: value, label: String(labelOf(row) || value) });
+  });
+  values.sort(function(a, b) { return a.label.localeCompare(b.label); });
+  $select.empty().append($("<option>", { value: "", text: emptyLabel }));
+  values.forEach(function(option) {
+    $select.append($("<option>", { value: option.value, text: option.label }));
+  });
+  $select.val(seen[selected] ? selected : "");
+}
+
+function renderUserHistory() {
+  let userId = $("#userHistoryUser").val() || "";
+  let module = $("#userHistoryModule").val() || "";
+  let action = $("#userHistoryAction").val() || "";
+  let rows = userHistoryEvents
+    .map(function(event, index) { return { event: event, index: index }; })
+    .filter(function(row) {
+      let event = row.event;
+      return (!userId || String(event.user_id || "") === userId) &&
+        (!module || event.module === module) &&
+        (!action || event.action === action);
+    });
+
+  if ($.fn.DataTable.isDataTable("#userHistoryTable")) $("#userHistoryTable").DataTable().destroy();
+  $("#user_history_list").html(rows.map(function(row) {
+    let event = row.event;
+    let time = moment(event.created_at);
+    let dateText = time.isValid() ? time.format("D MMM YYYY, h:mm:ss A") : "-";
+    let order = time.isValid() ? time.valueOf() : 0;
+    return `<tr>
+      <td class="nobr" data-order="${order}">${txnHtml(dateText)}</td>
+      <td>${txnHtml(event.user || "System")}</td>
+      <td>${txnHtml(event.module || "System")}</td>
+      <td>${txnHtml(event.action || "Updated record")}</td>
+      <td>${txnHtml(event.details || "-")}</td>
+      <td class="nobr">${event.reference && event.reference.id != null ? `<button type="button" class="btn btn-info btn-sm" onClick="$(this).viewUserHistoryReference(${row.index})" title="View related document"><i class="fa fa-search-plus"></i></button>` : ""}</td>
+    </tr>`;
+  }).join(""));
+
+  $("#userHistoryTable").DataTable(Object.assign(
+    standardTableOptions({
+      noun: "history entries",
+      searchPlaceholder: "Search user history...",
+      exportTitle: "User History",
+      exportSubtitle: () => [
+        $("#userHistoryUser option:selected").text(),
+        $("#userHistoryModule option:selected").text(),
+        $("#userHistoryAction option:selected").text(),
+      ].filter(function(text) { return !/^All /.test(text); }).join("   ·   "),
+      exportColumns: [0, 1, 2, 3, 4],
+      actionColumns: [5],
+      emptyTable: "No user actions match these filters",
+    }),
+    { order: [[0, "desc"]] }
+  ));
+}
+
+function loadUserHistory() {
+  if (!canViewUserHistory()) return;
+  $("#user_history_list").html('<tr><td colspan="6">Loading user history...</td></tr>');
+  $.get(api + "user-history")
+    .done(function(events) {
+      userHistoryEvents = events || [];
+      userHistorySelectOptions("#userHistoryUser", userHistoryEvents, function(e) { return e.user_id; }, function(e) { return e.user || "System"; }, "All users");
+      userHistorySelectOptions("#userHistoryModule", userHistoryEvents, function(e) { return e.module; }, function(e) { return e.module; }, "All areas");
+      userHistorySelectOptions("#userHistoryAction", userHistoryEvents, function(e) { return e.action; }, function(e) { return e.action; }, "All actions");
+      renderUserHistory();
+    })
+    .fail(function() {
+      $("#user_history_list").html('<tr><td colspan="6">Could not load the user history.</td></tr>');
+    });
+}
+
+$.fn.viewUserHistoryReference = function(index) {
+  let event = userHistoryEvents[index];
+  let reference = event && event.reference;
+  if (!reference || reference.id == null) return;
+  let id = reference.id;
+  if (reference.type === "invoice") {
+    $.get(api + id)
+      .done(function(transaction) { $(document).viewTransaction(0, [transaction]); })
+      .fail(function() { Swal.fire("Not available", "The related invoice no longer exists.", "info"); });
+  } else if (reference.type === "grn") {
+    $(document).viewGrn(id);
+  } else if (reference.type === "prn") {
+    $(document).viewPrn(id);
+  } else if (reference.type === "adjustment") {
+    $(document).viewAdjustment(id);
+  } else if (reference.type === "transfer") {
+    $(document).viewTransfer(id);
+  } else if (reference.type === "product") {
+    $(document).viewProductHistory(id);
+  } else if (reference.type === "deleted-product") {
+    let product = reference.snapshot || {};
+    let money = function(amount) {
+      return amount === "" || amount == null ? "-" : (settings && settings.symbol ? settings.symbol : "") + moneyText(Number(amount) || 0);
+    };
+    let row = function(label, value) {
+      return `<tr><th style="width:42%; padding:6px 10px;">${txnHtml(label)}</th><td style="padding:6px 10px;">${txnHtml(value == null || value === "" ? "-" : value)}</td></tr>`;
+    };
+    let productName = [product.brand, product.name, product.size].filter(Boolean).join(" ") || reference.label || "Deleted product";
+    let category = (allCategories || []).find(function(item) { return String(item._id) === String(product.category); });
+    Swal.fire({
+      title: "Deleted product details",
+      icon: "info",
+      html: `<div style="text-align:left;"><p><b>${txnHtml(productName)}</b></p><table class="table table-bordered" style="margin-bottom:0;">
+        ${row("Product ID", product._id || reference.id)}
+        ${row("SKU", product.sku)}
+        ${row("Barcode", product.barcode)}
+        ${row("Category", category ? category.name + " (ID " + product.category + ")" : product.category)}
+        ${row("Unit", product.unit || "pcs")}
+        ${row("Selling price", money(product.price))}
+        ${row("Cost price", money(product.cost_price))}
+        ${row("Stock tracking", product.stock ? "On" : "Off")}
+        ${row("Quantity when deleted", product.stock ? product.quantity : "Not tracked")}
+        ${row("Description", product.description)}
+      </table></div>`,
+    });
+  }
+};
+
+$(function() {
+  $("#userHistoryUser, #userHistoryModule, #userHistoryAction").on("change", renderUserHistory);
+  $("#userHistoryRefresh").on("click", loadUserHistory);
+});
 
 function applyJournalPermission() {
   let allowed = canViewJournal();

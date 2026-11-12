@@ -1,5 +1,5 @@
 
-#transactions_view, #expenses_view, #suppliers_view, #accounts_view, #journal_view {
+#transactions_view, #expenses_view, #suppliers_view, #accounts_view, #journal_view, #user_history_view {
   display: none;
 }
 

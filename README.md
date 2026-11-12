@@ -27,6 +27,7 @@
 
 - [Overview](#-overview)
 - [Key Features](#-key-features)
+- [User Actions & Interactions](#-user-actions--interactions)
 - [Google Drive Backup](#%EF%B8%8F-google-drive-backup)
   - [How it works](#how-it-works)
   - [One-time Google Cloud configuration](#one-time-google-cloud-configuration)
@@ -153,6 +154,7 @@ One clean, receipt-printer-friendly design for every document: **sale bill, GRN,
 
 ### 🖥️ Interface
 - **Pages:** Point of Sale, Transactions, Expenses, Suppliers, Quick Journal and Accounts. They're fixed to the window, so only the lists scroll.
+- **User History:** administrators and staff with **Manage Users and Permissions** can filter, search and export every successful saved action, including bills, stock adjustments, record changes and deletions.
 - **Toolbar:** buttons stay in place, and the open page or window is highlighted.
 - **Windows:** green headers and rounded corners throughout.
 - **Tooltips** on every button (mouse and keyboard; not shown for touch taps).
@@ -166,6 +168,43 @@ One clean, receipt-printer-friendly design for every document: **sale bill, GRN,
 
 ### 🌐 Multi-Till Network
 - Run the main PC as the server (port `8001`); other tills connect over the LAN and share products, customers and live stock.
+
+---
+
+## 🧭 User Actions & Interactions
+
+This is the day-to-day map of what a signed-in user can do in NEXORA POS. Buttons and pages are shown only when the user's assigned permissions allow them; the administrator has access to every area. Actions that change or delete saved data ask for confirmation where appropriate.
+
+| Area | User actions | What happens |
+| :--- | :--- | :--- |
+| **Point of Sale** | Search, scan or select products; add them to a bill; increase, decrease or remove bill lines; select a customer; apply discount and VAT; hold, recall or cancel an order; print a pre-payment bill | The current bill is recalculated live. Held orders remain available until they are recalled or deleted. A pre-payment print is marked as unpaid. |
+| **Checkout & bills** | Take Cash, Card, Bank Transfer, Credit or a partial payment; record a reference; use a customer's advance; complete and print the sale | A sale bill is created, stock is reduced for stock-tracked products, and the payment/customer balance is recorded. Change and any customer advance are calculated automatically. |
+| **Returns & exchanges** | Open an earlier bill, select returned items and quantities, choose whether stock is returned, then refund or exchange them | A return or exchange record is linked to the original sale. Restocked items are added back to inventory and the appropriate payment or customer balance is updated. |
+| **Customers** | Add, edit or delete customers; set credit limits; view customer transactions; settle credit; receive or apply customer advances | Customer details, credit and advance balances update immediately. Customer transaction history shows sales, payments and advances. |
+| **Products** | Add a product with price, cost, barcode, category, brand, size, unit, stock and image; edit its details; print barcode labels; delete it | Product changes are saved to inventory. The product history records creation, edits, deletions and stock changes; a product deletion is confirmed before it is applied. |
+| **Stock** | Receive stock through a GRN; return supplier stock through a PRN; create a stock adjustment for expiry, damage, loss, theft, staff use, count shortages, count surplus or found stock | Stock quantities and batches change at cost. GRNs, PRNs and adjustment notes are saved as their own documents, and each affected product's history shows the movement. |
+| **Product structure** | Create, rename or delete categories, brands and units; move products to another category; rename a brand or unit across its products | Categories in use cannot be deleted. Brands and units can be removed only when no products use them. A rename updates the affected product records. |
+| **Suppliers** | Add, edit or delete suppliers; create GRNs and PRNs; record supplier payments or advances; view supplier transactions and print documents | Purchases, returns, payments and supplier balances are recorded. GRNs add stock and PRNs remove it, subject to the selected settlement method. |
+| **Expenses** | Add, edit or delete expenses; create, rename or delete expense types; filter and export the expense list | Each expense records its date, type, payment method, amount, description and creator. An expense type in use must be cleared from its expenses before it can be deleted. |
+| **Transactions & reports** | View bills, products sold, returns, exchanges and profit; search, filter by date/status/payment/cashier; export Excel or PDF; print supported documents | These are reporting actions: they do not alter the underlying sale. Profit access is separately permission-controlled. |
+| **Quick Journal, Day End & Accounts** | Review daily activity; open supporting documents; print or export the journal; complete day end; transfer money between cash, card and bank; view account statements | The Quick Journal brings together sales, returns, payments, expenses, GRNs, PRNs, adjustments and transfers. A transfer creates a printable money-movement note and appears in Accounts. |
+| **Users & permissions** | Add, edit or delete staff accounts; change permissions; sign out | Permissions control access to products, categories, transactions, profit, expenses, suppliers, journal/accounts, users and settings. The bootstrap administrator always retains full access. |
+| **User History** | Filter completed actions by user, area or action; search; export Excel or PDF; refresh the list; open related documents | Every successful saved operation is recorded with its time, acting user, area, action and relevant details. A View button opens the related invoice, GRN, PRN, stock adjustment, transfer or product history when applicable; deleted products retain a read-only details snapshot. It is available to users who can manage staff. |
+| **Settings & data** | Update store, tax, currency, receipt, payment and terminal settings; change data location; back up, restore or reset data; configure Google Drive Backup | Setting changes affect future use of the application. Backup/restore and reset are protected actions; reset retains user accounts and creates a backup first. |
+
+### Reviewing what happened
+
+- **Product History** is the item-level audit trail. It shows sales, returns, GRNs, PRNs, stock adjustments, product creation, edits and deletion, along with the relevant quantity changes and recorded user when available.
+- **Bills and notes** preserve the full details of completed sales, returns, exchanges, GRNs, PRNs, supplier/customer payments, stock adjustments and money transfers. Open them from Transactions, Suppliers, Quick Journal or Accounts.
+- **Quick Journal** provides the clearest full-day view: every money and stock event is placed in time order, with daily totals and payment-method movement.
+- **User History** is the cross-application audit trail. It records successful saved actions such as bill creation and completion, returns, stock adjustments, record creation/updates/deletions, supplier and expense operations, transfers, user administration and settings changes.
+
+### Safe changes and deletions
+
+- Adjust a bill **before** payment by changing its lines or removing an item. After payment, use a return or exchange so the original bill and stock movement remain traceable.
+- Correct inventory with a **stock adjustment** or the appropriate GRN/PRN rather than silently changing a recorded movement.
+- Review confirmation prompts before deleting products, customers, suppliers, expenses, staff accounts or unused categories, brands, units and expense types. Some records cannot be deleted while they are still referenced by other data.
+- Use filters, search, print and Excel/PDF export to review information before making a corrective action.
 
 ---
 
@@ -353,7 +392,7 @@ Each user gets their own permissions (**Users → Edit → Permissions**). Only 
 | Manage Expenses | Expenses and expense types |
 | Manage Suppliers & GRN | Suppliers, GRNs, PRNs and supplier payments |
 | Quick Journal, Day End & Accounts | Money in and out, transfers, accounts |
-| Manage Users and Permissions | Add users and choose what they can do |
+| Manage Users and Permissions | Add users, choose what they can do and view User History |
 | Manage Settings | Store, receipt, tax, terminal, data & backup (incl. Google Drive) |
 
 ---
@@ -479,7 +518,7 @@ Nexora/
 
 ### Where the data lives
 - **Data folder:** `<UserHome>/Nexora/POS/` by default. You can change it in **Settings → Data & Backup → Current Data Location**.
-  - `server/databases/*.db`: NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`, `returns.db`, `credit_payments.db`, `customer_advances.db`, `product_history.db`, `expenses.db`, `expense_types.db`, `suppliers.db`, `grns.db`, `prns.db`, `supplier_payments.db`, `batches.db`, `stock_adjustments.db`, `money_transfers.db`, `brands.db`, `units.db`).
+  - `server/databases/*.db`: NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`, `returns.db`, `credit_payments.db`, `customer_advances.db`, `product_history.db`, `user_history.db`, `expenses.db`, `expense_types.db`, `suppliers.db`, `grns.db`, `prns.db`, `supplier_payments.db`, `batches.db`, `stock_adjustments.db`, `money_transfers.db`, `brands.db`, `units.db`).
   - `uploads/`: product pictures and the receipt logo.
 - **Backups made by the app:** `<UserHome>/Nexora/Nexora-Backups/`. This holds the safety copies taken before a reset or restore, and `drive-queue/`, where backups wait for upload.
 - **App settings** (data location, Google Drive connection): the OS user-data folder (`app-config.json`), never inside the data folder.

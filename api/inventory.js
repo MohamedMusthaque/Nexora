@@ -298,6 +298,25 @@ app.post("/product", upload.single("imagename"), function (req, res) {
 app.delete("/product/:productId", function (req, res) {
   const img_path = process.env.APPDATA + "/POS/uploads/" + req.query.image_path;
   inventoryDB.findOne({ _id: parseInt(req.params.productId) }, function (err, product) {
+    if (err) return res.status(500).send(err);
+    // Keep the meaningful fields in the response. The audit middleware saves
+    // this snapshot, so a deleted product can still be identified and viewed
+    // from User History after the inventory record is gone.
+    let deletedProduct = product ? {
+      _id: product._id,
+      name: product.name,
+      brand: product.brand || "",
+      size: product.size || "",
+      sku: product.sku || "",
+      barcode: product.barcode == null ? "" : String(product.barcode),
+      category: product.category == null ? "" : product.category,
+      price: product.price == null ? "" : product.price,
+      cost_price: product.cost_price == null ? "" : product.cost_price,
+      quantity: product.quantity == null ? "" : product.quantity,
+      stock: product.stock == 1,
+      unit: product.unit || "",
+      description: product.description || ""
+    } : null;
     if (product) {
       logHistory([
         historyEntry(product, "deleted", {
@@ -305,24 +324,24 @@ app.delete("/product/:productId", function (req, res) {
         }, { user: req.query.user, user_id: req.query.user_id }),
       ]);
     }
+    inventoryDB.remove(
+      {
+        _id: parseInt(req.params.productId),
+      },
+      function (err, numRemoved) {
+        if (err) return res.status(500).send(err);
+        batchesDB.remove({ product_id: parseInt(req.params.productId) }, { multi: true }, function (err) {
+          if (err) console.error("Failed to remove the product's batches:", err);
+        });
+        fs.unlink(img_path, function (err) {
+          if (err) {
+            console.error(`Failed to delete image: ${img_path}`, err);
+          }
+          res.status(200).send({ deleted_product: deletedProduct });
+        });
+      }
+    );
   });
-  inventoryDB.remove(
-    {
-      _id: parseInt(req.params.productId),
-    },
-    function (err, numRemoved) {
-      if (err) return res.status(500).send(err);
-      batchesDB.remove({ product_id: parseInt(req.params.productId) }, { multi: true }, function (err) {
-        if (err) console.error("Failed to remove the product's batches:", err);
-      });
-      fs.unlink(img_path, function (err) {
-        if (err) {
-          console.error(`Failed to delete image: ${img_path}`, err);
-        }
-        res.sendStatus(200);
-      });
-    }
-  );
 });
 
 // A scanned code: a product's barcode, or the barcode of one of its selling
