@@ -154,7 +154,7 @@ One clean, receipt-printer-friendly design for every document: **sale bill, GRN,
 
 ### 🖥️ Interface
 - **Pages:** Point of Sale, Transactions, Expenses, Suppliers, Quick Journal and Accounts. They're fixed to the window, so only the lists scroll.
-- **User History:** administrators and staff with **Manage Users and Permissions** can filter, search and export every successful saved action, including bills, stock adjustments, record changes and deletions.
+- **User History:** administrators and staff with **View User History** can filter, search and export every successful saved action, including bills, stock adjustments, record changes and deletions.
 - **Toolbar:** buttons stay in place, and the open page or window is highlighted.
 - **Windows:** green headers and rounded corners throughout.
 - **Tooltips** on every button (mouse and keyboard; not shown for touch taps).
@@ -188,8 +188,8 @@ This is the day-to-day map of what a signed-in user can do in NEXORA POS. Button
 | **Expenses** | Add, edit or delete expenses; create, rename or delete expense types; filter and export the expense list | Each expense records its date, type, payment method, amount, description and creator. An expense type in use must be cleared from its expenses before it can be deleted. |
 | **Transactions & reports** | View bills, products sold, returns, exchanges and profit; search, filter by date/status/payment/cashier; export Excel or PDF; print supported documents | These are reporting actions: they do not alter the underlying sale. Profit access is separately permission-controlled. |
 | **Quick Journal, Day End & Accounts** | Review daily activity; open supporting documents; print or export the journal; complete day end; transfer money between cash, card and bank; view account statements | The Quick Journal brings together sales, returns, payments, expenses, GRNs, PRNs, adjustments and transfers. A transfer creates a printable money-movement note and appears in Accounts. |
-| **Users & permissions** | Add, edit or delete staff accounts; change permissions; sign out | Permissions control access to products, categories, transactions, profit, expenses, suppliers, journal/accounts, users and settings. The bootstrap administrator always retains full access. |
-| **User History** | Filter completed actions by user, area or action; search; export Excel or PDF; refresh the list; open related documents | Every successful saved operation is recorded with its time, acting user, area, action and relevant details. A View button opens the related invoice, GRN, PRN, stock adjustment, transfer or product history when applicable; deleted products retain a read-only details snapshot. It is available to users who can manage staff. |
+| **Users & permissions** | Add, edit or delete staff accounts; change permissions; sign out | Permissions control access to products, categories, transactions, profit, expenses, suppliers, journal/accounts, User History, users and settings. The bootstrap administrator always retains full access. |
+| **User History** | Filter completed actions by user, area or action; search; export Excel or PDF; refresh the list; open related documents | Every successful saved operation is recorded with its time, acting user, area, action and relevant details. A View button opens the related invoice, GRN, PRN, stock adjustment, transfer or product history when applicable; deleted products retain a read-only details snapshot. It requires the **View User History** permission. |
 | **Settings & data** | Update store, tax, currency, receipt, payment and terminal settings; change data location; back up, restore or reset data; configure Google Drive Backup | Setting changes affect future use of the application. Backup/restore and reset are protected actions; reset retains user accounts and creates a backup first. |
 
 ### Reviewing what happened
@@ -387,12 +387,14 @@ Each user gets their own permissions (**Users → Edit → Permissions**). Only 
 | :--- | :--- |
 | Manage Products and Stock | Add / edit products, stock adjustments |
 | Manage Product Categories | Create, rename and delete categories |
-| View Transactions | Bills, payments, products sold, returns / exchanges |
+| View Transactions | Bills, payments and products sold |
+| Return / Refund & Exchange | Select completed orders to return, refund or exchange |
 | View Profit | Cost, profit and margin on sales |
 | Manage Expenses | Expenses and expense types |
 | Manage Suppliers & GRN | Suppliers, GRNs, PRNs and supplier payments |
 | Quick Journal, Day End & Accounts | Money in and out, transfers, accounts |
-| Manage Users and Permissions | Add users, choose what they can do and view User History |
+| Manage Users and Permissions | Add users and choose what they can do |
+| View User History | Review staff actions and open their related documents |
 | Manage Settings | Store, receipt, tax, terminal, data & backup (incl. Google Drive) |
 
 ---

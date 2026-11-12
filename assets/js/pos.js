@@ -1015,6 +1015,7 @@ if (!authedThisSession) {
     applySuppliersPermission();
     applyJournalPermission();
     applyUserHistoryPermission();
+    applyReturnsPermission();
     $("#loggedin-user").text(user.fullname);
     $("#cashier").attr("title", user.fullname);
   });
@@ -1030,6 +1031,7 @@ if (!authedThisSession) {
     if (settings.stock_check_disabled == "on") {
       $("#stock").parent().hide();
     }
+    applyReturnsPermission();
   });
 
   $.get(api + "users/all", function (users) {
@@ -1097,6 +1099,7 @@ if (!authedThisSession) {
     applySuppliersPermission();
     applyJournalPermission();
     applyUserHistoryPermission();
+    applyReturnsPermission();
 
     // product id -> open stock batches, from the latest product lookup (the
     // till's price codes). Declared before loadProducts, which resets it.
@@ -2692,6 +2695,7 @@ if (!authedThisSession) {
         .toggleClass("suppliers-mode", page === "suppliers")
         .toggleClass("accounts-mode", page === "accounts")
         .toggleClass("journal-mode", page === "journal")
+        .toggleClass("user-history-mode", page === "user-history")
         .removeClass("totals-compact");
       window.scrollTo(0, 0);
       if (page !== "pos") updateTransactionsStickyOffset();
@@ -2700,6 +2704,7 @@ if (!authedThisSession) {
       if (page === "expenses") fitExpensesView();
       if (page === "journal") fitJournalView();
       if (page === "transactions") fitTransactionsView();
+      if (page === "user-history") fitUserHistoryView();
     }
 
     // ---- toolbar highlight: the clicked button shows it was clicked ----
@@ -3146,11 +3151,18 @@ if (!authedThisSession) {
         $("#perm_transactions").prop("checked", false);
       }
 
+      // Accounts saved before this permission was introduced keep their
+      // previous transaction-based return access until an administrator saves
+      // the account with an explicit setting.
+      $("#perm_returns").prop("checked", allUsers[index].perm_returns === undefined ? allUsers[index].perm_transactions == 1 : allUsers[index].perm_returns == 1);
+
       if (allUsers[index].perm_users == 1) {
         $("#perm_users").prop("checked", true);
       } else {
         $("#perm_users").prop("checked", false);
       }
+
+      $("#perm_history").prop("checked", allUsers[index].perm_history == 1);
 
       if (allUsers[index].perm_settings == 1) {
         $("#perm_settings").prop("checked", true);
@@ -5856,7 +5868,9 @@ if (!authedThisSession) {
       $("#perm_products").prop("checked", user.perm_products == 1);
       $("#perm_categories").prop("checked", user.perm_categories == 1);
       $("#perm_transactions").prop("checked", user.perm_transactions == 1);
+      $("#perm_returns").prop("checked", user.perm_returns === undefined ? user.perm_transactions == 1 : user.perm_returns == 1);
       $("#perm_users").prop("checked", user.perm_users == 1);
+      $("#perm_history").prop("checked", user.perm_history == 1);
       $("#perm_settings").prop("checked", user.perm_settings == 1);
       $("#perm_profit").prop("checked", user.perm_profit == 1);
       $("#perm_expenses").prop("checked", user.perm_expenses == 1);
@@ -9534,16 +9548,46 @@ function canViewJournal() {
   return !!(user && (user._id === 1 || user.perm_journal == 1));
 }
 
-// User History contains activity across all business areas, so it follows the
-// existing staff-management permission. The administrator always has access.
+// Return / Refund & Exchange is a dedicated permission. Existing staff
+// records retain the old transaction-based access until an administrator
+// saves an explicit choice for this new permission.
+function canProcessReturns() {
+  if (!user) return false;
+  if (user._id === 1) return true;
+  return user.perm_returns === undefined ? user.perm_transactions == 1 : user.perm_returns == 1;
+}
+
+function applyReturnsPermission() {
+  let allowed = canProcessReturns();
+  let returnsEnabled = !settings || settings.return_disabled !== "on";
+  let exchangesEnabled = !settings || settings.exchange_disabled !== "on";
+  $("#returnOrdersBtn").toggle(allowed && returnsEnabled);
+  $("#exchangeOrdersBtn").toggle(allowed && exchangesEnabled);
+}
+
+// User History has its own view-only permission. The administrator always has
+// access, including for accounts created before this permission existed.
 function canViewUserHistory() {
-  return !!(user && (user._id === 1 || user.perm_users == 1));
+  return !!(user && (user._id === 1 || user.perm_history == 1));
 }
 
 function applyUserHistoryPermission() {
   let allowed = canViewUserHistory();
   $("#userHistoryNav").toggle(allowed);
   if (!allowed && $("#user_history_view").is(":visible")) $("#pointofsale").trigger("click");
+}
+
+// Keep User History itself fixed to the window. Its DataTable body gets the
+// remaining height, so long histories scroll inside the table rather than
+// moving the page and toolbar away.
+function fitUserHistoryView() {
+  let el = document.getElementById("user_history_view");
+  if (!el || !$(el).is(":visible")) return;
+  let top = el.getBoundingClientRect().top;
+  el.style.height = Math.max(window.innerHeight - top - 15, 380) + "px";
+  if ($.fn.DataTable.isDataTable("#userHistoryTable")) {
+    $("#userHistoryTable").DataTable().columns.adjust();
+  }
 }
 
 let userHistoryEvents = [];
@@ -9624,6 +9668,7 @@ function loadUserHistory() {
       userHistorySelectOptions("#userHistoryModule", userHistoryEvents, function(e) { return e.module; }, function(e) { return e.module; }, "All areas");
       userHistorySelectOptions("#userHistoryAction", userHistoryEvents, function(e) { return e.action; }, function(e) { return e.action; }, "All actions");
       renderUserHistory();
+      setTimeout(fitUserHistoryView, 0); // DataTable has just laid out its toolbar
     })
     .fail(function() {
       $("#user_history_list").html('<tr><td colspan="6">Could not load the user history.</td></tr>');
@@ -9681,6 +9726,7 @@ $.fn.viewUserHistoryReference = function(index) {
 $(function() {
   $("#userHistoryUser, #userHistoryModule, #userHistoryAction").on("change", renderUserHistory);
   $("#userHistoryRefresh").on("click", loadUserHistory);
+  $(window).on("resize", fitUserHistoryView);
 });
 
 function applyJournalPermission() {
@@ -10464,6 +10510,15 @@ let selectableOrders = [];
 let selectedReturnOrder = null;
 
 $.fn.openSelectOrderModal = function (mode) {
+  if (!canProcessReturns()) {
+    Swal.fire("Permission required", "You do not have permission to process returns or exchanges.", "warning");
+    return;
+  }
+  if ((mode === "return" && settings && settings.return_disabled === "on") ||
+      (mode === "exchange" && settings && settings.exchange_disabled === "on")) {
+    Swal.fire("Unavailable", mode === "exchange" ? "Exchanges are disabled in Settings." : "Returns and refunds are disabled in Settings.", "info");
+    return;
+  }
   currentReturnMode = mode;
 
   $("#selectOrderModalLabel").text(

@@ -93,7 +93,8 @@ body.transactions-mode,
 body.expenses-mode,
 body.suppliers-mode,
 body.accounts-mode,
-body.journal-mode{
+body.journal-mode,
+body.user-history-mode{
   /* overflow-x: hidden on body would make it a scroll container and stop
      position: sticky from working; clip hides overflow the same way without that */
   overflow-x: clip;
@@ -102,7 +103,8 @@ body.transactions-mode .main-toolbar-row,
 body.expenses-mode .main-toolbar-row,
 body.suppliers-mode .main-toolbar-row,
 body.accounts-mode .main-toolbar-row,
-body.journal-mode .main-toolbar-row{
+body.journal-mode .main-toolbar-row,
+body.user-history-mode .main-toolbar-row{
   position: sticky;
   top: 0;
   z-index: 1000;
@@ -4900,6 +4902,76 @@ body.expenses-mode #expenses_view .card-box > .tab-content{
    | the bills (scroll)                         | Products Sold (scroll) |
    Fixed to the window (pos.js: fitTransactionsView): the page doesn't
    scroll, the lists do. */
+
+/* ---- User History page -----------------------------------------------------
+   The page itself stays still; the shared DataTables table wrapper supplies
+   the only vertical scrollbar. */
+body.user-history-mode{
+  overflow: hidden;
+}
+body.user-history-mode #user_history_view > .row,
+body.user-history-mode #user_history_view > .row > .col-md-12{
+  height: 100%;
+}
+#user_history_view .card-box{
+  display: flex;
+  flex-direction: column;
+  padding-top: 14px;
+  padding-bottom: 12px;
+}
+body.user-history-mode #user_history_view .card-box{
+  height: 100%;
+  margin-bottom: 0;
+  overflow: hidden;
+}
+#user_history_view .card-box > .expenses-header,
+#user_history_view .card-box > .txn-filters{
+  flex: 0 0 auto;
+}
+#user_history_view .txn-filters{
+  margin-top: 12px;
+}
+#user_history_view .dataTables_wrapper{
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#user_history_view .dataTables_wrapper > .ph-toolbar,
+#user_history_view .dataTables_wrapper > .ph-footer{
+  flex: 0 0 auto;
+}
+#user_history_view .dataTables_wrapper > .ph-toolbar{
+  margin-bottom: 6px;
+}
+#user_history_view .dataTables_wrapper > .ph-table-scroll{
+  flex: 1 1 auto;
+  min-height: 140px;
+  overflow: auto;
+  border: 1px solid #e3e8ec;
+  border-radius: 6px;
+}
+#user_history_view .ph-table-scroll > table{
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+#user_history_view .ph-table-scroll > table > thead > tr > th{
+  position: sticky !important;
+  top: 0;
+  z-index: 2;
+  background: #f6f8fa;
+  box-shadow: inset 0 -1px 0 #dfe3e8;
+  border-bottom: none;
+}
+#user_history_view .ph-table-scroll::-webkit-scrollbar{
+  width: 8px;
+  height: 8px;
+}
+#user_history_view .ph-table-scroll::-webkit-scrollbar-thumb{
+  background: #cfd6dc;
+  border-radius: 4px;
+}
+
 body.transactions-mode{
   overflow: hidden;
 }

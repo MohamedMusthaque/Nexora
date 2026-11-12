@@ -118,11 +118,11 @@
                                     <span class="btn-label"><i class="fa fa-user"></i></span><span class="tb-text">Customers</span>
                             </button>
 
-                            <button id="returnOrdersBtn" type="button" onclick="$(this).openSelectOrderModal('return')" class="btn btn-warning waves-effect waves-light p_three" title="Return / refund">
+                            <button id="returnOrdersBtn" type="button" onclick="$(this).openSelectOrderModal('return')" class="btn btn-warning waves-effect waves-light" style="display: none;" title="Return / refund">
                                     <span class="btn-label"><i class="fa fa-undo"></i></span><span class="tb-text">Return/Refund</span>
                             </button>
 
-                            <button id="exchangeOrdersBtn" type="button" onclick="$(this).openSelectOrderModal('exchange')" class="btn btn-info waves-effect waves-light p_three" title="Exchange">
+                            <button id="exchangeOrdersBtn" type="button" onclick="$(this).openSelectOrderModal('exchange')" class="btn btn-info waves-effect waves-light" style="display: none;" title="Exchange">
                                     <span class="btn-label"><i class="fa fa-exchange"></i></span><span class="tb-text">Exchange</span>
                             </button>
                     </div>
@@ -165,8 +165,8 @@
                                 <span class="btn-label"><i class="fa fa-balance-scale"></i></span><span class="tb-text">Accounts</span>
                             </button>
 
-                            <!-- Administrators and users who manage staff can review every saved change. -->
-                            <button id="userHistoryNav" type="button" class="btn btn-default waves-effect waves-light p_four" style="display: none;" title="User History: completed actions by staff">
+                            <!-- Shown only with the dedicated View User History permission. -->
+                            <button id="userHistoryNav" type="button" class="btn btn-default waves-effect waves-light" style="display: none;" title="User History: completed actions by staff">
                                 <span class="btn-label"><i class="fa fa-history"></i></span><span class="tb-text">User History</span>
                             </button>
 
@@ -2683,6 +2683,11 @@
                                     <span class="account-perm-text"><b>View Transactions</b><small>Bills, payments &amp; products sold</small></span>
                                     <input type="checkbox" name="perm_transactions" id="perm_transactions"><span class="account-switch"></span>
                                 </label>
+                                <label class="account-perm" for="perm_returns">
+                                    <span class="account-perm-icon"><i class="fa fa-undo"></i></span>
+                                    <span class="account-perm-text"><b>Return / Refund &amp; Exchange</b><small>Select completed orders to return, refund or exchange</small></span>
+                                    <input type="checkbox" name="perm_returns" id="perm_returns"><span class="account-switch"></span>
+                                </label>
                                 <label class="account-perm" for="perm_profit">
                                     <span class="account-perm-icon"><i class="fa fa-line-chart"></i></span>
                                     <span class="account-perm-text"><b>View Profit</b><small>Cost, profit &amp; margin on sales</small></span>
@@ -2715,6 +2720,11 @@
                                     <span class="account-perm-icon"><i class="fa fa-users"></i></span>
                                     <span class="account-perm-text"><b>Manage Users and Permissions</b><small>Add users &amp; choose what they can do</small></span>
                                     <input type="checkbox" name="perm_users" id="perm_users"><span class="account-switch"></span>
+                                </label>
+                                <label class="account-perm" for="perm_history">
+                                    <span class="account-perm-icon"><i class="fa fa-history"></i></span>
+                                    <span class="account-perm-text"><b>View User History</b><small>Review staff actions and related documents</small></span>
+                                    <input type="checkbox" name="perm_history" id="perm_history"><span class="account-switch"></span>
                                 </label>
                                 <label class="account-perm" for="perm_settings">
                                     <span class="account-perm-icon"><i class="fa fa-cog"></i></span>
