@@ -110,6 +110,7 @@ app.post( "/post" , function ( req, res ) {
             "perm_categories": req.body.perm_categories == "on" ? 1 : 0,
             "perm_transactions": req.body.perm_transactions == "on" ? 1 : 0,
             "perm_returns": req.body.perm_returns == "on" ? 1 : 0,
+            "perm_exchange": req.body.perm_exchange == "on" ? 1 : 0,
             "perm_users": req.body.perm_users == "on" ? 1 : 0,
             "perm_history": req.body.perm_history == "on" ? 1 : 0,
             "perm_settings": req.body.perm_settings == "on" ? 1 : 0,
@@ -139,7 +140,8 @@ app.post( "/post" , function ( req, res ) {
                             perm_products: isBootstrapAdmin || req.body.perm_products == "on" ? 1 : 0,
                             perm_categories: isBootstrapAdmin || req.body.perm_categories == "on" ? 1 : 0,
                             perm_transactions: isBootstrapAdmin || req.body.perm_transactions == "on" ? 1 : 0,
-                            perm_returns: isBootstrapAdmin || req.body.perm_returns == "on" ? 1 : 0,
+                            perm_returns: req.body.perm_returns == "on" ? 1 : 0,
+                            perm_exchange: req.body.perm_exchange == "on" ? 1 : 0,
                             perm_users: isBootstrapAdmin || req.body.perm_users == "on" ? 1 : 0,
                             perm_history: isBootstrapAdmin || req.body.perm_history == "on" ? 1 : 0,
                             perm_settings: isBootstrapAdmin || req.body.perm_settings == "on" ? 1 : 0,
@@ -202,6 +204,7 @@ app.post( "/setup", function ( req, res ) {
             "perm_categories": 1,
             "perm_transactions": 1,
             "perm_returns": 1,
+            "perm_exchange": 1,
             "perm_users": 1,
             "perm_history": 1,
             "perm_settings": 1,
@@ -226,28 +229,36 @@ app.get( "/check", function ( req, res ) {
 }, function ( err, docs ) {
         // No administrator yet: nothing to do here - a new installation creates
         // it on the first-run setup screen (POST /setup), never as admin/admin.
-        if(docs && (docs.perm_products != 1 || docs.perm_categories != 1 || docs.perm_transactions != 1 || docs.perm_returns != 1 || docs.perm_users != 1 || docs.perm_history != 1 || docs.perm_settings != 1 || docs.perm_profit != 1 || docs.perm_expenses != 1 || docs.perm_suppliers != 1 || docs.perm_journal != 1)) {
-            // The bootstrap Administrator account (_id 1) must always have full access.
-            // Its permissions can end up stripped if its profile is ever saved without
-            // the permission checkboxes being populated (e.g. editing your own profile).
-            usersDB.update( {
-                _id: 1
-            }, {
-                $set: {
-                    perm_products: 1,
-                    perm_categories: 1,
-                    perm_transactions: 1,
-                    perm_returns: 1,
-                    perm_users: 1,
-                    perm_history: 1,
-                    perm_settings: 1,
-                    perm_profit: 1,
-                    perm_expenses: 1,
-                    perm_suppliers: 1,
-                    perm_journal: 1
-                }
-            }, {}, function ( err, numReplaced ) {
-            } );
+        if (docs) {
+            // Keep the bootstrap administrator's administrative access intact, but
+            // preserve explicit Return/Exchange choices made in the account form.
+            let adminPermissions = {
+                perm_products: 1,
+                perm_categories: 1,
+                perm_transactions: 1,
+                perm_users: 1,
+                perm_history: 1,
+                perm_settings: 1,
+                perm_profit: 1,
+                perm_expenses: 1,
+                perm_suppliers: 1,
+                perm_journal: 1
+            };
+            if (docs.perm_returns === undefined) adminPermissions.perm_returns = 1;
+            if (docs.perm_exchange === undefined) {
+                adminPermissions.perm_exchange = docs.perm_returns === undefined ? 1 : docs.perm_returns;
+            }
+
+            if (Object.keys(adminPermissions).some(function (permission) {
+                return docs[permission] != 1;
+            })) {
+                usersDB.update( {
+                    _id: 1
+                }, {
+                    $set: adminPermissions
+                }, {}, function ( err, numReplaced ) {
+                } );
+            }
         }
         res.sendStatus( 200 );
     } );

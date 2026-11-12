@@ -83,8 +83,6 @@ app.post( "/post", upload.single('imagename'), function ( req, res ) {
             "charge_tax": req.body.charge_tax,
             "card_disabled": req.body.card_disabled,
             "bank_disabled": req.body.bank_disabled,
-            "return_disabled": req.body.return_disabled,
-            "exchange_disabled": req.body.exchange_disabled,
             "stock_check_disabled": req.body.stock_check_disabled,
             "footer": req.body.footer,
             "img": image
@@ -112,5 +110,3 @@ app.post( "/post", upload.single('imagename'), function ( req, res ) {
     }
 
 });
-
- 

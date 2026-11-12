@@ -2685,8 +2685,13 @@
                                 </label>
                                 <label class="account-perm" for="perm_returns">
                                     <span class="account-perm-icon"><i class="fa fa-undo"></i></span>
-                                    <span class="account-perm-text"><b>Return / Refund &amp; Exchange</b><small>Select completed orders to return, refund or exchange</small></span>
+                                    <span class="account-perm-text"><b>Return / Refund</b><small>Select completed orders to return or refund</small></span>
                                     <input type="checkbox" name="perm_returns" id="perm_returns"><span class="account-switch"></span>
+                                </label>
+                                <label class="account-perm" for="perm_exchange">
+                                    <span class="account-perm-icon"><i class="fa fa-exchange"></i></span>
+                                    <span class="account-perm-text"><b>Exchange</b><small>Select completed orders to exchange</small></span>
+                                    <input type="checkbox" name="perm_exchange" id="perm_exchange"><span class="account-switch"></span>
                                 </label>
                                 <label class="account-perm" for="perm_profit">
                                     <span class="account-perm-icon"><i class="fa fa-line-chart"></i></span>
@@ -3392,14 +3397,6 @@
                                     </div>
                                     <h6 class="settings-group-title">Operations Options</h6>
                                     <div class="settings-card settings-toggles">
-                                        <label class="settings-toggle">
-                                            <span class="settings-toggle-text"><b>Disable Return / Refund</b><small>Sold items can't be returned for money back.</small></span>
-                                            <input type="checkbox" name="return_disabled" id="return_disabled">
-                                        </label>
-                                        <label class="settings-toggle">
-                                            <span class="settings-toggle-text"><b>Disable Exchange</b><small>Sold items can't be exchanged for others.</small></span>
-                                            <input type="checkbox" name="exchange_disabled" id="exchange_disabled">
-                                        </label>
                                         <label class="settings-toggle">
                                             <span class="settings-toggle-text"><b>Disable 'Disable stock check' function</b><small>Products with no stock can't be sold.</small></span>
                                             <input type="checkbox" name="stock_check_disabled" id="stock_check_disabled">

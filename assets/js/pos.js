@@ -1022,12 +1022,6 @@ if (!authedThisSession) {
 
   $.get(api + "settings/get", function (data) {
     settings = data.settings;
-    if (settings.return_disabled == "on") {
-      $("#returnOrdersBtn").hide();
-    }
-    if (settings.exchange_disabled == "on") {
-      $("#exchangeOrdersBtn").hide();
-    }
     if (settings.stock_check_disabled == "on") {
       $("#stock").parent().hide();
     }
@@ -3151,10 +3145,8 @@ if (!authedThisSession) {
         $("#perm_transactions").prop("checked", false);
       }
 
-      // Accounts saved before this permission was introduced keep their
-      // previous transaction-based return access until an administrator saves
-      // the account with an explicit setting.
-      $("#perm_returns").prop("checked", allUsers[index].perm_returns === undefined ? allUsers[index].perm_transactions == 1 : allUsers[index].perm_returns == 1);
+      $("#perm_returns").prop("checked", hasReturnPermission(allUsers[index], "return"));
+      $("#perm_exchange").prop("checked", hasReturnPermission(allUsers[index], "exchange"));
 
       if (allUsers[index].perm_users == 1) {
         $("#perm_users").prop("checked", true);
@@ -5868,7 +5860,8 @@ if (!authedThisSession) {
       $("#perm_products").prop("checked", user.perm_products == 1);
       $("#perm_categories").prop("checked", user.perm_categories == 1);
       $("#perm_transactions").prop("checked", user.perm_transactions == 1);
-      $("#perm_returns").prop("checked", user.perm_returns === undefined ? user.perm_transactions == 1 : user.perm_returns == 1);
+      $("#perm_returns").prop("checked", hasReturnPermission(user, "return"));
+      $("#perm_exchange").prop("checked", hasReturnPermission(user, "exchange"));
       $("#perm_users").prop("checked", user.perm_users == 1);
       $("#perm_history").prop("checked", user.perm_history == 1);
       $("#perm_settings").prop("checked", user.perm_settings == 1);
@@ -5934,12 +5927,6 @@ if (!authedThisSession) {
         }
         if (settings.bank_disabled == "on") {
           $("#bank_disabled").prop("checked", true);
-        }
-        if (settings.return_disabled == "on") {
-          $("#return_disabled").prop("checked", true);
-        }
-        if (settings.exchange_disabled == "on") {
-          $("#exchange_disabled").prop("checked", true);
         }
         if (settings.stock_check_disabled == "on") {
           $("#stock_check_disabled").prop("checked", true);
@@ -9548,21 +9535,27 @@ function canViewJournal() {
   return !!(user && (user._id === 1 || user.perm_journal == 1));
 }
 
-// Return / Refund & Exchange is a dedicated permission. Existing staff
-// records retain the old transaction-based access until an administrator
-// saves an explicit choice for this new permission.
-function canProcessReturns() {
+// Older accounts used one permission for both actions; preserve it for
+// Exchange until an administrator saves the new, separate permission.
+function hasReturnPermission(account, mode) {
+  if (!account) return false;
+  if (mode === "exchange") {
+    if (account.perm_exchange !== undefined) return account.perm_exchange == 1;
+    if (account.perm_returns !== undefined) return account.perm_returns == 1;
+  } else if (account.perm_returns !== undefined) {
+    return account.perm_returns == 1;
+  }
+  return account.perm_transactions == 1;
+}
+
+function canProcessReturns(mode) {
   if (!user) return false;
-  if (user._id === 1) return true;
-  return user.perm_returns === undefined ? user.perm_transactions == 1 : user.perm_returns == 1;
+  return hasReturnPermission(user, mode);
 }
 
 function applyReturnsPermission() {
-  let allowed = canProcessReturns();
-  let returnsEnabled = !settings || settings.return_disabled !== "on";
-  let exchangesEnabled = !settings || settings.exchange_disabled !== "on";
-  $("#returnOrdersBtn").toggle(allowed && returnsEnabled);
-  $("#exchangeOrdersBtn").toggle(allowed && exchangesEnabled);
+  $("#returnOrdersBtn").toggle(canProcessReturns("return"));
+  $("#exchangeOrdersBtn").toggle(canProcessReturns("exchange"));
 }
 
 // User History has its own view-only permission. The administrator always has
@@ -10510,13 +10503,8 @@ let selectableOrders = [];
 let selectedReturnOrder = null;
 
 $.fn.openSelectOrderModal = function (mode) {
-  if (!canProcessReturns()) {
-    Swal.fire("Permission required", "You do not have permission to process returns or exchanges.", "warning");
-    return;
-  }
-  if ((mode === "return" && settings && settings.return_disabled === "on") ||
-      (mode === "exchange" && settings && settings.exchange_disabled === "on")) {
-    Swal.fire("Unavailable", mode === "exchange" ? "Exchanges are disabled in Settings." : "Returns and refunds are disabled in Settings.", "info");
+  if (!canProcessReturns(mode)) {
+    Swal.fire("Permission required", mode === "exchange" ? "You do not have permission to process exchanges." : "You do not have permission to process returns or refunds.", "warning");
     return;
   }
   currentReturnMode = mode;
