@@ -100,7 +100,7 @@ The **Products** window has four tabs: Products, Categories, **Brands** and Stoc
   - Cost price and selling price, with live profit and margin shown as you type.
   - Barcode, entered or generated with **Fill**, stock and picture.
   - Printable **barcode labels** with the price.
-- **Brands:** every brand with its products, sizes, units in stock and stock value at cost and selling price, with Excel / PDF export. Open a brand to see its products and edit them; **Rename** fixes a brand's spelling on all its products at once, or merges two brands (e.g. "Nestle" into "Nestlé").
+- **Brands:** **Add Brand** (or **+ New** next to Brand in the product form, like Expense Type in the expense form) - every brand with its products, sizes, units in stock and stock value at cost and selling price, with Excel / PDF export. Open a brand to see its products and edit them; **Rename** fixes a brand's spelling on all its products at once, or merges two brands (e.g. "Nestle" into "Nestlé").
 - **Product History:** every sale, return, GRN, PRN, adjustment and edit for a product, plus its stock batches.
 - **Stock Adjustments:**
   - Stock out (Expired, Damaged, Lost / Missing, Theft, Own / Staff use, Stock count shortage) or stock in (Stock count surplus, Found).
@@ -477,7 +477,7 @@ Nexora/
 
 ### Where the data lives
 - **Data folder:** `<UserHome>/Nexora/POS/` by default. You can change it in **Settings → Data & Backup → Current Data Location**.
-  - `server/databases/*.db`: NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`, `returns.db`, `credit_payments.db`, `customer_advances.db`, `product_history.db`, `expenses.db`, `expense_types.db`, `suppliers.db`, `grns.db`, `prns.db`, `supplier_payments.db`, `batches.db`, `stock_adjustments.db`, `money_transfers.db`).
+  - `server/databases/*.db`: NeDB files (`inventory.db`, `users.db`, `customers.db`, `categories.db`, `transactions.db`, `settings.db`, `returns.db`, `credit_payments.db`, `customer_advances.db`, `product_history.db`, `expenses.db`, `expense_types.db`, `suppliers.db`, `grns.db`, `prns.db`, `supplier_payments.db`, `batches.db`, `stock_adjustments.db`, `money_transfers.db`, `brands.db`).
   - `uploads/`: product pictures and the receipt logo.
 - **Backups made by the app:** `<UserHome>/Nexora/Nexora-Backups/`. This holds the safety copies taken before a reset or restore, and `drive-queue/`, where backups wait for upload.
 - **App settings** (data location, Google Drive connection): the OS user-data folder (`app-config.json`), never inside the data folder.

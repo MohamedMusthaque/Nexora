@@ -1293,9 +1293,25 @@
                                 </div>
                                 <div class="col-sm-4 form-group">
                                     <label for="productBrand">Brand</label>
-                                    <!-- suggestions: the brands already used (pos.js: fillProductSuggestions) -->
-                                    <input type="text" name="brand" class="form-control" id="productBrand" list="productBrandList" maxlength="60" placeholder="e.g. Nestle">
-                                    <datalist id="productBrandList"></datalist>
+                                    <!-- the brand list (Products > Brands); "New" adds one here, like
+                                         Expense Type in the expense form (pos.js: renderBrandOptions) -->
+                                    <div class="input-group">
+                                        <select name="brand" class="form-control" id="productBrand"></select>
+                                        <span class="input-group-btn">
+                                            <button type="button" class="btn btn-default" id="productNewBrandBtn" title="Add a new brand"><i class="fa fa-plus"></i> New</button>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- quick add of a brand without leaving this form -->
+                            <div class="form-group product-newbrand-row" style="display: none;">
+                                <div class="input-group">
+                                    <span class="input-group-addon"><i class="fa fa-bookmark"></i></span>
+                                    <input type="text" id="productNewBrandName" class="form-control" maxlength="60" placeholder="New brand, e.g. Nestle">
+                                    <span class="input-group-btn">
+                                        <button type="button" class="btn btn-primary" id="productNewBrandSave">Add</button>
+                                        <button type="button" class="btn btn-default" id="productNewBrandCancel">Cancel</button>
+                                    </span>
                                 </div>
                             </div>
                             <div class="row">
@@ -1404,6 +1420,35 @@
             </div>
         </div>
     </div>
+
+
+    <!-- Add / rename a brand (pos.js: openBrandForm). Takes the Products window's
+         place while open, and brings it back on the Brands tab. -->
+    <div id="brandModal" class="modal fade nx-modal" tabindex="-1" role="dialog" aria-labelledby="brandModalTitle" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog modal-md">
+                <div class="modal-content">
+                    <div class="modal-header nx-hero">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+                        <span class="nx-hero-icon"><i class="fa fa-bookmark"></i></span>
+                        <div class="nx-hero-text">
+                            <h4 class="modal-title" id="brandModalTitle">Add Brand</h4>
+                            <p class="nx-hero-sub" id="brandModalSub">A brand to choose in the product form</p>
+                        </div>
+                    </div>
+                    <div class="modal-body">
+                        <form id="saveBrand" autocomplete="off">
+                            <input type="hidden" id="brandFrom">
+                            <div class="form-group">
+                                <label for="brandName">Brand name</label>
+                                <input type="text" id="brandName" class="form-control" maxlength="60" placeholder="e.g. Nestle, Coca-Cola, Anchor" required>
+                                <span class="help-block" id="brandNameHelp"></span>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-block waves-effect waves-light" id="submitBrand">Save Brand</button>
+                        </form>
+                    </div>
+               </div>
+          </div>
+     </div>
 
 
     <div id="newCategory" class="modal fade bs-example-modal-sm nx-modal" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel" aria-hidden="true" style="display: none;">
@@ -2317,6 +2362,12 @@
                         <!-- Brands: the products by brand, with stock and stock value; a brand can be
                              renamed / merged on all its products (pos.js: "Brands tab") -->
                         <div role="tabpanel" class="tab-pane" id="productsTabBrands">
+                            <div class="filter-bar brand-filters">
+                                <button type="button" class="btn btn-warning waves-effect waves-light" id="addBrandBtn">
+                                    <i class="fa fa-plus"></i> Add Brand
+                                </button>
+                                <span class="text-muted">Brands show in the product form's Brand list. Rename fixes a brand on all its products, or merges two brands.</span>
+                            </div>
                             <div class="sup-tiles brand-tiles">
                                 <div class="sup-tile">
                                     <h5>BRANDS</h5>

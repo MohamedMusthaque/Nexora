@@ -763,10 +763,94 @@ app.createGrnProduct = function (source, costPrice, sellingPrice, info, callback
 // "Coca-Cola 500 ml": for GRN / PRN / stock adjustment lines (suppliers.js, adjustments.js)
 app.productDisplayName = productDisplayName;
 
-// ---- Brands (Products window > Brands tab) ----
+// ---- Brands (Products window > Brands tab, and the product form's Brand list) ----
+// The brand list: brands added in the Brands tab or with "+ New" in the product
+// form (like expense types), so a brand can exist before any product has it.
+// A product keeps its brand's name (product.brand); brands already used on
+// products before this list existed still show (the client adds them).
+// Brands are the same whatever the case / spacing ("Nestle" = "NESTLE ").
+let brandsDB = new Datastore({
+  filename: process.env.APPDATA + "/POS/server/databases/brands.db",
+  autoload: true,
+});
+brandsDB.ensureIndex({ fieldName: "_id", unique: true });
+
+function brandKeyOf(name) {
+  return cleanText(name, 60).toLowerCase();
+}
+
+// the brands, with how many products have each (a brand in use can't be deleted)
+app.get("/brands", function (req, res) {
+  brandsDB.find({}).sort({ name: 1 }).exec(function (err, brands) {
+    if (err) return res.status(500).send("Could not load the brands.");
+    inventoryDB.find({}, { brand: 1 }, function (err, products) {
+      if (err) return res.status(500).send("Could not load the brands.");
+      let counts = {};
+      products.forEach((p) => {
+        let k = brandKeyOf(p.brand);
+        if (k) counts[k] = (counts[k] || 0) + 1;
+      });
+      res.send(brands.map((b) => Object.assign({}, b, { product_count: counts[brandKeyOf(b.name)] || 0 })));
+    });
+  });
+});
+
+// Body: { name } -> the new brand
+app.post("/brands", function (req, res) {
+  let name = cleanText(req.body.name, 60);
+  if (!name) return res.status(400).send("Please enter the brand name.");
+  brandsDB.find({}, function (err, brands) {
+    if (err) return res.status(500).send("Could not save the brand.");
+    let existing = brands.find((b) => brandKeyOf(b.name) === brandKeyOf(name));
+    if (existing) return res.status(409).send('A brand called "' + existing.name + '" already exists.');
+    let brand = { _id: Date.now() * 1000 + Math.floor(Math.random() * 1000), name: name, created_at: new Date().toJSON() };
+    brandsDB.insert(brand, function (err, saved) {
+      if (err) return res.status(500).send("Could not save the brand.");
+      res.send(saved);
+    });
+  });
+});
+
+// only a brand no product has (otherwise: rename / merge it instead)
+app.delete("/brands/:id", function (req, res) {
+  let id = parseInt(req.params.id);
+  brandsDB.findOne({ _id: id }, function (err, brand) {
+    if (err) return res.status(500).send("Could not delete the brand.");
+    if (!brand) return res.status(404).send("That brand no longer exists.");
+    inventoryDB.find({}, { brand: 1 }, function (err, products) {
+      if (err) return res.status(500).send("Could not delete the brand.");
+      let used = products.filter((p) => brandKeyOf(p.brand) === brandKeyOf(brand.name)).length;
+      if (used) {
+        return res.status(400).send(used + (used === 1 ? " product has" : " products have") + ' the brand "' + brand.name +
+          '". Change their brand (or merge it into another brand with Rename) before deleting it.');
+      }
+      brandsDB.remove({ _id: id }, {}, function (err) {
+        if (err) return res.status(500).send("Could not delete the brand.");
+        res.sendStatus(200);
+      });
+    });
+  });
+});
+
+// The brand list after a rename: the old name's entry goes (unless only the
+// case / spacing changed), and the new name is in the list once, spelled `to`.
+function renameBrandInList(from, to, callback) {
+  brandsDB.find({}, function (err, brands) {
+    if (err) return callback(err);
+    let stale = brands.filter((b) => brandKeyOf(b.name) === brandKeyOf(from) && brandKeyOf(from) !== brandKeyOf(to));
+    let target = brands.find((b) => brandKeyOf(b.name) === brandKeyOf(to));
+    brandsDB.remove({ _id: { $in: stale.map((b) => b._id) } }, { multi: true }, function (err) {
+      if (err) return callback(err);
+      if (target) return brandsDB.update({ _id: target._id }, { $set: { name: to } }, {}, (err) => callback(err));
+      brandsDB.insert({ _id: Date.now() * 1000 + Math.floor(Math.random() * 1000), name: to, created_at: new Date().toJSON() }, (err) => callback(err));
+    });
+  });
+}
+
 // Renames a brand on every product that has it (any case / spacing), e.g. to
-// fix the spelling, or to merge "Nestle" into "Nestlé". Each product's history
-// records the change. Body: { from, to, user, user_id } -> { updated }
+// fix the spelling, or to merge "Nestle" into "Nestlé" - and in the brand
+// list. Each product's history records the change.
+// Body: { from, to, user, user_id } -> { updated }
 app.post("/brands/rename", function (req, res) {
   let from = cleanText(req.body.from, 60);
   let to = cleanText(req.body.to, 60);
@@ -776,7 +860,13 @@ app.post("/brands/rename", function (req, res) {
   inventoryDB.find({}, function (err, products) {
     if (err) return res.status(500).send("Could not load the products.");
     let hits = products.filter((p) => same(p.brand) && String(p.brand) !== to);
-    if (!hits.length) return res.send({ updated: 0 });
+    let finish = function (updated) {
+      renameBrandInList(from, to, function (err) {
+        if (err) return res.status(500).send("The products were renamed, but the brand list could not be updated.");
+        res.send({ updated: updated });
+      });
+    };
+    if (!hits.length) return finish(0);
     let who = { user: req.body.user, user_id: req.body.user_id };
     let done = 0;
     let failed = false;
@@ -790,7 +880,7 @@ app.post("/brands/rename", function (req, res) {
         logHistory([historyEntry(Object.assign({}, p, { brand: to }), "updated", {
           changes: [{ field: "brand", label: "Brand", from: p.brand, to: to }],
         }, who)]);
-        if (++done === hits.length) res.send({ updated: done });
+        if (++done === hits.length) finish(done);
       });
     });
   });

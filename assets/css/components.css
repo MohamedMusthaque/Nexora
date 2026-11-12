@@ -6484,3 +6484,50 @@ body.transactions-mode #transactions_view .txn-page{
 #brandList .nobr{
   white-space: nowrap;
 }
+
+
+/* Brand list in the product form: list + "New", and the quick-add row
+   (like Expense Type in the expense form; pos.js: showProductNewBrandRow) */
+#newProduct #productBrand + .input-group-btn > .btn{
+  height: 40px;
+  border-radius: 0 6px 6px 0;
+  border-color: #d5dbe0;
+  color: #4c5667;
+  font-weight: 600;
+}
+#newProduct .input-group > select.form-control:first-child{
+  border-radius: 6px 0 0 6px;
+}
+#newProduct .product-newbrand-row{
+  margin-top: -4px;
+  padding: 8px;
+  border: 1px dashed #b8e3d9;
+  border-radius: 8px;
+  background: #f4fbf9;
+}
+#newProduct .product-newbrand-row .input-group-addon{
+  border-color: #d5dbe0;
+  border-radius: 6px 0 0 6px;
+  background: #fff;
+  color: #5fbeaa;
+}
+#newProduct .product-newbrand-row .input-group-btn > .btn{
+  height: 40px;
+}
+#newProduct .product-newbrand-row .input-group-btn > .btn:last-child{
+  border-radius: 0 6px 6px 0;
+}
+
+/* Brands tab: Add Brand bar; a brand with no products yet */
+#Products .tab-pane > .brand-filters{
+  flex: 0 0 auto;
+  margin-bottom: 12px;
+}
+#Products .brand-filters .text-muted{
+  margin-left: 10px;
+  font-size: 12.5px;
+}
+#brandList .brand-products-empty{
+  padding: 10px 14px;
+  font-size: 13px;
+}

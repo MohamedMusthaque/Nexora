@@ -1068,7 +1068,7 @@ if (!authedThisSession) {
         allProducts = [...data];
         cartBatchInfo = {}; // the fresh products carry the current stock batches
         loadProductList();
-        loadBrandList(); // the Brands tab
+        loadBrands(); // the brand list: the Brands tab and the product form's Brand list
         const capitalizeFirstLetter = (word) =>
           `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
 
@@ -2734,15 +2734,13 @@ if (!authedThisSession) {
       );
     }
 
-    // Brand / Size suggestions: the ones already used, so the same brand is
-    // always spelled the same way
+    // Size suggestions: the sizes already used, so the same size is always
+    // written the same way (Brand is a list: renderBrandOptions)
     function fillProductSuggestions() {
-      let unique = (key) =>
-        [...new Set(allProducts.map((p) => String(p[key] || "").trim()).filter(Boolean))].sort((a, b) =>
-          a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
-        );
-      $("#productBrandList").html(unique("brand").map((b) => `<option value="${txnHtml(b)}">`).join(""));
-      $("#productSizeList").html(unique("size").map((b) => `<option value="${txnHtml(b)}">`).join(""));
+      let sizes = [...new Set(allProducts.map((p) => String(p.size || "").trim()).filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })
+      );
+      $("#productSizeList").html(sizes.map((b) => `<option value="${txnHtml(b)}">`).join(""));
     }
 
     // the unit next to the stock field ("bottles")
@@ -2765,6 +2763,8 @@ if (!authedThisSession) {
       updateProductMarginHint();
       fillProductSuggestions();
       updateProductStockUnit();
+      hideProductNewBrandRow();
+      renderBrandOptions("");
     });
 
     function clearPriceInputErrors() {
@@ -2815,6 +2815,13 @@ if (!authedThisSession) {
     $("#saveProduct").submit(function (e) {
       e.preventDefault();
 
+      // a new brand still being typed: add it (or cancel) first, else the
+      // product would be saved without a brand
+      if ($(".product-newbrand-row").is(":visible")) {
+        Swal.fire("Add the brand first", "Click Add to add the new brand (or Cancel), then save the product.", "info");
+        return;
+      }
+
       let priceError = validateProductPrices();
       if (priceError) {
         Swal.fire("Check the prices", priceError, "warning");
@@ -2832,6 +2839,8 @@ if (!authedThisSession) {
           $("#saveProduct").get(0).reset();
           setProductFormHeader(null); // "Add another" starts a new product
           updateProductStockUnit();
+          hideProductNewBrandRow();
+          renderBrandOptions("");
           $("#current_img").text("");
 
           loadProducts();
@@ -2922,7 +2931,8 @@ if (!authedThisSession) {
       $("#quantity").val(allProducts[index].quantity);
       // the product details (older products don't have them: empty)
       let p = allProducts[index];
-      $("#productBrand").val(p.brand || "");
+      hideProductNewBrandRow();
+      renderBrandOptions(String(p.brand || "").trim());
       $("#productSize").val(p.size || "");
       $("#productUnit").val(p.unit || "");
       $("#productSku").val(p.sku || "");
@@ -4762,12 +4772,15 @@ if (!authedThisSession) {
       }
     }
 
-    // ---- Brands tab (Products window): the products by brand ----
-    // Built from each product's Brand (any case / spacing is the same brand;
-    // shown in the spelling most of its products use). A row's View shows its
-    // products; Rename renames - or merges into another brand - the brand on
-    // all of them (api/inventory.js: /brands/rename).
-    let brandGroups = []; // [{ key, name, spellings, products }]
+    // ---- Brands (Products window > Brands tab, and the product form's Brand list) ----
+    // The brand list (api/inventory.js: /brands) - brands added with Add Brand
+    // here or "+ New" in the product form - plus brands already on products.
+    // Brands are the same whatever the case / spacing, shown in the list's
+    // spelling (else the one most of their products use). A row's View shows
+    // its products; Rename (the Brand window) renames - or merges into another
+    // brand - the brand on all of them; an unused brand can be deleted.
+    let allBrands = []; // the brand list: [{ _id, name, product_count }]
+    let brandGroups = []; // [{ key, name, stored, spellings, products }]
     let brandOpen = new Set(); // brands whose products are shown (kept when the list reloads)
 
     function brandKey(b) {
@@ -4776,19 +4789,60 @@ if (!authedThisSession) {
 
     function buildBrandGroups() {
       let map = {};
+      let group = (key) => (map[key] = map[key] || { key, spellings: {}, products: [], stored: null });
       allProducts.forEach((p) => {
         let key = brandKey(p.brand);
-        let g = (map[key] = map[key] || { key, spellings: {}, products: [] });
+        let g = group(key);
         g.products.push(p);
         if (key) {
           let spelling = String(p.brand).replace(/\s+/g, " ").trim();
           g.spellings[spelling] = (g.spellings[spelling] || 0) + 1;
         }
       });
+      allBrands.forEach((b) => {
+        let key = brandKey(b.name);
+        if (key) group(key).stored = b;
+      });
       return Object.values(map).map((g) => {
-        g.name = g.key ? Object.entries(g.spellings).sort((a, b) => b[1] - a[1])[0][0] : "";
+        let used = Object.entries(g.spellings).sort((a, b) => b[1] - a[1]);
+        g.name = !g.key ? "" : g.stored ? g.stored.name : used[0][0];
         return g;
       });
+    }
+
+    // the brand names for the product form's list, A-Z
+    function brandNames() {
+      return brandGroups
+        .filter((g) => g.key)
+        .map((g) => g.name)
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    }
+
+    // the product form's Brand list; keep: the brand to select (else the current one).
+    // A product's own spelling that isn't in the list is added, so saving keeps it.
+    function renderBrandOptions(keep) {
+      let $sel = $("#productBrand");
+      let value = keep !== undefined ? keep : $sel.val() || "";
+      let names = brandNames();
+      $sel.html(
+        `<option value="">${names.length ? "No brand" : "No brands yet - add one with New"}</option>` +
+          names.map((n) => `<option value="${txnHtml(n)}">${txnHtml(n)}</option>`).join("")
+      );
+      if (value && !names.includes(value)) $sel.append(`<option value="${txnHtml(value)}">${txnHtml(value)}</option>`);
+      $sel.val(value);
+    }
+
+    // the brand list from the server, then the Brands tab and the form's list
+    function loadBrands(done) {
+      $.get(api + "inventory/brands")
+        .done(function (brands) {
+          allBrands = brands || [];
+        })
+        .always(function () {
+          loadBrandList();
+          renderBrandOptions();
+          if (typeof done === "function") done();
+        });
     }
 
     // stock (products that track it), stock value at cost and at selling price, sizes
@@ -4809,6 +4863,9 @@ if (!authedThisSession) {
 
     // the brand's products, under its row
     function brandProductsHtml(g) {
+      if (!g.products.length) {
+        return `<div class="brand-products brand-products-empty text-muted"><i class="fa fa-info-circle"></i> No products have this brand yet. Choose it in a product's form (Brand).</div>`;
+      }
       let catName = (id) => {
         let c = allCategories.find((x) => String(x._id) === String(id));
         return c ? c.name : "Uncategorized";
@@ -4870,7 +4927,7 @@ if (!authedThisSession) {
 
       let rows = branded
         .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
-        .concat(none ? [none] : [])
+        .concat(none && none.products.length ? [none] : [])
         .map((g) => {
           let f = brandFigures(g.products);
           let sizes = f.sizes.length
@@ -4880,11 +4937,12 @@ if (!authedThisSession) {
                 .join(" ") + (f.sizes.length > 6 ? ` <small class="text-muted">+${f.sizes.length - 6} more</small>` : "")
             : '<span class="text-muted">&mdash;</span>';
           let money = (n) => (f.tracked ? supMoney(n) : '<span class="text-muted">&mdash;</span>');
-          let spellings = Object.keys(g.spellings || {});
+          let spellings = Object.keys(g.spellings || {}).filter((sp) => sp !== g.name);
+          let canDelete = g.key && g.stored && !g.products.length;
           return `<tr data-brand="${txnHtml(g.key)}">
             <td data-order="${g.key ? txnHtml(g.key) : "￿"}" data-export="${txnHtml(g.key ? g.name : "No brand")}">${
               g.key
-                ? `<b>${txnHtml(g.name)}</b>${spellings.length > 1 ? ` <i class="fa fa-exclamation-circle text-warning" title="Spelled ${txnHtml(spellings.length)} ways: ${txnHtml(spellings.join(", "))}. Rename to make them the same."></i>` : ""}`
+                ? `<b>${txnHtml(g.name)}</b>${spellings.length ? ` <i class="fa fa-exclamation-circle text-warning" title="Some products spell it ${txnHtml(spellings.join(", "))}. Rename to make them all the same."></i>` : ""}`
                 : '<span class="text-muted">No brand</span>'
             }</td>
             <td class="text-right">${g.products.length}</td>
@@ -4895,6 +4953,7 @@ if (!authedThisSession) {
             <td class="nobr">
               <button type="button" class="btn btn-info btn-sm brand-toggle" title="View products"><i class="fa fa-search-plus"></i></button>
               ${g.key ? `<button type="button" class="btn btn-warning btn-sm brand-rename" title="Rename / merge brand"><i class="fa fa-edit"></i></button>` : ""}
+              ${canDelete ? `<button type="button" class="btn btn-danger btn-sm brand-delete" title="Delete brand (no product has it)"><i class="fa fa-trash"></i></button>` : ""}
             </td>
           </tr>`;
         })
@@ -4911,7 +4970,7 @@ if (!authedThisSession) {
             exportColumns: [0, 1, 2, 3, 4, 5],
             sumColumns: [1, 3, 4, 5],
             actionColumns: [6], // Sizes stay searchable: "500 ml" finds the brands that have it
-            emptyTable: "No brands yet - add a Brand in a product's form",
+            emptyTable: "No brands yet - click Add Brand",
           }),
           { order: [[0, "asc"]] }
         )
@@ -4929,57 +4988,182 @@ if (!authedThisSession) {
       if (g) showBrandProducts(tr[0], g, !tr.hasClass("brand-open"));
     });
 
+    // ---- the Brand window: add / rename (like the Category window) ----
+    // It takes the Products window's place while open (Bootstrap can't stack
+    // windows) and brings it back on the Brands tab.
+    let returnToBrandsTab = false;
+
+    function openBrandForm(g) {
+      $("#saveBrand").get(0).reset();
+      $("#brandFrom").val(g ? g.name : "");
+      $("#brandName").val(g ? g.name : "");
+      $("#brandModalTitle").text(g ? "Rename Brand" : "Add Brand");
+      let others = g ? Object.keys(g.spellings).filter((sp) => sp !== g.name) : [];
+      $("#brandModalSub").text(
+        g
+          ? `${g.products.length} ${g.products.length === 1 ? "product has" : "products have"} this brand`
+          : "A brand to choose in the product form"
+      );
+      $("#brandNameHelp").text(
+        g
+          ? "Changes the brand on all its products" +
+              (others.length ? " (also those spelled " + others.join(", ") + ")" : "") +
+              ". Typing an existing brand merges the two."
+          : ""
+      );
+      returnToBrandsTab = $("#Products").hasClass("in");
+      $("#Products").modal("hide");
+      $("#brandModal").modal("show");
+    }
+
+    $("#addBrandBtn").on("click", () => openBrandForm(null));
     $(document).on("click", "#brandList .brand-rename", function () {
       let g = brandGroups.find((x) => x.key === $(this).closest("tr").attr("data-brand"));
-      if (!g) return;
-      let spellings = Object.keys(g.spellings);
+      if (g) openBrandForm(g);
+    });
+    $("#brandModal").on("shown.bs.modal", () => $("#brandName").trigger("focus").select());
+    $("#brandModal").on("hidden.bs.modal", function () {
+      $("#saveBrand").get(0).reset();
+      $("#brandFrom").val("");
+      if (returnToBrandsTab) {
+        returnToBrandsTab = false;
+        showProductsTab("Brands");
+        $("#Products").modal("show");
+      }
+    });
+
+    function addBrand(name) {
+      return $.ajax({ url: api + "inventory/brands", type: "POST", contentType: "application/json", data: JSON.stringify({ name: name }) });
+    }
+
+    $("#saveBrand").on("submit", function (e) {
+      e.preventDefault();
+      let to = String($("#brandName").val() || "").replace(/\s+/g, " ").trim();
+      let from = $("#brandFrom").val();
+      if (!to) return $("#brandName").trigger("focus");
+      let $btn = $("#submitBrand").prop("disabled", true);
+      let fail = (xhr) => Swal.fire("Oops!", (xhr && xhr.responseText) || "Could not save the brand.", "warning");
+      let done = () => {
+        $("#brandModal").modal("hide");
+        loadProducts(); // products, the Brands tab and the form's Brand list
+      };
+
+      if (!from) {
+        // add
+        addBrand(to).done(done).fail(fail).always(() => $btn.prop("disabled", false));
+        return;
+      }
+      // rename / merge
+      let g = brandGroups.find((x) => x.key === brandKey(from));
+      let target = brandGroups.find((x) => x.key && x.key === brandKey(to) && x.key !== brandKey(from));
+      let unchanged = to === from && !(g && Object.keys(g.spellings).some((sp) => sp !== to));
+      if (unchanged) {
+        $btn.prop("disabled", false);
+        return $("#brandModal").modal("hide");
+      }
+      let go = function () {
+        $.ajax({
+          url: api + "inventory/brands/rename",
+          type: "POST",
+          contentType: "application/json",
+          data: JSON.stringify({ from: from, to: to, user: user?.fullname || "", user_id: user?._id || "" }),
+        })
+          .done(function (res) {
+            brandOpen.delete(brandKey(from));
+            Swal.fire({
+              icon: "success",
+              title: target ? "Brands merged" : "Brand renamed",
+              text: `${res.updated} ${res.updated === 1 ? "product now says" : "products now say"} "${to}".`,
+              timer: 2500,
+            });
+            done();
+          })
+          .fail(fail)
+          .always(() => $btn.prop("disabled", false));
+      };
+      if (!target) return go();
       Swal.fire({
-        title: "Rename brand",
-        html:
-          `<p class="text-muted" style="font-size: 14px;">Changes the brand on all <b>${g.products.length}</b> ${g.products.length === 1 ? "product" : "products"} of <b>${txnHtml(g.name)}</b>.` +
-          (spellings.length > 1 ? `<br>It is spelled ${spellings.length} ways (${txnHtml(spellings.join(", "))}); they all get the new name.` : "") +
-          "<br>Typing an existing brand merges them.</p>",
-        input: "text",
-        inputValue: g.name,
-        inputAttributes: { maxlength: 60 },
+        icon: "question",
+        title: "Merge brands?",
+        html: `<b>${txnHtml(target.name)}</b> already exists (${target.products.length} ${target.products.length === 1 ? "product" : "products"}). Merge <b>${txnHtml(from)}</b> into it?`,
         showCancelButton: true,
-        confirmButtonText: "Rename",
-        inputValidator: (v) => (!String(v || "").trim() ? "Enter the brand name." : undefined),
+        confirmButtonText: "Merge",
+      }).then((c) => (c.value ? go() : $btn.prop("disabled", false)));
+    });
+
+    // an unused brand (no product has it)
+    $(document).on("click", "#brandList .brand-delete", function () {
+      let g = brandGroups.find((x) => x.key === $(this).closest("tr").attr("data-brand"));
+      if (!g || !g.stored) return;
+      Swal.fire({
+        title: "Delete this brand?",
+        html: `<b>${txnHtml(g.name)}</b> is removed from the Brand list.`,
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        confirmButtonText: "Delete",
       }).then(function (r) {
         if (!r.value) return;
-        let to = String(r.value).replace(/\s+/g, " ").trim();
-        if (to === g.name && spellings.length === 1) return; // nothing changes
-        let target = brandGroups.find((x) => x.key && x.key === brandKey(to) && x.key !== g.key);
-        let go = function () {
-          $.ajax({
-            url: api + "inventory/brands/rename",
-            type: "POST",
-            contentType: "application/json",
-            data: JSON.stringify({ from: g.name, to: to, user: user?.fullname || "", user_id: user?._id || "" }),
-          })
-            .done(function (res) {
-              brandOpen.delete(g.key);
-              Swal.fire({
-                icon: "success",
-                title: target ? "Brands merged" : "Brand renamed",
-                text: `${res.updated} ${res.updated === 1 ? "product now says" : "products now say"} "${to}".`,
-                timer: 2500,
-              });
-              loadProducts();
-            })
-            .fail(function (xhr) {
-              Swal.fire("Oops!", (xhr && xhr.responseText) || "Could not rename the brand.", "error");
-            });
-        };
-        if (!target) return go();
-        Swal.fire({
-          icon: "question",
-          title: "Merge brands?",
-          html: `<b>${txnHtml(target.name)}</b> already has ${target.products.length} ${target.products.length === 1 ? "product" : "products"}. Merge <b>${txnHtml(g.name)}</b> into it?`,
-          showCancelButton: true,
-          confirmButtonText: "Merge",
-        }).then((c) => c.value && go());
+        $.ajax({ url: api + "inventory/brands/" + g.stored._id, type: "DELETE" })
+          .done(() => loadBrands())
+          .fail((xhr) => Swal.fire("Oops!", (xhr && xhr.responseText) || "Could not delete the brand.", "warning"));
       });
+    });
+
+    // ---- product form: "+ New" brand, like New Type in the expense form ----
+    // The Brand list is cleared and disabled while a new brand is typed; Add
+    // saves it to the brand list and selects it, Cancel puts back the earlier choice.
+    function showProductNewBrandRow() {
+      let $sel = $("#productBrand");
+      if (!$sel.prop("disabled")) $sel.data("previousBrand", $sel.val() || "");
+      $sel.val("").prop("disabled", true);
+      $("#productNewBrandBtn").prop("disabled", true);
+      $(".product-newbrand-row").show();
+      $("#productNewBrandName").val("");
+      setTimeout(() => $("#productNewBrandName").trigger("focus"), 100);
+    }
+
+    function hideProductNewBrandRow(restoreChoice) {
+      $(".product-newbrand-row").hide();
+      $("#productNewBrandName").val("");
+      let $sel = $("#productBrand");
+      if ($sel.prop("disabled")) {
+        $sel.prop("disabled", false);
+        if (restoreChoice === true) $sel.val(String($sel.data("previousBrand") || ""));
+      }
+      $sel.removeData("previousBrand");
+      $("#productNewBrandBtn").prop("disabled", false);
+    }
+
+    $("#productNewBrandBtn").on("click", showProductNewBrandRow);
+    $("#productNewBrandCancel").on("click", function () {
+      hideProductNewBrandRow(true);
+      $("#productBrand").trigger("focus");
+    });
+    $("#productNewBrandName").on("keydown", function (e) {
+      if (e.key === "Enter") {
+        e.preventDefault(); // don't save the product yet
+        $("#productNewBrandSave").trigger("click");
+      }
+    });
+    $("#productNewBrandSave").on("click", function () {
+      let name = String($("#productNewBrandName").val() || "").replace(/\s+/g, " ").trim();
+      if (!name) return $("#productNewBrandName").trigger("focus");
+      // already in the list (any case / spacing): just select it
+      let existing = brandGroups.find((g) => g.key && g.key === brandKey(name));
+      if (existing) {
+        hideProductNewBrandRow();
+        renderBrandOptions(existing.name);
+        return;
+      }
+      let $btn = $(this).prop("disabled", true);
+      addBrand(name)
+        .done(function (brand) {
+          hideProductNewBrandRow();
+          loadBrands(() => renderBrandOptions(brand.name));
+        })
+        .fail((xhr) => Swal.fire("Oops!", (xhr && xhr.responseText) || "Could not add the brand.", "warning"))
+        .always(() => $btn.prop("disabled", false));
     });
 
     // the brands table is measured while its tab is hidden
